@@ -276,6 +276,7 @@ Alt text is the caption; the title attribute is the credit.
 | Footnote | margin note | line at the foot of the slide | note at the foot of the page |
 | Reference list | generated, at the end | none; the deck carries credit lines only | generated, numbered |
 | Image attributes | width and classes honoured; `.full-bleed` runs the full measure | honoured on an in-flow image; an image slide is full-bleed already | width and classes honoured |
+| Raw HTML | escaped, shown as written | escaped, shown as written | escaped, shown as written |
 
 ## 4. The rendering core
 

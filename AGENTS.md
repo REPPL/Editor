@@ -74,7 +74,8 @@ repository root.
 
 Rust is installed with rustup's minimal profile and is not on the default
 `PATH`. Typst is a single binary from its GitHub releases, unpacked into
-`$HOME/.local/bin`. Put both on the path before any Cargo or Typst command:
+`$HOME/.local/bin`. Put both on the path before any Cargo or Typst command —
+`npm run lint` needs it too, because the audit step shells out to Cargo:
 
 ```sh
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
@@ -85,6 +86,7 @@ Provisioning a fresh machine:
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --profile minimal -y
 rustup component add rustfmt clippy
+cargo install cargo-audit --locked
 # Typst: download the aarch64-apple-darwin archive from
 # https://github.com/typst/typst/releases and move the binary into $HOME/.local/bin
 npm install
@@ -94,33 +96,56 @@ Xcode command line tools are also required. Typst is used by the publish
 pipeline, not by the app; Pandoc is a development convenience for
 converting source documents into examples and is not part of the pipeline.
 
-### Frontend
+### The six commands a change must pass
 
 ```sh
-npm install                      # install dependencies
-npm run build                    # type-check, then bundle into dist/
-npm test                         # the full test run (Vitest in jsdom)
-npx vitest run -t "sets the mark" # one test, matched by name
-npm run lint                     # eslint, then tsc --noEmit
-npm run dev                      # Vite alone, without the shell
+npm test                                             # Vitest in jsdom
+npm run lint                                         # eslint, tsc --noEmit, cargo audit
+npm run build                                        # tsc --noEmit, then the bundle
+cargo test   --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo fmt    --manifest-path src-tauri/Cargo.toml --check
 ```
 
-### Shell
+`npm run lint` ends in `npm run lint:rust`, which is
+`cargo audit --file src-tauri/Cargo.lock`. It must report zero vulnerabilities;
+informational warnings about unmaintained transitive crates are allowed and are
+not fixed here.
+
+### Frontend, one command at a time
 
 ```sh
-cargo build   --manifest-path src-tauri/Cargo.toml
-cargo test    --manifest-path src-tauri/Cargo.toml
-cargo test    --manifest-path src-tauri/Cargo.toml walks_a_folder_of_chapters
-cargo fmt     --manifest-path src-tauri/Cargo.toml --check
-cargo clippy  --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+npm install                       # install dependencies
+npm run dev                       # Vite alone, without the shell
+npm run test:watch                # Vitest, watching
+npx vitest run -t "sets the mark" # one test, matched by name
+npx vitest run src/core/parse.test.ts
+```
+
+### Shell, one command at a time
+
+```sh
+cargo build --manifest-path src-tauri/Cargo.toml
+cargo test  --manifest-path src-tauri/Cargo.toml walks_a_folder_of_chapters
 ```
 
 ### The application
 
 ```sh
 npm run tauri dev     # Vite plus the shell, with the window
-npm run tauri build   # a release bundle
+npm run tauri build   # a release bundle under src-tauri/target/release/bundle
 ```
+
+Free port 1420 before and after any `tauri dev` run:
+`lsof -ti :1420 | xargs -r kill`. Never leave a dev server running.
+
+### Checks a human has to make
+
+Anything that needs a real keyboard, a real Finder drag, a real projector or a
+real network is recorded as an unticked checklist under
+`.abcd/.work.local/logs/acceptance/<spec-id>.md`, one file per spec. Those
+files are local and gitignored; they are the record of what the automated runs
+above cannot reach.
 
 ## Boundaries
 
