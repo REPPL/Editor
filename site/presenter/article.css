@@ -1,0 +1,81 @@
+/*
+ * The article page: one column that fits the reader's screen.
+ *
+ * The measure is set in characters and the column is centred, so the same file
+ * is legible at 390, 820 and 1280 CSS px with nothing sliding off the side.
+ */
+:root {
+  color-scheme: light dark;
+}
+
+body.article {
+  margin: 0;
+  padding: 1.5rem 1rem 4rem;
+  font: 1.0625rem/1.6 Georgia, "Iowan Old Style", "Times New Roman", serif;
+  background: Canvas;
+  color: CanvasText;
+}
+
+body.article main {
+  max-width: 38em;
+  margin: 0 auto;
+}
+
+body.article h1,
+body.article h2,
+body.article h3,
+body.article h4 {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.2;
+  margin: 2rem 0 0.5rem;
+}
+
+body.article h1 {
+  font-size: 1.75rem;
+}
+
+body.article p {
+  margin: 0 0 1rem;
+}
+
+body.article figure {
+  margin: 1.5rem 0;
+}
+
+body.article img,
+body.article video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+body.article figcaption {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.875rem;
+  color: GrayText;
+  margin-top: 0.5rem;
+}
+
+body.article pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  background: color-mix(in srgb, CanvasText 6%, Canvas);
+}
+
+body.article table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+body.article blockquote {
+  margin: 1.5rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid GrayText;
+}
+
+body.article hr {
+  border: 0;
+  border-top: 1px solid GrayText;
+  margin: 2rem 0;
+}

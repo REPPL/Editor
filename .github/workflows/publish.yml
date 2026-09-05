@@ -1,0 +1,78 @@
+# The production repository's pipeline.
+#
+# Editor writes the site and pushes it; this workflow reports on what arrived.
+# It does not gate the deploy: gating means deploying from the workflow with a
+# token, and Editor holds no credential of its own. No secret, no token and no
+# `secrets.*` reference appears in this file.
+#
+# Actions are pinned by full commit SHA, with the version in a comment beside
+# it, so a moved tag cannot change what runs here.
+name: publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "tools/verify-site.mjs"
+      - ".github/workflows/publish.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify the site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: verify the site
+        run: node tools/verify-site.mjs site
+
+  # ---------------------------------------------------------------------
+  # STUB — assets above the ceiling (map #15, itd-2609051335880760).
+  # Owner: the referenced-assets spec. Verifies every object named in the
+  # asset manifest against its recorded hash in object storage before the
+  # deploy is reported good. Left as a stub because phase 1 publishes copied
+  # assets only and holds no storage credential.
+  # ---------------------------------------------------------------------
+  assets:
+    name: verify assets above the ceiling (stub)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: not yet implemented
+        run: echo "stub: map #15 verifies the asset manifest here"
+
+  # ---------------------------------------------------------------------
+  # STUB — the journal PDF (map #21, itd-2609051336019782).
+  # Owner: the PDF spec. Runs the core to produce Typst source for each
+  # variant, runs Typst, and stores each PDF beside its version.
+  # ---------------------------------------------------------------------
+  pdf:
+    name: render the journal PDF (stub)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: not yet implemented
+        run: echo "stub: map #21 renders the PDF here"
+
+  # ---------------------------------------------------------------------
+  # STUB — the access policy (map #20, itd-2609051336005698).
+  # Owner: the gated-document spec. Applies the Cloudflare Access policy from
+  # the committed access file, over the document's id, with the pipeline's own
+  # credential. Phase 1 publishes unlisted only.
+  # ---------------------------------------------------------------------
+  access:
+    name: apply the access policy (stub)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: not yet implemented
+        run: echo "stub: map #20 applies the access policy here"
