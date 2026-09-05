@@ -45,14 +45,13 @@ what a click opens.
 
 - The tree itself — Parts, Chapters, heading levels, badges, ordering, and what
   a click opens: map #1, `itd-2609051335399446` (cond-2609051925372563). Where
-  Return and a click must agree, this spec calls the same hook a click calls.
-- The binding table's shape, the keys panel, the tooltips, the editing surface's
-  prefix state, and the one cancel contract: map #2, `itd-2609051335406422`
+  Return and a click must agree, this spec calls the hook a click calls.
+- The table's shape, the keys panel, the tooltips, the editing surface's prefix
+  state, and the one cancel contract: map #2, `itd-2609051335406422`
   (cond-2609051925374969). This spec registers rows and reuses the contract.
 - What the palette inserts: map #3, `itd-2609051335415528`
-  (cond-2609051925377969). Only its place in the cycle is here.
-- The same vocabulary inside a reading view: map #26, `itd-2609051402083398`
-  (cond-2609051925377047). This spec stops at the app's own chrome.
+  (cond-2609051925377969); and the same vocabulary inside a reading view: map
+  #26, `itd-2609051402083398` (cond-2609051925377047).
 - The tablet, where there is no shell to claim `C-x` (cond-2609051925377283);
   rebinding a chord; and editing structure from the tree — dragging a chapter
   between Parts. All three are open in `03-evidence.md`.
@@ -73,28 +72,20 @@ what a click opens.
 ### Three panes, one order
 
 `src/focus.ts` holds a `Pane` of `"editor" | "sidebar" | "panel"` and the fixed
-order `["editor", "sidebar", "panel"]`. Each pane registers a `PaneTarget`:
-
-```ts
-interface PaneTarget {
-  readonly pane: Pane;
-  label(): string;      // what the modeline says
-  available(): boolean; // whether it can hold the keyboard now
-  take(): void; release(): void;
-}
-```
+order `["editor", "sidebar", "panel"]`. Each pane registers a `PaneTarget`: its
+`pane`, a `label()` for the modeline, an `available()` saying whether it can
+hold the keyboard now, and `take()` and `release()`.
 
 `cycle()` walks the order from the pane that holds the keyboard, wrapping, and
 stops at the first target whose `available()` is true. The editor is always
 available, so the walk terminates; the panel target is available only while a
 panel is open, which is what makes the cycle two panes with nothing open and
-three with something open, in the same order every time.
-
-There is one panel target, not four. Its `label()` and `take()` delegate to
-whichever panel is open — the keys panel and the insert palette through
-`currentOverlay()`, the publish and settings panels through the focus contract
-they hand to `registerPanel`. Where two could be open, the most recently opened
-wins, which the overlay contract already enforces for the two overlays.
+three with something open, in the same order every time. There is one panel
+target, not four: its `label()` and `take()` delegate to whichever panel is
+open — the keys panel and the insert palette through `currentOverlay()`, the
+publish and settings panels through the focus contract they hand to
+`registerPanel`. Where two could be open, the most recently opened wins, which
+the overlay contract already enforces for the two overlays.
 
 ### Hearing a chord in a pane the editing surface cannot hear
 
@@ -110,8 +101,8 @@ resolve the same row.
   not the editor. It builds a chord with `chordFromEvent`, compares against
   `bindingById(id).chords` through `canonicalChord`, and holds a single pending
   step so a prefix sequence completes. It is a second *reader*, not a second
-  prefix state: the pending step is reported to the modeline through the same
-  prefix cell, so a half-typed `C-x` looks the same wherever it was typed.
+  prefix state: the pending step goes to the modeline's own prefix cell, so a
+  half-typed `C-x` looks the same wherever it was typed.
 
 While the pane is `"panel"` the reader answers `other-window` and nothing else,
 letting every other key through to the panel's own handler, so the one cancel
@@ -133,10 +124,9 @@ Seven rows, in the notation `src/keys.ts` documents:
 | `sidebar-quit` | Back to the editor | `C-g`, `Escape` | panes | sidebar |
 
 `C-x o` is free: the table's `C-x` sequences are `u`, `r`, `h`, `k`, `C-x`,
-`C-s`, `C-f`, `C-p`, `C-u`, `C-l`, `S-/`, `C-b` and `C-r`.
-
-Six of the seven carry a chord another row already carries — `C-n` is
-`next-line`, `Return` is `newline`, `C-g` is `keyboard-quit` — and the table's
+`C-s`, `C-f`, `C-p`, `C-u`, `C-l`, `S-/`, `C-b` and `C-r`. Six of the seven
+carry a chord another row carries — `C-n` is `next-line`, `Return` is
+`newline`, `C-g` is `keyboard-quit` — and the table's
 own invariant is that no two rows share a chord. That invariant is right and
 stays; what changes is that it is stated per scope. `BindingOwner` gains
 `"sidebar"`, and `scopeOf(binding)` returns `"sidebar"` for those rows and
@@ -158,26 +148,25 @@ same walk now collects a flat list:
 
 ```ts
 interface SidebarRow {
-  readonly key: string;   // the expansion key: part:… | chapter:… | node:…
+  readonly key: string;  // the expansion key: part:… | chapter:… | node:…
   readonly kind: "part" | "chapter" | "heading";
-  readonly depth: number;
+  readonly depth: number; readonly element: HTMLElement; // the .tree-row
   readonly expandable: boolean; readonly expanded: boolean;
   readonly chapter?: Chapter;   readonly node?: OutlineNode;
-  readonly element: HTMLElement; // the .tree-row
 }
 ```
 
 The `Sidebar` interface gains `rows()`, `cursor`, `setCursor`, `takeFocus`,
 `releaseFocus`, `focused`, `expandAtCursor`, `collapseAtCursor` and
 `activateCursor`. The cursor is drawn as `data-cursor="yes"` on the `.tree-row`,
-which is a ring in `src/style.css` and is deliberately not the `data-open` mark
-the open chapter already carries: where Alice is looking and what is open are
-two facts.
+a ring in `src/style.css` and deliberately not the `data-open` mark the open
+chapter carries: where Alice is looking and what is open are two facts.
 
 - `takeFocus()` puts the cursor on the row for the open chapter — its heading
   row when a heading is selected — or on the first row when nothing is open,
   expanding the Parts on the way so the row is visible; then it focuses the
   `nav` element itself, which is what stops the editing surface seeing keys.
+  `releaseFocus()` blurs it and leaves the cursor where it is.
 - Movement clamps at the ends rather than wrapping. An overlay wraps because a
   list of forms has no shape; a book does.
 - `expandAtCursor()` expands a collapsed expandable row and does nothing else —
@@ -186,7 +175,6 @@ two facts.
 - `activateCursor()` calls the same `onOpenChapter(chapter, node?)` hook a click
   calls, so the behaviour is map #1's and this spec inherits it. On a Part row
   it does nothing, because a Part is not a chapter.
-- `releaseFocus()` blurs the tree and leaves the cursor where it is.
 
 The drawer is the same two calls. `takeFocus()` opens the sidebar when it is
 closed and remembers that it did; `releaseFocus()` closes it again only in that
@@ -206,9 +194,9 @@ Three things return the keyboard to the text, and all three go through
    in the chapter exactly where Alice left it, because nothing here dispatches a
    transaction.
 2. `other-window` from the last pane in the cycle.
-3. `activateCursor()`, once `app.openChapter` has resolved. `openChapter`
-   already calls `revealLine(view, node.line)` for a heading, so the cursor is
-   on the heading before the focus arrives.
+3. `activateCursor()`, once `app.openChapter` has resolved; `openChapter`
+   already calls `revealLine(view, node.line)`, so the cursor is on the heading
+   before the focus arrives.
 
 An overlay closing tells the model through `onOverlayChange`, the one observer
 `src/overlay.ts` gains; a publish or settings panel closing tells it through the
@@ -295,18 +283,17 @@ Manual checks, run with `npm run tauri dev` and recorded as an unticked list in
   a reader of its own. The build assumes one visible prefix state fed by two
   readers is honest; the modeline is where a disagreement would show.
 - **Rebinding** is open in `03-evidence.md`: "whether individual chords in that
-  table are rebindable and persisted". The rows added here carry ids like every
-  other row, which is the seam a later answer needs; nothing is persisted.
+  table are rebindable and persisted". The rows added here carry ids, which is
+  the seam a later answer needs; nothing is persisted.
 - **Structure editing from the tree** is open in the same chapter: "whether the
   sidebar edits structure — dragging a chapter between Parts — or whether
   structure edits stay in the file system for the first release". The intent
   notes this vocabulary is where such a gesture would sit; the build reserves no
   chord for it, because a chord held for an undecided gesture is a promise the
   table cannot keep.
-- **Three silences in the intent**, each with an assumption the build makes and
-  states rather than an answer it invents. Which panel takes the third place
-  when a panel and an overlay are both open: the most recently opened, which the
-  overlay contract already enforces. Where the cursor starts with no chapter
-  open: the first row, the only row it can name without guessing. What `C-f` on
-  a leaf and `C-b` on a collapsed node do: nothing, because the intent promises
-  open and close, not movement to a child or a parent.
+- **Three silences in the intent**, each with an assumption the build states
+  rather than an answer it invents. Which panel takes the third place when a
+  panel and an overlay are both open: the most recently opened. Where the cursor
+  starts with no chapter open: the first row, the only one it can name without
+  guessing. What `C-f` on a leaf and `C-b` on a collapsed node do: nothing,
+  because the intent promises open and close, not movement to child or parent.

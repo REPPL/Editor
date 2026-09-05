@@ -178,6 +178,13 @@ any decision it made.
 Record each decision as one dated line in `.abcd/work/DECISIONS.md`. Promote
 architecture-shaping decisions to an ADR.
 
+### Record before acting
+
+A defect or observation is captured to the issue ledger before anyone fixes
+it; a user-facing request is captured and promoted to an intent draft before
+anyone builds it; a survey lands as a research note with its recommendation
+captured. The fix or the build cites the record it answers.
+
 ### Documentation
 
 `docs/` is user-facing only. Each page is exactly one Diátaxis type (tutorial,
