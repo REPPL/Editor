@@ -11,7 +11,7 @@
 import type { EditorView } from "@codemirror/view";
 
 import { cursorPosition } from "./editor";
-import { emacsStatus } from "./emacs";
+import { emacsStatus, packageKeymapInstalled } from "./emacs";
 import { describeChord } from "./keyspanel";
 
 /** What the modeline shows besides the cursor position. */
@@ -87,12 +87,22 @@ export function createModeline(): Modeline {
     describeChord("set-mark", "Whether the mark is set"),
   );
   const messageCell = cell("modeline-message");
+  // Empty in every build where the keymap survived, which is every build:
+  // the cell exists so that the one build where it did not says so where the
+  // author is already looking, rather than in a console she will never open.
+  const keymapCell = cell(
+    "modeline-keymap",
+    "The Emacs keymap installed no commands: the build dropped " +
+      "@replit/codemirror-emacs's own bindings, and every chord the package " +
+      "owns will do nothing (see the treeshake note in vite.config.ts)",
+  );
   element.append(
     paneCell,
     chapterCell,
     positionCell,
     prefixCell,
     markCell,
+    keymapCell,
     messageCell,
   );
 
@@ -137,6 +147,13 @@ export function createModeline(): Modeline {
         prefixCell.dataset["active"] = outside ? "yes" : "no";
         markCell.textContent = "";
       }
+
+      // Read every refresh rather than once at mount: the check is cheap, and
+      // a cell that told the truth only about the moment the window opened
+      // would be its own kind of lie.
+      const keymap = packageKeymapInstalled();
+      keymapCell.textContent = keymap ? "" : "no keymap";
+      keymapCell.dataset["installed"] = keymap ? "yes" : "no";
 
       messageCell.textContent = context.message;
     },

@@ -271,6 +271,7 @@ pub fn run() {
         .manage(present::PendingDeck::default())
         .manage(publish::PublishInProgress::default())
         .manage(devharness::DevHarness::default())
+        .manage(export::ExportDestinations::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_folder,
@@ -294,6 +295,7 @@ pub fn run() {
             publish::check_deploy,
             publish::read_publish_log,
             publish::open_published_link,
+            export::choose_export_destination,
             export::export_rendering,
             export::reveal_staged_version,
             devharness::dev_harness,

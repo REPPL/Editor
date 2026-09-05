@@ -249,7 +249,11 @@ impl DropQueue {
 }
 
 /// Sixteen random bytes as lower-case unpadded base32: twenty-six characters.
-fn mint_nonce() -> Result<String, String> {
+///
+/// One minter for every nonce the shell hands the web view — a drop's paths,
+/// the folder an export was pointed at — so there is one place where the
+/// randomness is chosen.
+pub(crate) fn mint_nonce() -> Result<String, String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|error| format!("cannot mint a nonce: {error}"))?;
     Ok(base32(&bytes))

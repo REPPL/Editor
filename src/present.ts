@@ -158,6 +158,12 @@ function boxReport(element: Element | null): BoxReport {
  * test that holds the shape of that log to what the bug needed to see.
  */
 export function observeDeck(root: ParentNode, phase: string): DeckObservation {
+  // The root's own document, not the global one: the observation describes the
+  // page it was handed, and a caller that hands over a fragment or a second
+  // document should not be answered with facts about this one.
+  const owner: Document =
+    root instanceof Document ? root : (root.ownerDocument ?? document);
+  const view: Window = owner.defaultView ?? window;
   const reveal = engine();
   const indices = reveal?.getIndices?.() ?? null;
   const columns = [...root.querySelectorAll(".reveal .slides > section")];
@@ -187,11 +193,11 @@ export function observeDeck(root: ParentNode, phase: string): DeckObservation {
             .filter((one) => one !== "")
             .join("+"),
     presentAt: slides.findIndex((slide) => slide.classList.contains("present")),
-    viewportWidth: window.innerWidth,
-    viewportHeight: window.innerHeight,
-    bodyFontSize: getComputedStyle(document.body).fontSize,
+    viewportWidth: view.innerWidth,
+    viewportHeight: view.innerHeight,
+    bodyFontSize: view.getComputedStyle(owner.body).fontSize,
     headlineFontSize:
-      headline === null ? "" : getComputedStyle(headline).fontSize,
+      headline === null ? "" : view.getComputedStyle(headline).fontSize,
     reveal: boxReport(root.querySelector(".reveal")),
     slidesBox: boxReport(root.querySelector(".reveal .slides")),
     sections: columns.slice(0, 3).map((section) => boxReport(section)),
@@ -217,6 +223,27 @@ export async function logObservation(observation: DeckObservation): Promise<bool
     console.warn(`present log: ${String(error)}`);
     return false;
   }
+}
+
+/**
+ * The recorder one window logs through.
+ *
+ * The first `false` answer latches it off for the rest of the window's life:
+ * with no log configured — which is every ordinary launch — a dragged resize
+ * would otherwise cross to the shell once a frame to be told the same thing
+ * again. The writer is a parameter so a test can answer for the shell.
+ */
+export function createRecorder(
+  root: ParentNode,
+  write: (observation: DeckObservation) => Promise<boolean> = logObservation,
+): (phase: string) => void {
+  let logging = true;
+  return (phase: string): void => {
+    if (!logging) return;
+    void write(observeDeck(root, phase)).then((written) => {
+      logging = written;
+    });
+  };
 }
 
 /** The speaker's notes, in a split view beside the deck. */
@@ -433,9 +460,7 @@ async function start(): Promise<void> {
 
   // Off unless the run named a file; see `present_log` in `present.rs` for
   // what it accepts and where it refuses to write.
-  const record = (phase: string): void => {
-    void logObservation(observeDeck(document, phase));
-  };
+  const record = createRecorder(document);
   window.addEventListener("resize", () => {
     record("resize");
   });

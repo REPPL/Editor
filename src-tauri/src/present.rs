@@ -405,19 +405,19 @@ pub fn present_log_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<
     }
 }
 
-/// Append one observation to the present log, if the run asked for one.
+/// Append one line to a resolved present-log path.
 ///
-/// Answers whether anything was written, so the page can stop asking. A line
-/// with a break in it would read back as two observations, so it is refused
-/// rather than escaped: the caller writes one JSON object per call.
-#[tauri::command]
-pub fn present_log<R: tauri::Runtime>(
-    line: String,
-    app: tauri::AppHandle<R>,
-) -> Result<bool, String> {
-    let Some(path) = present_log_path(&app) else {
-        return Ok(false);
-    };
+/// A line with a break in it would read back as two observations, so it is
+/// refused rather than escaped: the caller writes one JSON object per call.
+///
+/// The confined name may still be a symlink pointing out of the scratch
+/// directory, and an append would follow it — so the name is refused when
+/// anything but a regular file is standing at it. The check and the open are
+/// two steps, which a link made between them would slip through; on this
+/// path — a development-only surface, inside a directory the shell chose —
+/// that is the residual the refusal leaves, and it is named here rather than
+/// left to be discovered.
+fn append_log_line(path: &Path, line: &str) -> Result<bool, String> {
     if line.len() > MAX_LOG_LINE {
         return Err(format!(
             "a present-log line may be at most {MAX_LOG_LINE} bytes"
@@ -426,14 +426,41 @@ pub fn present_log<R: tauri::Runtime>(
     if line.contains(['\n', '\r']) {
         return Err("a present-log line may not contain a line break".to_string());
     }
+    if let Ok(found) = fs::symlink_metadata(path) {
+        if found.file_type().is_symlink() {
+            // No path in the message: what crosses to the page names no folder
+            // of the author's machine.
+            return Err(
+                "the present log name is a link rather than a file, and the log is not written through a link"
+                    .to_string(),
+            );
+        }
+        if !found.is_file() {
+            return Err("the present log name is not a file".to_string());
+        }
+    }
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&path)
+        .open(path)
         .map_err(|error| format!("cannot open the present log: {error}"))?;
     writeln!(file, "{line}")
         .map_err(|error| format!("cannot write the present log: {error}"))
         .map(|()| true)
+}
+
+/// Append one observation to the present log, if the run asked for one.
+///
+/// Answers whether anything was written, so the page can stop asking.
+#[tauri::command]
+pub fn present_log<R: tauri::Runtime>(
+    line: String,
+    app: tauri::AppHandle<R>,
+) -> Result<bool, String> {
+    let Some(path) = present_log_path(&app) else {
+        return Ok(false);
+    };
+    append_log_line(&path, &line)
 }
 
 #[cfg(test)]
@@ -732,6 +759,50 @@ mod tests {
             message.contains("cache or temporary directory"),
             "{message}"
         );
+    }
+
+    #[test]
+    fn writes_one_present_log_line_per_observation() {
+        let dir = scratch("append");
+        let path = dir.join("written.jsonl");
+        let _ = fs::remove_file(&path);
+
+        assert!(append_log_line(&path, "{\"phase\":\"mount\"}").expect("written"));
+        assert!(append_log_line(&path, "{\"phase\":\"resize\"}").expect("written"));
+        let text = fs::read_to_string(&path).expect("read");
+        assert_eq!(text.lines().count(), 2);
+
+        // A line that would read back as two observations, and one over the
+        // cap, are refused rather than escaped or truncated.
+        let broken = append_log_line(&path, "{\"a\":1}\n{\"a\":2}").expect_err("refused");
+        assert!(broken.contains("line break"), "{broken}");
+        let long = append_log_line(&path, &"x".repeat(MAX_LOG_LINE + 1)).expect_err("refused");
+        assert!(long.contains("at most"), "{long}");
+        assert_eq!(fs::read_to_string(&path).expect("read").lines().count(), 2);
+        fs::remove_file(&path).expect("clean");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn refuses_a_present_log_name_a_link_is_standing_at() {
+        // The name is inside the scratch directory and passes confinement; the
+        // link at it points anywhere. An append would follow it, so the name
+        // is refused instead.
+        let dir = scratch("link");
+        let target = dir.join("elsewhere.txt");
+        let path = dir.join("linked.jsonl");
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&target);
+        fs::write(&target, "before\n").expect("target");
+        std::os::unix::fs::symlink(&target, &path).expect("link");
+
+        let message = append_log_line(&path, "{\"phase\":\"mount\"}").expect_err("refused");
+        assert!(message.contains("link"), "{message}");
+        // Nothing was written through it, and the message names no folder.
+        assert_eq!(fs::read_to_string(&target).expect("read"), "before\n");
+        assert!(!message.contains('/'), "{message}");
+        fs::remove_file(&path).expect("clean");
+        fs::remove_file(&target).expect("clean");
     }
 
     #[test]

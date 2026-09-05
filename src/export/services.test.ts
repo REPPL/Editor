@@ -112,15 +112,19 @@ describe("what one row writes", () => {
 
   it("hands the deck row the deck page, the engine and the images, and nothing else", async () => {
     const built = await plan();
-    const request = requestFor("deck", built, "/desktop");
+    const request = requestFor("deck", built, "a-nonce-the-shell-minted");
     expect(request.files.map((file) => file.path)).toEqual([DECK_PATH]);
     expect(request.folder_name).toBe("macromarketing-2026-deck");
-    expect(request.destination).toBe("/desktop");
+    // The nonce, not a folder: the shell holds the folder Alice chose.
+    expect(request.destination_nonce).toBe("a-nonce-the-shell-minted");
+    expect(Object.keys(request)).not.toContain("destination");
     expect(request.variant).toBe("talk");
     expect(request.copies).toEqual(built.copies);
     // The article's page is not in a deck folder, and the deck's is not in an
     // article folder.
-    expect(requestFor("article", built, "/desktop").files.map((f) => f.path)).toEqual([
+    expect(
+      requestFor("article", built, "a-nonce-the-shell-minted").files.map((f) => f.path),
+    ).toEqual([
       ARTICLE_PATH,
     ]);
 

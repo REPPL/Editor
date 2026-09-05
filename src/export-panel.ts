@@ -238,6 +238,8 @@ export function createExportPanel(
       return;
     }
     const kind = row.id as ExportKind;
+    // The shell opens the dialog and keeps the answer; what comes back is the
+    // nonce that claims it, so the panel never holds a folder of Alice's.
     const destination = await services.chooseFolder(built.beside);
     if (destination === null) {
       announce("Nothing was exported.");

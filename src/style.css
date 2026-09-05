@@ -480,6 +480,15 @@ body {
   color: var(--accent);
 }
 
+/* The keymap warning: empty unless the build dropped the package's own
+   installation, and loud when it did — the surface is quiet in a way that
+   looks like a broken keyboard, so the line has to name the real cause. */
+.modeline-keymap[data-installed="no"] {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: #b4442a;
+}
+
 .modeline-message {
   flex: 1 1 auto;
   color: var(--muted);

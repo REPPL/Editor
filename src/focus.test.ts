@@ -217,6 +217,18 @@ function pressAt(target: EventTarget, chord: string): boolean {
 }
 
 /**
+ * The pointer route onto one element, spelled out.
+ *
+ * jsdom runs no default action for a pointer, so the two things a browser
+ * does when Alice clicks something focusable are written here in the
+ * browser's own order: the focus moves first, the click event follows.
+ */
+function clickAt(element: HTMLElement): void {
+  element.focus();
+  element.click();
+}
+
+/**
  * Press a chord at whichever pane holds the keyboard.
  *
  * Which element the event is dispatched at is the whole question here: the
@@ -760,6 +772,123 @@ describe("one pane at a time", () => {
   });
 });
 
+describe("the keyboard arriving on its own", () => {
+  // The pane the model names has to be the pane that has the keys however the
+  // keys got there. A chord is only one of the routes: a pointer moves the
+  // focus without asking the model, and a model that kept saying Sidebar
+  // would keep its reader claiming `C-n` and Return from the text — the
+  // falsifier the intent writes down.
+
+  it("adopts the editor when the keyboard lands in the text", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+    const treeCursor = cursorRow(app);
+    const treeRows = app.sidebar.rows().map((row) => row.key);
+
+    // What a click in a paragraph does: the content takes DOM focus.
+    app.view.contentDOM.focus();
+
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.focused).toBe(false);
+    expect(app.sidebar.element.dataset["focused"]).toBe("no");
+    expect(modeline(app)).toContain("[Editor]");
+
+    // And the text answers its own chords again: Return inserts a newline,
+    // `C-n` moves the point, and the tree does not move at all.
+    const line = cursorPosition(app.view).line;
+    pressAt(app.view.contentDOM, "Return");
+    expect(documentText(app.view)).not.toBe(ALICE);
+    expect(documentText(app.view).split("\n").length).toBe(
+      ALICE.split("\n").length + 1,
+    );
+    pressAt(app.view.contentDOM, "C-n");
+    expect(cursorPosition(app.view).line).toBeGreaterThan(line);
+
+    expect(cursorRow(app)).toBe(treeCursor);
+    expect(app.sidebar.rows().map((row) => row.key)).toEqual(treeRows);
+  });
+
+  it("adopts the editor when a click in the text follows a click in the tree", async () => {
+    await mount();
+    const twisty = app.sidebar.element.querySelector<HTMLElement>(".tree-twisty");
+    expect(twisty).not.toBeNull();
+    clickAt(twisty as HTMLElement);
+    expect(app.focus.pane).toBe("sidebar");
+
+    clickAt(app.view.contentDOM);
+    await settle();
+
+    expect(app.focus.pane).toBe("editor");
+    expect(modeline(app)).toContain("[Editor]");
+    pressAt(app.view.contentDOM, "Return");
+    expect(documentText(app.view)).not.toBe(ALICE);
+    const line = cursorPosition(app.view).line;
+    pressAt(app.view.contentDOM, "C-n");
+    expect(cursorPosition(app.view).line).toBeGreaterThan(line);
+    expect(app.chapterPath).toBe(ALICE_PATH);
+  });
+
+  it("adopts the sidebar when the keyboard lands in the tree", async () => {
+    await mount();
+    expect(app.focus.pane).toBe("editor");
+    const before = documentText(app.view);
+
+    // A click on a row's twisty: the keyboard is in the tree, and the tree
+    // is what the chords are for.
+    const rows = app.sidebar.rows();
+    const bob = rows.find((row) => row.key === `chapter:${BOB_PATH}`);
+    const twisty = bob?.element.querySelector<HTMLElement>(".tree-twisty");
+    expect(twisty).not.toBeNull();
+    clickAt(twisty as HTMLElement);
+
+    expect(app.focus.pane).toBe("sidebar");
+    expect(app.sidebar.focused).toBe(true);
+    expect(app.sidebar.element.dataset["focused"]).toBe("yes");
+    expect(modeline(app)).toContain("[Sidebar]");
+    // The cursor is on the row she pointed at, not on the one that was
+    // selected: the pointer said where she is.
+    expect(cursorRow(app)).toBe(`chapter:${BOB_PATH}`);
+
+    // And the tree answers, while the text is not typed into.
+    expect(pressAt(app.sidebar.element, "C-n")).toBe(true);
+    expect(cursorRow(app)).not.toBe(`chapter:${BOB_PATH}`);
+    expect(documentText(app.view)).toBe(before);
+  });
+
+  it("gives the keyboard back to the text when it leaves the tree for nowhere", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+
+    // The focus leaves the nav and lands nowhere — a click on the page's own
+    // chrome, or a blur.
+    app.sidebar.element.blur();
+    await settle();
+
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.focused).toBe(false);
+    expect(modeline(app)).toContain("[Editor]");
+    pressAt(app.view.contentDOM, "Return");
+    expect(documentText(app.view)).not.toBe(ALICE);
+  });
+
+  it("adopts the panel when the keyboard lands in it and gives it back", async () => {
+    await mount();
+    const panel = createPublishPanel(publishServices());
+    mountPublishPanel(app, panel);
+    await panel.open();
+    await settle();
+    expect(app.focus.pane).toBe("panel");
+
+    app.view.contentDOM.focus();
+    expect(app.focus.pane).toBe("editor");
+    expect(modeline(app)).toContain("[Editor]");
+
+    panel.destroy();
+  });
+});
+
 describe("the drawer", () => {
   it("opens the drawer with the keyboard and closes it behind Return", async () => {
     await mount();
@@ -897,6 +1026,43 @@ describe("the panel in the third place", () => {
     closeOverlay();
     await settle();
     panel.destroy();
+  });
+
+  it("gives the third place to a panel reopened after another one", async () => {
+    // A panel is registered once at mount and is the same object every time
+    // it opens, so "most recently opened" has to be read from the closed→open
+    // transition. Stamping it the first time it was ever seen open would
+    // leave it behind the panel that opened after it for ever.
+    await mount();
+    const publish = createPublishPanel(publishServices());
+    mountPublishPanel(app, publish);
+    const settings = createSettingsPanel(settingsServices());
+    mountSettingsPanel(app, settings);
+
+    await publish.open();
+    await settle();
+    expect(modeline(app)).toContain("[Publish]");
+
+    publish.close();
+    await settings.open();
+    await settle();
+    expect(modeline(app)).toContain("[Settings]");
+
+    await publish.open();
+    await settle();
+    expect(app.focus.pane).toBe("panel");
+    expect(modeline(app)).toContain("[Publish]");
+
+    // And from the editor the cycle still reaches the newer one.
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("editor");
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+    press(app, "C-x o");
+    expect(modeline(app)).toContain("[Publish]");
+
+    publish.destroy();
+    settings.destroy();
   });
 
   it("lets a panel keep its own keys, answering only the chord that leaves it", async () => {

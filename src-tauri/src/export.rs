@@ -4,16 +4,26 @@
 //! path's own `buildVersion`, and this writes it with the publish path's own
 //! `stage_version` and `copy_tree`: the folder carried into a room and the
 //! version the site serves are one build, differing only in where the deck's
-//! engine sits. The rules an export adds are the four this module holds — the
-//! folder name is one segment, the destination is never the open document or
-//! anywhere inside it, an existing folder is never written over, and the
-//! folder is revealed rather than opened.
+//! engine sits. The rules an export adds are the five this module holds — the
+//! folder name is one segment, the destination is the one the author chose in
+//! the shell's own dialog and no other, that destination is never the open
+//! document or the application's own cache, an existing folder is never
+//! written over, and the folder is revealed rather than opened.
+//!
+//! **The destination is not the page's to give.** The dialog is opened here,
+//! by [`choose_export_destination`], and its answer stays in the shell under a
+//! nonce — exactly as a drop's paths stay in `assets::DropQueue`. The request
+//! carries the nonce, so a script in the web view can ask for the folder the
+//! author just chose and for nothing else: not `~`, not the staging tree it
+//! would then be copied out of.
 //!
 //! Nothing here touches the network. `no_network_outside_publish` names the
 //! one file in the crate that holds an HTTP client, and this is not it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +38,64 @@ pub const EXPORT_STAGING_FOLDER: &str = "export-staging";
 /// The most folders one name may collide with before the export gives up.
 const COLLISION_LIMIT: usize = 99;
 
+/// How long the folder the author chose stays claimable.
+///
+/// The page asks for the export as soon as the dialog closes, so this only has
+/// to cover one round trip; a nonce left lying around after it is worth
+/// nothing.
+pub const DESTINATION_LIFETIME: Duration = Duration::from_secs(120);
+
+/// One answer the author gave the folder dialog.
+struct ChosenFolder {
+    nonce: String,
+    path: PathBuf,
+    at: Instant,
+}
+
+/// The folders the author has chosen, each under the nonce that claims it.
+///
+/// The web view never names a destination: it names a nonce this state minted
+/// when the author picked a folder in the shell's own dialog. An unknown or
+/// expired nonce is refused, and a nonce is good for one export.
+#[derive(Default)]
+pub struct ExportDestinations(Mutex<Vec<ChosenFolder>>);
+
+impl ExportDestinations {
+    /// Hold the folder the author chose and mint the nonce that claims it.
+    pub fn offer(&self, path: PathBuf) -> Result<String, String> {
+        let nonce = crate::assets::mint_nonce()?;
+        let mut held = self
+            .0
+            .lock()
+            .map_err(|_| "the chosen folder is unreadable".to_string())?;
+        let now = Instant::now();
+        held.retain(|chosen| now.duration_since(chosen.at) < DESTINATION_LIFETIME);
+        held.push(ChosenFolder {
+            nonce: nonce.clone(),
+            path,
+            at: now,
+        });
+        Ok(nonce)
+    }
+
+    /// Take the folder a nonce names. An unknown or expired nonce is refused.
+    pub fn claim(&self, nonce: &str) -> Result<PathBuf, String> {
+        let mut held = self
+            .0
+            .lock()
+            .map_err(|_| "the chosen folder is unreadable".to_string())?;
+        let now = Instant::now();
+        held.retain(|chosen| now.duration_since(chosen.at) < DESTINATION_LIFETIME);
+        let index = held
+            .iter()
+            .position(|chosen| chosen.nonce == nonce)
+            .ok_or_else(|| {
+                "that folder is no longer on offer. Choose the folder again.".to_string()
+            })?;
+        Ok(held.remove(index).path)
+    }
+}
+
 /// What the page asks for when Alice confirms a row.
 ///
 /// The shapes are the publish request's, because the build runs in the web
@@ -40,8 +108,8 @@ pub struct ExportRequest {
     pub variant: String,
     /// The folder to create, as one path segment.
     pub folder_name: String,
-    /// The folder Alice chose in the native dialog.
-    pub destination: String,
+    /// The nonce `choose_export_destination` minted for the folder Alice chose.
+    pub destination_nonce: String,
     /// The built text files, relative to the folder.
     pub files: Vec<BuiltFile>,
     /// The assets to copy, disk to disk.
@@ -63,6 +131,18 @@ pub struct ExportOutcome {
 pub struct ExportContext {
     pub document_root: PathBuf,
     pub cache_dir: PathBuf,
+}
+
+/// What one export wrote, and where.
+///
+/// The path is the shell's own business — it is what the Finder is asked to
+/// reveal — and it stops at the command boundary: what crosses to the page is
+/// the [`ExportOutcome`] alone, which names no folder of the author's machine.
+#[derive(Debug, Clone)]
+pub struct Export {
+    pub outcome: ExportOutcome,
+    /// The folder that was created, resolved: the path that was written to.
+    pub target: PathBuf,
 }
 
 /// Whether a name is one path segment an export may create.
@@ -134,15 +214,31 @@ pub fn staged_version_path(cache_dir: &Path) -> Result<PathBuf, String> {
     Ok(staged)
 }
 
+/// A path as the filesystem resolves it, or as it was written where it is not
+/// there to resolve.
+///
+/// A destination is always resolved, because it has to exist to be exported
+/// into. The trees an export refuses — the cache, the two staging folders —
+/// may not exist yet, and a comparison against a folder that is not there is
+/// still worth making.
+fn resolved(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 /// Write one rendering into a folder inside the destination.
 ///
 /// In order: the name, the destination, a folder nothing is standing in, the
 /// staging tree the dry run's own function builds, the copy, and the chrome.
 /// Nothing is written anywhere until every refusal has been made.
+///
+/// The destination is the path the shell resolved from the author's own answer
+/// to the folder dialog — `ExportDestinations::claim` — never a path the
+/// request carried.
 pub fn run_export(
     context: &ExportContext,
     request: &ExportRequest,
-) -> Result<ExportOutcome, String> {
+    destination: &Path,
+) -> Result<Export, String> {
     // The chrome is looked up first: an unknown kind is refused before a
     // folder is resolved, let alone created.
     let chrome = stage::chrome_for_folder(&request.kind)?;
@@ -158,7 +254,7 @@ pub fn run_export(
     // folder reached through a symlink is the same folder.
     let document_root = fs::canonicalize(&context.document_root)
         .map_err(|error| format!("cannot resolve the document folder: {error}"))?;
-    let destination = fs::canonicalize(&request.destination)
+    let destination = fs::canonicalize(destination)
         .map_err(|error| format!("cannot resolve the folder you chose: {error}"))?;
     if !destination.is_dir() {
         return Err(format!(
@@ -179,7 +275,32 @@ pub fn run_export(
         ));
     }
 
+    // The application's own working trees are not somewhere an export writes.
+    // The staging folders are inside the cache, and each is named anyway: they
+    // are the two an export would otherwise copy out of while copying into.
+    let export_staging = context.cache_dir.join(EXPORT_STAGING_FOLDER);
+    let publish_staging = crate::publish::staging_path(&context.cache_dir);
+    for held in [&context.cache_dir, &export_staging, &publish_staging] {
+        let held = resolved(held);
+        if destination == held || destination.starts_with(&held) {
+            return Err(format!(
+                "{} is inside the application's own working folders, which it clears and rewrites. An export writes anywhere else.",
+                name_of(&destination)
+            ));
+        }
+    }
+
     let target = free_folder(&destination, &request.folder_name)?;
+    // Create it here rather than leaving it to the copy: `create_dir` fails
+    // where something is already standing, which is the promise "an export
+    // never writes over anything" made against the filesystem itself rather
+    // than against a check made a moment earlier.
+    fs::create_dir(&target).map_err(|error| {
+        format!(
+            "cannot create {} in the folder you chose: {error}",
+            name_of(&target)
+        )
+    })?;
 
     // The dry run's own function, on a staging tree of its own.
     let staged = stage::stage_version(
@@ -198,9 +319,12 @@ pub fn run_export(
         files += 1;
     }
 
-    Ok(ExportOutcome {
-        folder: name_of(&target),
-        files,
+    Ok(Export {
+        outcome: ExportOutcome {
+            folder: name_of(&target),
+            files,
+        },
+        target,
     })
 }
 
@@ -233,6 +357,44 @@ fn reveal(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
         .map_err(|error| format!("cannot show the folder: {error}"))
 }
 
+/// Ask the author where to export, and hold the answer.
+///
+/// The dialog is the shell's, so its answer never has to be taken from the
+/// page: what crosses back is a nonce, and the folder it names stays here.
+/// `default_path` only says where the dialog opens; a folder that cannot be
+/// resolved is simply not passed to it.
+#[tauri::command]
+pub async fn choose_export_destination(
+    app: tauri::AppHandle,
+    default_path: Option<String>,
+    chosen: tauri::State<'_, ExportDestinations>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let opens_at = default_path.and_then(|path| fs::canonicalize(path).ok());
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let mut dialog = app.dialog().file();
+        if let Some(folder) = opens_at {
+            dialog = dialog.set_directory(folder);
+        }
+        dialog.blocking_pick_folder()
+    })
+    .await
+    .map_err(|error| format!("cannot open the folder chooser: {error}"))?;
+
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|error| format!("cannot read the folder you chose: {error}"))?;
+    // Resolved here, so the nonce names the folder itself rather than a route
+    // to it, and the export's own refusals compare like with like.
+    let path = fs::canonicalize(&path)
+        .map_err(|error| format!("cannot resolve the folder you chose: {error}"))?;
+    chosen.offer(path).map(Some)
+}
+
 /// Write one rendering into a folder, and show it.
 ///
 /// A folder that was written and could not be revealed is reported as written:
@@ -242,21 +404,27 @@ pub async fn export_rendering(
     app: tauri::AppHandle,
     request: ExportRequest,
     root: tauri::State<'_, crate::DocumentRoot>,
+    chosen: tauri::State<'_, ExportDestinations>,
 ) -> Result<ExportOutcome, String> {
     let document_root = root.get()?;
     let cache = cache_dir(&app)?;
-    let destination = request.destination.clone();
+    // The one destination this export may write into: the answer the author
+    // gave the shell's own dialog, claimed by the nonce the request carries.
+    let destination = chosen.claim(&request.destination_nonce)?;
     let context = ExportContext {
         document_root,
         cache_dir: cache,
     };
-    let outcome = tauri::async_runtime::spawn_blocking(move || run_export(&context, &request))
-        .await
-        .map_err(|error| format!("cannot export: {error}"))??;
-    if let Err(error) = reveal(&app, &Path::new(&destination).join(&outcome.folder)) {
+    let export =
+        tauri::async_runtime::spawn_blocking(move || run_export(&context, &request, &destination))
+            .await
+            .map_err(|error| format!("cannot export: {error}"))??;
+    // The folder that was written, not a path assembled again from what the
+    // page said: a destination reached through a symlink resolves once.
+    if let Err(error) = reveal(&app, &export.target) {
         log::warn!("{error}");
     }
-    Ok(outcome)
+    Ok(export.outcome)
 }
 
 /// Show the folder the dry run staged.
@@ -326,12 +494,15 @@ mod tests {
         }]
     }
 
-    fn request(kind: &str, destination: &Path) -> ExportRequest {
+    fn request(kind: &str) -> ExportRequest {
         ExportRequest {
             kind: kind.to_string(),
             variant: "talk".to_string(),
             folder_name: format!("a-talk-{kind}"),
-            destination: destination.to_string_lossy().into_owned(),
+            // The nonce a real request carries is minted by the dialog
+            // command; every test here calls `run_export` with the folder the
+            // shell resolved, which is what the command hands it.
+            destination_nonce: "not-claimed-here".to_string(),
             files: if kind == "deck" {
                 deck_files()
             } else {
@@ -367,9 +538,16 @@ mod tests {
     #[test]
     fn an_export_writes_the_page_the_engine_and_the_images() {
         let fixture = fixture();
-        let outcome = run_export(&fixture.context, &request("deck", fixture.outside.path()))
+        let export = run_export(&fixture.context, &request("deck"), fixture.outside.path())
             .expect("exported");
+        let outcome = export.outcome;
         assert_eq!(outcome.folder, "a-talk-deck");
+        // The path the Finder is asked to reveal is the folder that was
+        // written, resolved, and not a path put together again afterwards.
+        assert_eq!(
+            export.target,
+            fs::canonicalize(fixture.outside.path().join("a-talk-deck")).expect("resolved")
+        );
         let folder = fixture.outside.path().join("a-talk-deck");
         let names: Vec<String> = walk(&folder).into_iter().map(|(name, _)| name).collect();
         assert_eq!(
@@ -402,7 +580,8 @@ mod tests {
         let fixture = fixture();
         run_export(
             &fixture.context,
-            &request("article", fixture.outside.path()),
+            &request("article"),
+            fixture.outside.path(),
         )
         .expect("exported");
         let folder = fixture.outside.path().join("a-talk-article");
@@ -420,9 +599,10 @@ mod tests {
     #[test]
     fn export_refuses_a_rendering_it_does_not_write() {
         let fixture = fixture();
-        let mut request = request("deck", fixture.outside.path());
+        let mut request = request("deck");
         request.kind = "pdf".to_string();
-        let message = run_export(&fixture.context, &request).expect_err("refused");
+        let message =
+            run_export(&fixture.context, &request, fixture.outside.path()).expect_err("refused");
         assert!(
             message.contains("not a rendering an export writes"),
             "{message}"
@@ -433,7 +613,7 @@ mod tests {
     fn export_refuses_a_destination_inside_the_open_document() {
         let fixture = fixture();
         let inside = fixture.document.path().join("01-part");
-        let message = run_export(&fixture.context, &request("deck", &inside)).expect_err("refused");
+        let message = run_export(&fixture.context, &request("deck"), &inside).expect_err("refused");
         assert!(
             message.contains("inside the open document folder"),
             "{message}"
@@ -444,19 +624,132 @@ mod tests {
     #[test]
     fn export_refuses_the_document_root_itself() {
         let fixture = fixture();
-        let message = run_export(&fixture.context, &request("deck", fixture.document.path()))
+        let message = run_export(&fixture.context, &request("deck"), fixture.document.path())
             .expect_err("refused");
         assert!(message.contains("is the open document folder"), "{message}");
         assert!(!fixture.document.path().join("a-talk-deck").exists());
     }
 
     #[test]
+    fn a_destination_is_the_dialog_s_answer_claimed_once() {
+        // The page names a nonce, never a folder. One dialog answer is one
+        // export: an unknown nonce, a nonce already spent, and a nonce from
+        // nowhere are the same refusal.
+        let fixture = fixture();
+        let chosen = ExportDestinations::default();
+        let nonce = chosen
+            .offer(fixture.outside.path().to_path_buf())
+            .expect("minted");
+        assert_ne!(nonce, "");
+        assert!(!nonce.contains('/'), "the nonce carries a path: {nonce}");
+
+        assert_eq!(
+            chosen.claim(&nonce).expect("claimed"),
+            fixture.outside.path()
+        );
+        let again = chosen.claim(&nonce).expect_err("spent");
+        assert!(again.contains("no longer on offer"), "{again}");
+        let invented = chosen
+            .claim("aaaaaaaaaaaaaaaaaaaaaaaaaa")
+            .expect_err("refused");
+        assert!(invented.contains("no longer on offer"), "{invented}");
+    }
+
+    #[test]
+    fn an_export_request_carries_no_folder_of_its_own() {
+        // The wire shape: what the page hands the shell names a nonce and a
+        // folder name, and no path on the author's machine at all.
+        let request = request("deck");
+        let json = serde_json::to_string(&request).expect("serialised");
+        assert!(json.contains("destination_nonce"), "{json}");
+        assert!(!json.contains("\"destination\""), "{json}");
+        assert!(!json.contains('/') || !json.contains(":\"/"), "{json}");
+    }
+
+    #[test]
+    fn export_refuses_the_application_s_own_working_folders() {
+        // The cache holds both staging trees. An export into it would copy a
+        // tree out of the very folder it is copying into, and the next dry run
+        // would clear what Alice carried away.
+        let fixture = fixture();
+        let staging = fixture.context.cache_dir.join(EXPORT_STAGING_FOLDER);
+        let publish_staging = crate::publish::staging_path(&fixture.context.cache_dir);
+        let inside_cache = fixture.context.cache_dir.join("something-else");
+        for folder in [
+            fixture.context.cache_dir.clone(),
+            staging.clone(),
+            publish_staging.clone(),
+            inside_cache.clone(),
+        ] {
+            fs::create_dir_all(&folder).expect("folder");
+            let message =
+                run_export(&fixture.context, &request("deck"), &folder).expect_err("refused");
+            assert!(
+                message.contains("the application's own working folders"),
+                "{}: {message}",
+                folder.display()
+            );
+            assert!(!folder.join("a-talk-deck").exists());
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn export_creates_its_folder_before_it_stages_anything() {
+        // The folder is created with `create_dir`, which fails where something
+        // is already standing rather than adopting it — and it is created
+        // before the staging tree is built, so a destination that cannot be
+        // written leaves nothing behind anywhere.
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = fixture();
+        let destination = fixture.outside.path();
+        let mode = fs::metadata(destination).expect("metadata").permissions();
+        fs::set_permissions(destination, fs::Permissions::from_mode(0o555)).expect("read-only");
+
+        let message =
+            run_export(&fixture.context, &request("deck"), destination).expect_err("refused");
+
+        fs::set_permissions(destination, mode).expect("restored");
+        assert!(message.contains("cannot create a-talk-deck"), "{message}");
+        assert!(
+            !fixture
+                .context
+                .cache_dir
+                .join(EXPORT_STAGING_FOLDER)
+                .exists(),
+            "the export staged a tree for a folder it could not create"
+        );
+        assert!(walk(destination).is_empty());
+    }
+
+    #[test]
+    fn export_refuses_a_name_a_link_is_standing_at() {
+        // `create_dir` refuses whatever is at the name, a link that resolves
+        // nowhere included: an export writes into a folder it made itself.
+        #[cfg(unix)]
+        {
+            let fixture = fixture();
+            std::os::unix::fs::symlink(
+                fixture.document.path().join("nothing-here"),
+                fixture.outside.path().join("a-talk-deck"),
+            )
+            .expect("link");
+            let message = run_export(&fixture.context, &request("deck"), fixture.outside.path())
+                .expect_err("refused");
+            assert!(message.contains("cannot create a-talk-deck"), "{message}");
+            assert!(!fixture.document.path().join("nothing-here").exists());
+        }
+    }
+
+    #[test]
     fn export_refuses_a_folder_name_that_is_not_one_segment() {
         let fixture = fixture();
         for name in ["../escaped", "a talk", "A-Talk", "-talk", "talk/deck", ""] {
-            let mut request = request("deck", fixture.outside.path());
+            let mut request = request("deck");
             request.folder_name = name.to_string();
-            let message = run_export(&fixture.context, &request).expect_err("refused");
+            let message = run_export(&fixture.context, &request, fixture.outside.path())
+                .expect_err("refused");
             assert!(
                 message.contains("not a folder name an export writes"),
                 "{name}: {message}"
@@ -468,11 +761,12 @@ mod tests {
     #[test]
     fn export_never_writes_over_a_folder_that_is_there() {
         let fixture = fixture();
-        run_export(&fixture.context, &request("deck", fixture.outside.path())).expect("exported");
+        run_export(&fixture.context, &request("deck"), fixture.outside.path()).expect("exported");
         let first = fixture.outside.path().join("a-talk-deck");
         let before = walk(&first);
-        let second = run_export(&fixture.context, &request("deck", fixture.outside.path()))
-            .expect("exported");
+        let second = run_export(&fixture.context, &request("deck"), fixture.outside.path())
+            .expect("exported")
+            .outcome;
         assert_eq!(second.folder, "a-talk-deck-2");
         assert_eq!(walk(&first), before, "the first folder was written over");
         assert!(fixture.outside.path().join("a-talk-deck-2").is_dir());
@@ -482,16 +776,18 @@ mod tests {
     fn export_leaves_the_document_folder_byte_for_byte() {
         let fixture = fixture();
         let before = walk(fixture.document.path());
-        run_export(&fixture.context, &request("deck", fixture.outside.path())).expect("exported");
+        run_export(&fixture.context, &request("deck"), fixture.outside.path()).expect("exported");
         run_export(
             &fixture.context,
-            &request("article", fixture.outside.path()),
+            &request("article"),
+            fixture.outside.path(),
         )
         .expect("exported");
         // And a refused destination inside the document leaves it alone too.
         run_export(
             &fixture.context,
-            &request("deck", &fixture.document.path().join("01-part")),
+            &request("deck"),
+            &fixture.document.path().join("01-part"),
         )
         .expect_err("refused");
         assert_eq!(walk(fixture.document.path()), before);
@@ -500,10 +796,11 @@ mod tests {
     #[test]
     fn an_exported_folder_carries_no_absolute_path() {
         let fixture = fixture();
-        run_export(&fixture.context, &request("deck", fixture.outside.path())).expect("exported");
+        run_export(&fixture.context, &request("deck"), fixture.outside.path()).expect("exported");
         run_export(
             &fixture.context,
-            &request("article", fixture.outside.path()),
+            &request("article"),
+            fixture.outside.path(),
         )
         .expect("exported");
 
@@ -544,7 +841,7 @@ mod tests {
         // The export's folder is the staging tree, copied. So what the shell
         // wrote is what the build handed it, byte for byte.
         let fixture = fixture();
-        run_export(&fixture.context, &request("deck", fixture.outside.path())).expect("exported");
+        run_export(&fixture.context, &request("deck"), fixture.outside.path()).expect("exported");
         let folder = fixture.outside.path().join("a-talk-deck");
         assert_eq!(
             fs::read_to_string(folder.join("slides/index.html")).expect("read"),

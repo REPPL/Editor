@@ -238,6 +238,9 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    */
   const focus: FocusModel = createFocusModel({
     sidebar,
+    // The content, not the whole surface: it is the element the keyboard
+    // actually lands in when Alice clicks in a paragraph.
+    editorContent: view.contentDOM,
     focusEditor: () => {
       view.focus();
     },

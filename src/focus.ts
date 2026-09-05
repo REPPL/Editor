@@ -100,6 +100,16 @@ export function focusFirstControl(element: HTMLElement): void {
 export interface FocusHooks {
   /** Give the keyboard back to the editing surface. */
   focusEditor(): void;
+  /**
+   * The editing surface's content root.
+   *
+   * The one element the keyboard can land in and mean "the text": a click in
+   * a paragraph, a `contentDOM.focus()` after a chapter loads, a browser
+   * restoring focus. Without it the model can only hear the panes it drives
+   * itself, and a pointer route leaves it naming a pane that does not have
+   * the keys.
+   */
+  readonly editorContent: HTMLElement;
   /** The sidebar, which is the second pane. */
   readonly sidebar: Sidebar;
   /** The pane or the prefix changed, and the modeline has to say so. */
@@ -170,6 +180,15 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
    * opened.
    */
   const stamps = new WeakMap<object, number>();
+  /**
+   * The sources that were open the last time they were looked at.
+   *
+   * The transition is what a stamp records, so a source has to be forgotten
+   * when it closes: a panel registered once at mount is the same object every
+   * time it opens, and stamping it only the first time would freeze a panel
+   * reopened after another one behind that other one for ever.
+   */
+  const seenOpen = new WeakSet<object>();
   let stamp = 0;
 
   function changed(): void {
@@ -198,11 +217,16 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
         },
       });
     }
+    if (overlay && !overlay.open) seenOpen.delete(overlay);
     for (const panel of panels) {
       if (panel.isOpen()) found.push({ key: panel, focus: panel });
+      // Closed now: the next time it is open it has just opened.
+      else seenOpen.delete(panel);
     }
     for (const entry of found) {
-      if (!stamps.has(entry.key)) stamps.set(entry.key, ++stamp);
+      if (seenOpen.has(entry.key)) continue;
+      seenOpen.add(entry.key);
+      stamps.set(entry.key, ++stamp);
     }
     return found.sort(
       (a, b) => (stamps.get(b.key) ?? 0) - (stamps.get(a.key) ?? 0),
@@ -296,23 +320,80 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
    * A panel opened by its own chord focuses itself, and a click lands
    * wherever it lands. The model would otherwise name a pane that does not
    * have the keys, which is the one thing the modeline must never do.
+   *
+   * The pane being left is still released: it is losing the keyboard whether
+   * or not it was asked to, so a tree that keeps its cursor mark — or a
+   * drawer the cycle opened — would outlive the pane it belongs to.
    */
   function adopt(next: Pane): void {
-    if (next === pane) return;
+    if (next === pane) {
+      // The pane is the same; which panel fills the third place may not be,
+      // and the modeline names the panel rather than the place.
+      if (pane === "panel") changed();
+      return;
+    }
+    targetFor(pane).release();
     pane = next;
     pending = null;
+    if (next === "sidebar") sidebar.adoptFocus();
     changed();
+  }
+
+  /**
+   * Which pane an element belongs to, or null for anything else.
+   *
+   * The three panes are asked in the cycle's own order of precedence: a panel
+   * sits over the surface, so an element inside an open panel is the panel's
+   * even when the panel is drawn inside another pane's subtree.
+   */
+  function paneOf(landed: Node | null): Pane | null {
+    if (landed === null) return null;
+    if (openPanels().some((entry) => entry.focus.element.contains(landed))) {
+      return "panel";
+    }
+    if (hooks.editorContent.contains(landed)) return "editor";
+    // A tree with no rows cannot hold a cursor, and its one button is the
+    // page's own: leaving it out keeps the reader off that button's keys.
+    if (sidebar.element.contains(landed) && sidebarTarget.available()) {
+      return "sidebar";
+    }
+    return null;
   }
 
   function onFocusIn(event: FocusEvent): void {
     const landed = event.target;
     if (!(landed instanceof Node)) return;
-    if (openPanels().some((entry) => entry.focus.element.contains(landed))) {
-      adopt("panel");
+    const arrived = paneOf(landed);
+    if (arrived !== null) {
+      adopt(arrived);
       return;
     }
     // The keyboard left the panel: it closed, or she clicked past it.
     if (pane === "panel") adopt(sidebar.focused ? "sidebar" : "editor");
+  }
+
+  /**
+   * The keyboard left the tree.
+   *
+   * Where it went is `focusin`'s business and it is heard first, so this only
+   * has to answer the case where it went nowhere — a click on the page's
+   * chrome, a blur — in which the model would otherwise keep the reader
+   * claiming `C-n` and Return for a tree nothing is pointing at.
+   */
+  function onFocusOut(event: FocusEvent): void {
+    const left = event.target;
+    if (!(left instanceof Node) || !sidebar.element.contains(left)) return;
+    const next = event.relatedTarget;
+    // Focus moving on within the tree has not left it.
+    if (next instanceof Node && sidebar.element.contains(next)) return;
+    queueMicrotask(() => {
+      if (pane !== "sidebar") return;
+      const active = document.activeElement;
+      if (active !== null && sidebar.element.contains(active)) return;
+      const now = paneOf(active);
+      if (now === null) toEditor();
+      else adopt(now);
+    });
   }
 
   /** The rows this pane answers. */
@@ -414,6 +495,7 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
 
   document.addEventListener("keydown", onKeydown, true);
   document.addEventListener("focusin", onFocusIn, true);
+  document.addEventListener("focusout", onFocusOut, true);
   const stopWatchingOverlays = onOverlayChange(() => {
     reconcile();
     changed();
@@ -444,6 +526,7 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
     destroy(): void {
       document.removeEventListener("keydown", onKeydown, true);
       document.removeEventListener("focusin", onFocusIn, true);
+      document.removeEventListener("focusout", onFocusOut, true);
       stopWatchingOverlays();
     },
   };

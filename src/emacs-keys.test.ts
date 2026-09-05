@@ -47,6 +47,7 @@ import {
   scopeOf,
 } from "./keys";
 import { installKeyLog } from "./keyspike";
+import { createModeline } from "./modeline";
 
 /** A document with enough shape for movement chords to be visible. */
 const SAMPLE = [
@@ -350,6 +351,22 @@ describe("the binding table", () => {
     expect(chordIndexIn("sidebar").size).toBeGreaterThan(0);
     expect(chordIndexIn("editor").has("C-n")).toBe(true);
     expect(chordIndexIn("sidebar").has("C-n")).toBe(true);
+
+    // `other-window` is the one row every pane answers — the reader in
+    // `src/focus.ts` runs it from the tree and from a panel as well as from
+    // the text — so its chords are the one place where per-scope uniqueness
+    // is not enough: no row in any scope may share them.
+    const cycle = bindingById("other-window");
+    expect(cycle?.chords).toEqual(["C-x o", "C-x C-o"]);
+    for (const chord of cycle?.chords ?? []) {
+      const key = canonicalChord(chord);
+      const claimants = BINDINGS.filter((binding) =>
+        binding.chords.map(canonicalChord).includes(key),
+      ).map((binding) => binding.id);
+      expect(claimants, key).toEqual(["other-window"]);
+      // And it is reachable from the text, which is where the cycle starts.
+      expect(chordIndexIn("editor").has(key)).toBe(true);
+    }
   });
 
   it("suppresses a chord instead of listing it, never both", () => {
@@ -453,7 +470,13 @@ describe("the binding table", () => {
     // four keymaps the surface installs answers has to be a row of the table
     // or an entry in SUPPRESSED. A future version of a package that adds a
     // chord fails the build rather than quietly widening the promise.
-    const listed = chordIndex();
+    //
+    // The editing surface's own scope, not the whole table: these four keymaps
+    // are installed in the surface, so a chord they answer has to be a row the
+    // surface owns. Sweeping against every row would let a chord be excused by
+    // a sidebar row that answers only while the tree has the keyboard — which
+    // is exactly the pane confusion the scopes exist to prevent.
+    const listed = chordIndexIn("editor");
     const suppressed = new Set(
       SUPPRESSED.map((entry) => canonicalChord(entry.chord)),
     );
@@ -1840,6 +1863,104 @@ describe("the package's own installation", () => {
     // `vite.config.ts` can go with it.
     expect(source).toContain("/*@__PURE__*/EmacsHandler.bindKey(i, emacsKeys[i])");
     expect(source).toContain("/*@__PURE__*/EmacsHandler.addCommands(");
+  });
+
+  it("is said in the modeline when it is missing, not only in the console", () => {
+    // The console error the fix shipped with is seen by a developer who opens
+    // the console and by nobody else. The author sees the modeline, so the
+    // build that dropped the keymap says so there.
+    const modeline = createModeline();
+    const context = { chapter: null, dirty: false, message: "" };
+
+    modeline.update(null, context);
+    const keymapCell = modeline.element.querySelector<HTMLElement>(
+      ".modeline-keymap",
+    );
+    expect(keymapCell?.dataset["installed"]).toBe("yes");
+    expect(keymapCell?.textContent).toBe("");
+
+    // The state a build with the annotations honoured leaves behind: the
+    // package's own commands are simply not there.
+    const commands = EmacsHandler.commands;
+    const killLine = commands["killLine"];
+    delete commands["killLine"];
+    try {
+      expect(packageKeymapInstalled()).toBe(false);
+      modeline.update(null, context);
+      expect(keymapCell?.dataset["installed"]).toBe("no");
+      expect(keymapCell?.textContent).toBe("no keymap");
+      expect(keymapCell?.title).toContain("vite.config.ts");
+    } finally {
+      if (killLine !== undefined) commands["killLine"] = killLine;
+    }
+
+    expect(packageKeymapInstalled()).toBe(true);
+    modeline.update(null, context);
+    expect(keymapCell?.textContent).toBe("");
+  });
+
+  it("is what tools/check-bundle.mjs looks for in the built file", () => {
+    // The guard reads the emitted bundle, which this suite never builds. What
+    // is checked here is that the two things it looks for are the two the
+    // dependency actually does: a guard that matched nothing would pass a
+    // build with the keymap dropped.
+    const guard = readFileSync(join(process.cwd(), "tools/check-bundle.mjs"), "utf8");
+    const source = readFileSync(
+      join(process.cwd(), "node_modules/@replit/codemirror-emacs/dist/index.js"),
+      "utf8",
+    );
+    const patternFor = (name: string): RegExp => {
+      const line = guard.match(new RegExp(`const ${name} =\\s*(/.*/);`));
+      expect(line?.[1], `${name} is no longer a literal in the guard`).toBeTruthy();
+      return new RegExp((line?.[1] ?? "").slice(1, -1));
+    };
+    expect(patternFor("BIND_LOOP").test(source)).toBe(true);
+    expect(patternFor("ADD_COMMANDS").test(source)).toBe(true);
+    expect(guard).toContain("killLine");
+  });
+
+  it("is what a built bundle is failed for lacking", async () => {
+    // The guard itself, run as `npm run build` runs it, over a folder shaped
+    // like `dist`: one bundle carrying the two calls, one with them dropped
+    // exactly as Rolldown dropped them.
+    const { execFileSync } = await import("node:child_process");
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+
+    const installed = [
+      "const Ww={a:1};class Q{static bindKey(){}static addCommands(){}}",
+      "for(let e in Ww)Q.bindKey(e,Ww[e]);",
+      "Q.addCommands({unsetTransientMark:function(){},killLine:function(){}});",
+    ].join("\n");
+    // What the annotations bought the bundler: the loop's body gone and the
+    // command table with it.
+    const dropped = "const Ww={a:1};for(let e in Ww)Ww[e];\n";
+
+    const run = (source: string): { code: number; output: string } => {
+      const dist = mkdtempSync(join(tmpdir(), "check-bundle-"));
+      mkdirSync(join(dist, "assets"));
+      writeFileSync(join(dist, "assets", "main-abc123.js"), source);
+      try {
+        const output = execFileSync(
+          process.execPath,
+          [join(process.cwd(), "tools/check-bundle.mjs"), dist],
+          { encoding: "utf8", stdio: "pipe" },
+        );
+        return { code: 0, output };
+      } catch (error) {
+        const failure = error as { status?: number; stderr?: string };
+        return { code: failure.status ?? 1, output: failure.stderr ?? "" };
+      }
+    };
+
+    const whole = run(installed);
+    expect(whole.code, whole.output).toBe(0);
+    expect(whole.output).toContain("the Emacs keymap is installed");
+
+    const inert = run(dropped);
+    expect(inert.code).not.toBe(0);
+    expect(inert.output).toContain("bindKey loop");
+    expect(inert.output).toContain("addCommands call");
   });
 });
 

@@ -76,6 +76,16 @@ export interface Sidebar {
   setCursor(index: number): void;
   /** Take the keyboard: open the drawer, put the cursor somewhere it can start. */
   takeFocus(): void;
+  /**
+   * Notice that the keyboard arrived by a route the tree did not drive.
+   *
+   * A click on a row lands on the row's own button, so the keyboard is in the
+   * tree without `takeFocus` having put it there: the cursor mark and the
+   * modeline have to agree with that, and moving the focus again — or opening
+   * a drawer nobody asked to open — would be answering a gesture Alice did
+   * not make.
+   */
+  adoptFocus(): void;
   /** Give the keyboard back, closing the drawer only if `takeFocus` opened it. */
   releaseFocus(): void;
   /** Whether the tree holds the keyboard. */
@@ -608,6 +618,27 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
       paintCursor();
       const at = cursorIndex();
       if (at >= 0) rowList[at]?.element.scrollIntoView({ block: "nearest" });
+    },
+
+    /**
+     * Notice the keyboard already being here.
+     *
+     * The drawer is open — the keyboard could not have landed in it otherwise
+     * — and the focus is on whatever Alice pointed at, so neither is touched.
+     * A cursor is placed only where there is none, so the row she clicked is
+     * not overruled by the one that was selected.
+     */
+    adoptFocus() {
+      const active = element.ownerDocument.activeElement;
+      const under =
+        active === null
+          ? undefined
+          : rowList.find((row) => row.element.contains(active));
+      if (under) cursorKey = under.key;
+      else if (cursorIndex() < 0) cursorKey = rowList[0]?.key ?? null;
+      focused = true;
+      element.dataset["focused"] = "yes";
+      paintCursor();
     },
 
     releaseFocus() {

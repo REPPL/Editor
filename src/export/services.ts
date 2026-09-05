@@ -11,7 +11,6 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 
 import { slugify } from "../core/outline";
 import { DECK_ENGINE_FILES } from "../core/render/slides";
@@ -41,7 +40,14 @@ export interface ExportRequest {
   readonly kind: ExportKind;
   readonly variant: string;
   readonly folder_name: string;
-  readonly destination: string;
+  /**
+   * The nonce the shell minted for the folder Alice chose.
+   *
+   * Not a path: the dialog is the shell's, its answer stays there, and this
+   * names that answer. A script in the view can ask for the folder she just
+   * chose and for nothing else.
+   */
+  readonly destination_nonce: string;
   readonly files: readonly BuiltFile[];
   readonly copies: readonly AssetCopy[];
 }
@@ -116,14 +122,14 @@ export function dryRunFiles(plan: ExportPlan): string[] {
 export function requestFor(
   kind: ExportKind,
   plan: ExportPlan,
-  destination: string,
+  destinationNonce: string,
 ): ExportRequest {
   const page = pageOf(kind);
   return {
     kind,
     variant: plan.variant,
     folder_name: folderNameFor(kind, plan.slug),
-    destination,
+    destination_nonce: destinationNonce,
     // One page per folder: a deck export carries the deck and nothing else.
     files: plan.files.filter((file) => file.path === page),
     copies: plan.copies,
@@ -134,7 +140,12 @@ export function requestFor(
 export interface ExportServices {
   /** Build the open document as a folder would carry it. Writes nothing. */
   plan(): Promise<ExportPlan>;
-  /** The native folder chooser, opened beside the document folder. */
+  /**
+   * The native folder chooser, opened beside the document folder.
+   *
+   * Answers with the nonce the shell minted for the folder Alice chose, or
+   * null where she chose nothing. The path itself never crosses into the page.
+   */
   chooseFolder(defaultPath: string | null): Promise<string | null>;
   /** Write one rendering into a folder, and show it. */
   exportRendering(request: ExportRequest): Promise<ExportOutcome>;
@@ -204,14 +215,11 @@ export function createExportServices(
         beside: parentOf(documentRoot()),
       };
     },
-    async chooseFolder(defaultPath) {
-      const chosen = await open({
-        directory: true,
-        multiple: false,
-        ...(defaultPath === null ? {} : { defaultPath }),
-      });
-      return typeof chosen === "string" ? chosen : null;
-    },
+    chooseFolder: (defaultPath) =>
+      // The dialog is opened shell-side, so the destination an export writes
+      // into is the author's own answer to it rather than a path this page
+      // was in a position to choose.
+      invoke<string | null>("choose_export_destination", { defaultPath }),
     exportRendering: (request) => invoke<ExportOutcome>("export_rendering", { request }),
     async dryRun() {
       // The dry run stands in for a publish, so it is the site build that is

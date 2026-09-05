@@ -17,6 +17,7 @@ import { pathResolver } from "./core/assets";
 import { DECK_CONFIG } from "./core/render/slides";
 import {
   createNotesView,
+  createRecorder,
   deckFragment,
   headlineOf,
   mountDeck,
@@ -122,6 +123,19 @@ describe("presenting a chapter", () => {
 });
 
 describe("the present window", () => {
+  /**
+   * The mounted markup with every mark the mount added taken back off.
+   *
+   * `present` is added with `classList`, so it arrives appended to a class
+   * that was there — ` present"` — or as the whole attribute on an element
+   * that had none. Both spellings, everywhere they occur: an assertion that
+   * undid only the first mark would call a correct mount a regression the
+   * moment a fixture grew a column.
+   */
+  function withoutPresent(html: string): string {
+    return html.replaceAll(' class="present"', "").replaceAll(' present"', '"');
+  }
+
   it("mounts the fragment where reveal.js looks for it", () => {
     document.body.innerHTML = '<div class="reveal"><div class="slides"></div></div>';
     const fragment = deckFragment("## Beginnings\n\nA.\n", pathResolver());
@@ -129,9 +143,29 @@ describe("the present window", () => {
     expect(mountDeck(document, fragment, false)).toBe(false);
     const slides = document.querySelector(".reveal .slides");
     expect(slides?.querySelectorAll("section")).toHaveLength(1);
-    // The markup is the fragment's, with the one class that says which slide
-    // the deck opens on added to it.
-    expect(slides?.innerHTML.replace(' present"', '"')).toBe(fragment);
+    // The markup is the fragment's, with the classes that say which slide the
+    // deck opens on added to it — every one of them, since a column is marked
+    // as well as the slide inside it.
+    expect(withoutPresent(slides?.innerHTML ?? "")).toBe(fragment);
+    expect(
+      slides?.querySelector("section")?.classList.contains("present"),
+    ).toBe(true);
+  });
+
+  it("mounts a column of slides as the fragment it was given, too", () => {
+    // The columned case, where `present` is added twice: an assertion that
+    // stripped only the first would fail here for the right markup.
+    document.body.innerHTML = '<div class="reveal"><div class="slides"></div></div>';
+    const fragment = deckFragment(
+      "## One\n\n### Below\n\nA sub-section.\n",
+      pathResolver(),
+    );
+    expect(fragment).not.toContain("present");
+    mountDeck(document, fragment, false);
+    const slides = document.querySelector(".reveal .slides");
+    expect(withoutPresent(slides?.innerHTML ?? "")).toBe(fragment);
+    // Both marks were made: the column and the first slide inside it.
+    expect(slides?.querySelectorAll(".present")).toHaveLength(2);
   });
 
   it("replaces the deck rather than adding a second one", () => {
@@ -266,6 +300,53 @@ describe("starting the engine on a deck", () => {
     expect(shown.reveal.found).toBe(true);
     expect(shown.slidesBox.found).toBe(true);
     expect(typeof shown.bodyFontSize).toBe("string");
+  });
+
+  it("reads the page it was handed, not the one it is running in", async () => {
+    // The observation describes the root it was given. A second document with
+    // a deck in it is the cheapest way to see that: the running page has an
+    // empty stage, and the answer is about the other one.
+    stage();
+    const other = document.implementation.createHTMLDocument("elsewhere");
+    other.body.innerHTML =
+      '<div class="reveal"><div class="slides"></div></div>';
+    mountDeck(other, deckFragment(DECK, pathResolver()), false);
+
+    const seen = observeDeck(other, "mount");
+    expect(seen.slides).toBe(2);
+    expect(seen.presentAt).toBe(0);
+    expect(observeDeck(document, "mount").slides).toBe(0);
+    await Promise.resolve();
+  });
+
+  it("stops asking the shell for a log once it has been told there is none", async () => {
+    // Every ordinary launch has no log configured, and a dragged resize would
+    // otherwise cross to the shell once a frame to be told so again.
+    stage();
+    const asked: string[] = [];
+    const record = createRecorder(document, (observation) => {
+      asked.push(observation.phase);
+      return Promise.resolve(false);
+    });
+
+    record("mount");
+    await Promise.resolve();
+    record("resize");
+    record("resize");
+    await Promise.resolve();
+    expect(asked).toEqual(["mount"]);
+
+    // And a run that does have a log keeps writing.
+    const written: string[] = [];
+    const logging = createRecorder(document, (observation) => {
+      written.push(observation.phase);
+      return Promise.resolve(true);
+    });
+    logging("mount");
+    await Promise.resolve();
+    logging("resize");
+    await Promise.resolve();
+    expect(written).toEqual(["mount", "resize"]);
   });
 
   it("reports each control the engine drew and whether it is disabled", () => {

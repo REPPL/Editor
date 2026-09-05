@@ -98,7 +98,9 @@ function panelWith(
 ): Fakes {
   const calls = {
     plan: vi.fn(() => Promise.resolve(plan(overrides))),
-    chooseFolder: vi.fn(() => Promise.resolve("/desktop")),
+    // What the shell answers with: the nonce for the folder Alice chose in
+    // its own dialog, never the folder itself.
+    chooseFolder: vi.fn(() => Promise.resolve("a-nonce-the-shell-minted")),
     exportRendering: vi.fn(() => Promise.resolve({ folder: "macromarketing-2026-deck", files: 9 })),
     dryRun: vi.fn(() =>
       Promise.resolve({ hash: "cccccccccccccccccccccccccc" } as never),
@@ -294,7 +296,7 @@ describe("the export panel", () => {
       refusals: [
         {
           chapter: "01-slides/01-opening.md",
-          reference: "/Users/somebody/lantern.jpg",
+          reference: "/Users/somebody/lantern.jpg", // abcd-lint:allow illustrative refusal path
           reason: "the reference is absolute",
         },
       ],
