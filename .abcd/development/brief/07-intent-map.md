@@ -46,6 +46,7 @@ Three kinds:
 | 27 | Set the size threshold and name an asset root | standalone | — | 4 |
 | 28 | Take a document off the site | standalone | — | 6 |
 | 29 | Start a new document | standalone | — | 1 |
+| 30 | Move between the editor and the sidebar without the mouse | standalone | — | 1 |
 
 ## The intents
 
@@ -110,6 +111,24 @@ reads whatever is already there; and intent 13, which creates a document
 from a manuscript instead.
 Plumbing excluded: the metadata file's keys.
 Order: phase 1, before 1 has anything to open.
+
+**30. Move between the editor and the sidebar without the mouse** —
+standalone.
+Surfaces: the editor (focus between panes, the sidebar by keyboard, the
+modeline).
+Overlaps: intent 1, which owns the sidebar tree and what a click does — the
+boundary is that 1 owns the tree, its badges, and opening a chapter at a
+heading, and 30 owns reaching that tree from the keyboard, moving in it,
+and returning; intent 2, which owns the binding table's shape, the keys
+panel, and the cancel contract — 30 registers rows in that table and reuses
+that contract rather than defining either; intent 3, whose palette is one
+of the panes the cycle reaches — 3 owns what the palette inserts; and
+intent 26, which owns the same vocabulary in a reading view — the boundary
+is the surface: 30 stops at the app's own chrome.
+Plumbing excluded: which pane holds focus, the focus ring, and the shell's
+claim on `C-x` as a prefix.
+Order: phase 1, with 1 and 2. Amended into the map after the maintainer
+used the app and found the sidebar reachable only by pointing at it.
 
 ### Bundle: The deck (phase 1)
 
