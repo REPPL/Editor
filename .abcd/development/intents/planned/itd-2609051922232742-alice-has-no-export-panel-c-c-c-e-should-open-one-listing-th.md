@@ -154,9 +154,11 @@ rather than a thing she discovers afterwards.
   every image displayed, and the notes block as that slide's speaker
   notes, with the network disconnected.
 - **Given** the same document and variant, **when** Alice exports the deck
-  to a folder and then runs the dry-run row, **then** the deck files in
-  the exported folder and in the staged version folder are byte-identical,
-  and the dry-run row opens the staged folder in the Finder.
+  to a folder and then runs the dry-run row, **then** every asset and all
+  slide markup in the exported folder are byte-identical to the staged
+  version's, the deck page differs only in the attributes that point at
+  the engine and stylesheet beside it, and the dry-run row opens the
+  staged folder in the Finder.
 - **Given** an article export and a deck export just written, **when**
   every file in each folder is searched, **then** no file contains an
   absolute path, a machine name, or a user name, and every reference
