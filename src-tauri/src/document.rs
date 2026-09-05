@@ -51,6 +51,12 @@ pub struct Chapter {
     pub path: String,
     /// The numeric filename prefix, when the name carries one.
     pub order: Option<u32>,
+    /// The file's size in bytes, from the walk's own metadata call.
+    pub bytes: u64,
+    /// Last modification, in milliseconds since the epoch, when the platform
+    /// reports one. `None` rather than a guess: a filesystem that keeps no
+    /// modification time must not be made to look as though it does.
+    pub modified: Option<u64>,
 }
 
 /// A folder: the document root, or a Part inside it.
@@ -155,6 +161,20 @@ fn utf8_name(raw: &std::ffi::OsStr) -> Result<&str, String> {
     })
 }
 
+/// A file's modification time in milliseconds since the epoch.
+///
+/// `None` when the platform does not record one, or when it predates the
+/// epoch: the frontend compares the number against one it saw before, and a
+/// number it cannot compare is worse than no number at all.
+fn modified_millis(metadata: &fs::Metadata) -> Option<u64> {
+    metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|since| since.as_millis() as u64)
+}
+
 /// Order two siblings: numbered ones first by number, then everything by name.
 fn compare_by_order(a: (Option<u32>, &str), b: (Option<u32>, &str)) -> Ordering {
     match (a.0, b.0) {
@@ -232,6 +252,8 @@ fn read_part(folder: &Path, depth: usize, failures: &mut Vec<String>) -> Result<
                     title: title_of(&entry_name, true),
                     path: entry_path_text,
                     order: chapter_order,
+                    bytes: metadata.len(),
+                    modified: modified_millis(&metadata),
                     name: entry_name,
                 });
             }
@@ -423,6 +445,136 @@ pub fn write_chapter_text(path: &Path, text: &str) -> Result<(), String> {
         let _ = fs::remove_file(&temp);
         format!("cannot replace {}: {error}", path.display())
     })
+}
+
+/// One chapter's text, as a batch read reports it.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChapterRead {
+    pub path: String,
+    pub text: String,
+}
+
+/// What a batch read found, and what it could not.
+///
+/// A reload redraws the whole tree, so it needs every chapter's text at once.
+/// One unreadable chapter is a line in `failures`, not a failed batch: the
+/// rest of the document still draws.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ChapterBatch {
+    pub reads: Vec<ChapterRead>,
+    pub failures: Vec<String>,
+}
+
+/// Read many chapters in one pass, each confined to `root`.
+pub fn read_many(root: &Path, paths: &[String]) -> ChapterBatch {
+    let mut batch = ChapterBatch::default();
+    for path in paths {
+        match confine_chapter(root, path).and_then(|resolved| read_chapter_text(&resolved)) {
+            Ok(text) => batch.reads.push(ChapterRead {
+                path: path.clone(),
+                text,
+            }),
+            Err(message) => batch.failures.push(message),
+        }
+    }
+    batch
+}
+
+/// The next unused two-digit prefix for a new chapter in `part`.
+///
+/// One past the highest prefix already there, so a chapter added to a Part
+/// lands after the ones the author has. Numbers above 99 keep their width;
+/// nothing is renamed to make room.
+pub fn next_prefix(part: &Path) -> Result<String, String> {
+    let mut highest: u32 = 0;
+    let entries =
+        fs::read_dir(part).map_err(|e| format!("cannot read {}: {e}", display_name(part)))?;
+    for entry in entries.flatten() {
+        let raw = entry.file_name();
+        let Some(name) = raw.to_str() else { continue };
+        if !is_visible(name) {
+            continue;
+        }
+        if let (Some(order), _) = split_order(name) {
+            highest = highest.max(order);
+        }
+    }
+    Ok(format!("{:02}", highest.saturating_add(1)))
+}
+
+/// Copy a Markdown file into a Part as its next chapter.
+///
+/// The bytes are copied as bytes: no line ending, escape, or trailing newline
+/// is touched, because nothing here turns the file into a string and back.
+/// The copy goes to a dot-prefixed temporary file beside the destination and
+/// is renamed into place, so a half-written chapter never appears in the tree
+/// and the walk — which skips dotted names — never sees the temporary.
+pub fn add_chapter_from(part: &Path, source: &Path) -> Result<Chapter, String> {
+    let source_name = display_name(source);
+    if !is_chapter(&source_name) {
+        return Err(format!("{source_name} is not a Markdown chapter"));
+    }
+    let (_, stem) = split_order(&source_name);
+    let name = format!("{}-{}", next_prefix(part)?, stem);
+    let destination = part.join(&name);
+    if destination.exists() {
+        return Err(format!("{name} is already in this Part"));
+    }
+
+    let bytes = fs::read(source).map_err(|e| format!("cannot read {source_name}: {e}"))?;
+    let temp = part.join(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, AtomicOrdering::Relaxed)
+    ));
+    let written = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&temp)?;
+        file.write_all(&bytes)?;
+        file.sync_all()
+    })();
+    if let Err(error) = written {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("cannot write {name}: {error}"));
+    }
+    if let Err(error) = fs::rename(&temp, &destination) {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("cannot write {name}: {error}"));
+    }
+
+    let metadata = fs::metadata(&destination).ok();
+    let (order, _) = split_order(&name);
+    Ok(Chapter {
+        title: title_of(&name, true),
+        path: destination.to_string_lossy().into_owned(),
+        order,
+        bytes: metadata.as_ref().map(fs::Metadata::len).unwrap_or(0),
+        modified: metadata.as_ref().and_then(modified_millis),
+        name,
+    })
+}
+
+/// Add every file of a drop to a Part, or none of them.
+///
+/// The whole drop is checked before anything is written: a drop carrying one
+/// file that is not Markdown creates nothing and says what a Part accepts,
+/// which is what the author is told rather than half a drop landing.
+pub fn add_chapters_from(part: &Path, sources: &[PathBuf]) -> Result<Vec<Chapter>, String> {
+    if sources.is_empty() {
+        return Err("that drop carried no file".to_string());
+    }
+    for source in sources {
+        let name = display_name(source);
+        if !is_chapter(&name) {
+            return Err(format!(
+                "{name} is not a Markdown chapter; a Part takes .md and .markdown files"
+            ));
+        }
+    }
+    let mut added = Vec::with_capacity(sources.len());
+    for source in sources {
+        added.push(add_chapter_from(part, source)?);
+    }
+    Ok(added)
 }
 
 #[cfg(test)]
@@ -754,6 +906,184 @@ mod tests {
             "a folder is not an asset"
         );
         assert!(confine_asset(&base, "../lantern.jpg").is_err());
+    }
+
+    #[test]
+    fn reports_a_chapter_size_and_modification_time() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::write(base.join("01-alice.md"), "# Alice\n").expect("chapter");
+
+        let tree = read_tree(base).expect("tree");
+        let chapter = &tree.root.chapters[0];
+        assert_eq!(chapter.bytes, 8);
+        assert!(chapter.modified.is_some(), "a real filesystem records one");
+    }
+
+    #[test]
+    fn reads_many_chapters_in_one_pass_and_names_the_ones_it_cannot() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join("01-alice.md"), "# Alice\n").expect("chapter");
+        fs::write(base.join("02-bob.md"), "# Bob\r\n").expect("chapter");
+
+        let batch = read_many(
+            &base,
+            &[
+                base.join("01-alice.md").to_string_lossy().into_owned(),
+                base.join("02-bob.md").to_string_lossy().into_owned(),
+                base.join("03-missing.md").to_string_lossy().into_owned(),
+                "../secrets.md".to_string(),
+            ],
+        );
+        assert_eq!(batch.reads.len(), 2);
+        assert_eq!(batch.reads[0].text, "# Alice\n");
+        assert_eq!(batch.reads[1].text, "# Bob\r\n", "bytes are not normalised");
+        assert_eq!(batch.failures.len(), 2, "one missing, one outside");
+    }
+
+    #[test]
+    fn writes_nothing_when_a_folder_holds_no_chapters() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::write(base.join("notes.txt"), "not a chapter").expect("file");
+
+        let before: Vec<String> = names_in(base);
+        let tree = read_tree(base).expect("tree");
+        assert!(tree.root.chapters.is_empty());
+        assert!(tree.root.parts.is_empty());
+        assert_eq!(names_in(base), before, "the walk writes nothing at all");
+    }
+
+    /// Every visible name in a folder, sorted, for a "nothing changed" check.
+    fn names_in(folder: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(folder)
+            .expect("read dir")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn counts_the_next_prefix_from_what_is_already_there() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        assert_eq!(next_prefix(base).expect("empty"), "01");
+        fs::write(base.join("01-alice.md"), "").expect("chapter");
+        fs::write(base.join("07-bob.md"), "").expect("chapter");
+        fs::write(base.join("loose.md"), "").expect("chapter");
+        assert_eq!(next_prefix(base).expect("counted"), "08");
+    }
+
+    #[test]
+    fn adds_a_dropped_chapter_with_the_next_prefix() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        let part = base.join("01-part");
+        fs::create_dir(&part).expect("part");
+        fs::write(part.join("01-alice.md"), "# Alice\n").expect("chapter");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("03-carol notes.md");
+        fs::write(&source, "# Carol\n").expect("source");
+
+        let added = add_chapter_from(&part, &source).expect("added");
+        assert_eq!(added.name, "02-carol notes.md");
+        assert_eq!(added.order, Some(2));
+        assert_eq!(added.title, "carol notes");
+        assert_eq!(
+            fs::read_to_string(part.join("02-carol notes.md")).expect("read"),
+            "# Carol\n"
+        );
+    }
+
+    #[test]
+    fn copies_dropped_bytes_verbatim() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("draft.md");
+        // CRLF endings, a tab, no trailing newline: everything a round trip
+        // through a string would be tempted to tidy.
+        let bytes = b"# Draft\r\n\r\n\tIndented\r\nlast line without a newline";
+        fs::write(&source, bytes).expect("source");
+
+        let added = add_chapter_from(&part, &source).expect("added");
+        assert_eq!(fs::read(&added.path).expect("bytes"), bytes);
+        assert_eq!(added.bytes as usize, bytes.len());
+    }
+
+    #[test]
+    fn refuses_a_dropped_file_that_is_not_markdown() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("lantern.jpg");
+        fs::write(&source, b"\xff\xd8").expect("source");
+
+        let message = add_chapters_from(&part, &[source]).expect_err("refused");
+        assert!(message.contains("not a Markdown chapter"), "{message}");
+        assert!(message.contains(".markdown"), "it says what a Part accepts");
+        assert_eq!(names_in(&part), Vec::<String>::new(), "nothing was written");
+    }
+
+    #[test]
+    fn writes_none_of_a_drop_that_carries_one_bad_file() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let good = outside.path().join("alice.md");
+        let bad = outside.path().join("notes.txt");
+        fs::write(&good, "# Alice\n").expect("source");
+        fs::write(&bad, "shh").expect("source");
+
+        assert!(add_chapters_from(&part, &[good, bad]).is_err());
+        assert_eq!(names_in(&part), Vec::<String>::new());
+    }
+
+    #[test]
+    fn adds_every_markdown_file_of_a_drop_in_order() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let first = outside.path().join("alice.md");
+        let second = outside.path().join("bob.markdown");
+        fs::write(&first, "# Alice\n").expect("source");
+        fs::write(&second, "# Bob\n").expect("source");
+
+        let added = add_chapters_from(&part, &[first, second]).expect("added");
+        assert_eq!(
+            added.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            vec!["01-alice.md", "02-bob.markdown"]
+        );
+    }
+
+    #[test]
+    fn leaves_no_temporary_behind_when_a_chapter_is_added() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("alice.md");
+        fs::write(&source, "# Alice\n").expect("source");
+
+        add_chapter_from(&part, &source).expect("added");
+        assert_eq!(names_in(&part), vec!["01-alice.md".to_string()]);
     }
 
     #[test]

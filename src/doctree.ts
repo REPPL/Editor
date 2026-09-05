@@ -14,6 +14,10 @@ export interface Chapter {
   readonly title: string;
   readonly path: string;
   readonly order: number | null;
+  /** The file's size in bytes, as the walk found it. */
+  readonly bytes: number;
+  /** Last modification in milliseconds, or null where none is recorded. */
+  readonly modified: number | null;
 }
 
 /** A folder: the document root, or a Part inside it. */
@@ -64,6 +68,88 @@ export interface DocumentMetadata {
   readonly present: boolean;
 }
 
+/** One chapter's text, from a batch read. */
+export interface ChapterRead {
+  readonly path: string;
+  readonly text: string;
+}
+
+/**
+ * What a batch read found, and what it could not.
+ *
+ * A reload draws the whole tree, so it reads every chapter in one round trip
+ * rather than one per chapter. An unreadable chapter is a line in `failures`,
+ * never a failed batch.
+ */
+export interface ChapterBatch {
+  readonly reads: readonly ChapterRead[];
+  readonly failures: readonly string[];
+}
+
+/**
+ * A drop the shell observed, named by a nonce.
+ *
+ * The paths themselves never cross into the web view and are never accepted
+ * from it: the shell keeps them under a nonce that expires, and a command that
+ * acts on a drop names the nonce. A script running in the web view can
+ * therefore ask Editor to act on a file the author actually dropped, and on
+ * nothing else.
+ */
+export interface DropPayload {
+  readonly nonce: string;
+  /** Where the pointer was, in logical (CSS) pixels. */
+  readonly x: number;
+  readonly y: number;
+  /** How many files the drop carried. */
+  readonly count: number;
+}
+
+/** The event the shell emits when the author drops files on the window. */
+export const DROPPED_EVENT = "document://dropped";
+
+/** The event the shell emits when the open folder changed underneath us. */
+export const CHANGED_EVENT = "document://changed";
+
+/** What a dropped file turned out to be. */
+export type AssetKind = "image" | "video" | "file";
+
+/** Whether the bytes were copied in or left where they are. */
+export type AssetMode = "copied" | "referenced";
+
+/** One file the shell took into the document. */
+export interface DropOutcome {
+  readonly kind: AssetKind;
+  /** Percent-encoded, relative to the chapter. Never an operating-system path. */
+  readonly reference: string;
+  readonly id: string;
+  readonly bytes: number;
+  readonly mode: AssetMode;
+  readonly converted_from: string | null;
+  readonly deduplicated: boolean;
+}
+
+/** One file the shell would not take, and why. */
+export interface DropRefusal {
+  readonly name: string;
+  readonly reason: string;
+}
+
+/** What one drop produced. One bad file does not cost the author the others. */
+export interface DropReport {
+  readonly accepted: readonly DropOutcome[];
+  readonly refused: readonly DropRefusal[];
+}
+
+/** What a pasted or dragged address turned out to be. */
+export interface PasteOutcome {
+  /** `video` for a direct media address, `other` for everything else. */
+  readonly kind: string;
+  /** The role a video block names it under: `remote`, or nothing. */
+  readonly role: string | null;
+  /** The address, verbatim. Nothing was fetched. */
+  readonly reference: string;
+}
+
 /** Whether the page is running inside the Tauri shell. */
 export function inShell(): boolean {
   return "__TAURI_INTERNALS__" in globalThis;
@@ -87,6 +173,54 @@ export async function readDocumentMetadata(): Promise<DocumentMetadata> {
   return invoke<DocumentMetadata>("read_document_metadata");
 }
 
+/** Read many Chapters' Markdown in one round trip. */
+export async function readChapters(
+  paths: readonly string[],
+): Promise<ChapterBatch> {
+  requireShell("Reading the chapters");
+  return invoke<ChapterBatch>("read_chapters", { paths: [...paths] });
+}
+
+/**
+ * Add a dropped Markdown file to a Part as its next chapter.
+ *
+ * The source is named by the drop's nonce, not by a path: the web view never
+ * hands the shell a path to copy from.
+ */
+export async function addChapter(
+  part: string,
+  nonce: string,
+): Promise<readonly Chapter[]> {
+  requireShell("Adding a chapter");
+  return invoke<Chapter[]>("add_chapter", { part, nonce });
+}
+
+/**
+ * Take the files of one drop into the chapter's Part.
+ *
+ * Named by the drop's nonce, never by a path: the shell holds what the author
+ * dropped and refuses a nonce it did not mint, or one that has expired.
+ */
+export async function dropOnChapter(
+  chapter: string,
+  nonce: string,
+): Promise<DropReport> {
+  requireShell("Dropping a file");
+  return invoke<DropReport>("drop_on_chapter", { chapter, nonce });
+}
+
+/**
+ * What a pasted or dragged address should become. Nothing is written, and
+ * nothing is fetched: the address is read, not probed.
+ */
+export async function pasteReference(
+  chapter: string,
+  text: string,
+): Promise<PasteOutcome> {
+  requireShell("Pasting an address");
+  return invoke<PasteOutcome>("paste_reference", { chapter, text });
+}
+
 /** Read one Chapter's Markdown. */
 export async function readChapter(path: string): Promise<string> {
   requireShell("Reading a chapter");
@@ -108,4 +242,58 @@ export async function writeChapter(path: string, text: string): Promise<void> {
 export async function setDirty(dirty: boolean): Promise<void> {
   if (!inShell()) return;
   return invoke<void>("set_dirty", { dirty });
+}
+
+/**
+ * The chapter waiting to be presented, as the buffer had it.
+ *
+ * The text, not the file: an unsaved edit presents.
+ */
+export interface DeckSource {
+  readonly text: string;
+  readonly chapterPath: string;
+  readonly chapterTitle: string;
+}
+
+/** One image the shell read, as bytes rather than as a path. */
+export interface AssetBytes {
+  readonly mime: string;
+  readonly base64: string;
+}
+
+/** The event the shell emits when a new deck is waiting to be collected. */
+export const DECK_EVENT = "present://deck";
+
+/**
+ * Present a chapter: hold its text, and open or focus the present window.
+ *
+ * Nothing is written. The deck is built in the present window from this text
+ * and exists only while that window is open.
+ */
+export async function presentChapter(
+  text: string,
+  chapterPath: string,
+): Promise<void> {
+  requireShell("Presenting a chapter");
+  return invoke<void>("present_chapter", { text, chapterPath });
+}
+
+/** The deck the shell is holding, for the present window to build. */
+export async function pendingDeck(): Promise<DeckSource> {
+  requireShell("Reading the pending deck");
+  return invoke<DeckSource>("pending_deck");
+}
+
+/**
+ * Read one image a chapter refers to.
+ *
+ * The reference is the author's, relative to their chapter: the web view never
+ * hands the shell a path of its own choosing.
+ */
+export async function readAsset(
+  chapterPath: string,
+  path: string,
+): Promise<AssetBytes> {
+  requireShell("Reading an image");
+  return invoke<AssetBytes>("read_asset", { chapterPath, path });
 }

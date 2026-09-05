@@ -23,11 +23,22 @@ Super (Command), `S-` for Shift, and a space for a prefix sequence such as
 panel or rebinding all read one source.
 
 The owner says where a chord is answered: `keymap` for the ones
-`@replit/codemirror-emacs` ships, `editor` for the ones Editor adds on top,
-and `shell` for the ones the Tauri menu claims before the web view is
-consulted. `Cmd-O` is the only `shell` chord: it is the File menu's
-accelerator, so macOS resolves it and the page never sees the keydown. The
-sweep below leaves the `shell` chords out for exactly that reason.
+`@replit/codemirror-emacs` ships, `codemirror` for the ones CodeMirror's own
+`defaultKeymap`, `historyKeymap` and `searchKeymap` answer below it, `editor`
+for the ones Editor adds on top, `shell` for the ones the Tauri menu claims
+before the web view is consulted, and `app` for a chord reserved for a command
+another part of the application wires. `Cmd-O` is the only `shell` chord: it is
+the File menu's accelerator, so macOS resolves it and the page never sees the
+keydown.
+
+The table runs in both directions. Every chord in it reaches the action its
+label names; and every chord the four keymaps answer is either a row of the
+table or an entry in `SUPPRESSED`, which clears it so the key falls through to
+the browser. `M-x`, `M-/` and `M-;` are suppressed in the Emacs keymap because
+each opens a dead end — a command line with no commands, completion with no
+source, a comment form Markdown does not have — and `Cmd-/` and `Ctrl-h` are
+suppressed in CodeMirror's keymap, the second because `C-h` is the first step
+of `C-h b`.
 
 A chord is compared in one canonical modifier order, on both sides. The
 table writes `S-C-/` the way an Emacs user says it; a keydown arrives with
@@ -51,8 +62,9 @@ events at it. Two different things are checked, and they cover different
 sets of chords.
 
 **Claimed.** The sweep dispatches every step of every chord in the table
-that carries a modifier and is not owned by the shell — 43 chords, prefix
-sequences counted once and each of their steps pressed and checked — and
+that carries a modifier and that the Emacs layer answers — the package's own
+bindings plus the ones Editor adds through the same handler, prefix sequences
+counted once and each of their steps pressed and checked — and
 asserts that each step leaves the keydown event with `preventDefault`
 called. That is what stops the browser acting on the chord as well. It does
 not assert what the command did. Chords with no modifier — `Left`, `Right`,
@@ -163,12 +175,16 @@ appear in the log at all was taken above the page: note where.
 | 4 | `C-x C-f` and `Cmd-O` | The folder chooser opens | Both routes must work: the chord through the page, `Cmd-O` through the menu |
 | 5 | `Ctrl-Tab` | The log shows the chord | WebKit may keep it for focus traversal. If the log is silent, the shell has to claim it or the binding table must not use it |
 | 6 | `Cmd-Q` | The application quits | It must stay the system quit. If a page handler ever swallows it, that is a bug, not a feature |
-| 7 | `Cmd-Z`, `Cmd-A`, `Cmd-C`, `Cmd-V` | Nothing happens in the editor beyond the browser's own behaviour | Confirms the Edit submenu is gone and the Emacs kill ring is the only kill ring |
+| 7 | `Cmd-Z`, `Cmd-A`, `Cmd-C`, `Cmd-V` | `Cmd-Z` undoes and `Cmd-A` selects all, both from CodeMirror's own keymap and both listed in the table; `Cmd-C` and `Cmd-V` are the browser's clipboard | Confirms the Edit submenu is gone, so these reach the page rather than the menu, and that the Emacs kill ring is still the only kill ring |
 | 8 | `C-a`, `C-e`, `C-k`, `C-y`, `C-/` | Each does the Emacs thing, not the macOS thing | macOS text fields bind some of these too; the log tells you which handler won |
 | 9 | `C-g` while a prefix is half-typed | The prefix indicator in the modeline clears | Then again with the search panel open |
 | 10 | `C-s`, then `M-C-s` | Search opens, then steps to the next match | |
 | 11 | `M-w` with a region set, then `Cmd-V` into another application | The region is on the system clipboard | The clipboard API needs a secure context, and `tauri://` is not one by default. If the copy silently fails, `useHttpsScheme` is the switch to try |
 | 12 | The same list in Safari on an iPad with a hardware keyboard | As many as survive | No shell there to claim anything, so this bounds what the single HTML file can offer |
+| 13 | `C-h b`, then `C-x ?` | The keys panel opens, lists every row of the table, and closes on Escape and on `C-g` | `C-h` is the chord at real risk: WebKit may read it as a backspace in editable content. If the log never shows `C-h`, the row keeps `C-x ?` and loses `C-h b` |
+| 14 | `C-c i` | The insert palette opens; three letters filter it; Return puts the form at the cursor | `C-c` is unbound in the shipped keymap and Control-c is not copy on macOS, but no real window has pressed it yet |
+| 15 | `M-%` | The search panel opens with the cursor in the replacement field | Alt-Shift on the `5` key. The package spells this binding in a notation its own key reader never produces, so Editor rebinds it; this row is what proves the rebinding reaches a real keyboard |
+| 16 | `C-x C-b`, then `C-x C-r` | The sidebar hides and shows; the document redraws from disk | Both are Editor's own chords on the `C-x` prefix |
 
 Record the result of each row against the binding table. A row that fails on
 the desktop is a decision: claim the combination in the shell, rebind the

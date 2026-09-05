@@ -8,8 +8,14 @@ import {
   defaultHighlightStyle,
   syntaxHighlighting,
 } from "@codemirror/language";
-import { search, searchKeymap } from "@codemirror/search";
-import { EditorState, Prec, type Extension } from "@codemirror/state";
+import { closeSearchPanel, search, searchKeymap, searchPanelOpen } from "@codemirror/search";
+import {
+  EditorSelection,
+  EditorState,
+  Prec,
+  StateField,
+  type Extension,
+} from "@codemirror/state";
 import {
   EditorView,
   drawSelection,
@@ -20,6 +26,12 @@ import {
 } from "@codemirror/view";
 
 import { emacsKeymap } from "./emacs";
+import {
+  bindingById,
+  chordFromEvent,
+  toKeymapSpec,
+  withoutSuppressed,
+} from "./keys";
 
 /** Where the cursor is, one-based, for the modeline. */
 export interface CursorPosition {
@@ -70,6 +82,76 @@ const markdownReturn = EditorView.domEventHandlers({
   },
 });
 
+/**
+ * Where the cursor sat when the search panel opened.
+ *
+ * Emacs returns the point to where an incremental search began when the search
+ * is cancelled; CodeMirror's panel does not, because it has no notion of the
+ * search having begun anywhere. The position is mapped through every change,
+ * so an edit made while the panel is open does not send the cursor to the
+ * wrong place.
+ */
+const searchOrigin = StateField.define<number | null>({
+  create: () => null,
+  update(value, transaction) {
+    const was = searchPanelOpen(transaction.startState);
+    const now = searchPanelOpen(transaction.state);
+    if (!was && now) return transaction.startState.selection.main.head;
+    if (was && !now) return null;
+    return value === null ? null : transaction.changes.mapPos(value);
+  },
+});
+
+/**
+ * Cancel the search the way Emacs does: close it, and put the cursor back.
+ *
+ * It declines when no search is open, so `C-g` still reaches the keymap's own
+ * `keyboardQuit` and clears a half-typed prefix.
+ */
+function cancelSearch(view: EditorView): boolean {
+  if (!searchPanelOpen(view.state)) return false;
+  const origin = view.state.field(searchOrigin, false) ?? null;
+  closeSearchPanel(view);
+  if (origin !== null) {
+    view.dispatch({
+      selection: EditorSelection.cursor(Math.min(origin, view.state.doc.length)),
+      scrollIntoView: true,
+    });
+  }
+  view.focus();
+  return true;
+}
+
+/**
+ * The cancel chords, in the editor and in the search panel.
+ *
+ * Two extensions, because the keyboard is in two places. While the focus is in
+ * the content, the Emacs plugin sees the keydown before any keymap does, so
+ * the editor's half has to be a DOM handler above it. Once the search panel is
+ * open the focus is inside the panel, which runs the `search-panel` scope of
+ * the keymap facet and nothing else, so the panel's half has to be a scoped
+ * binding. Both chords come from the table.
+ */
+const searchCancel = [
+  EditorView.domEventHandlers({
+    keydown(event, view) {
+      if (!searchPanelOpen(view.state)) return false;
+      const chords = bindingById("keyboard-quit")?.chords ?? [];
+      if (!chords.includes(chordFromEvent(event))) return false;
+      cancelSearch(view);
+      event.preventDefault();
+      return true;
+    },
+  }),
+  keymap.of(
+    (bindingById("keyboard-quit")?.chords ?? []).map((chord) => ({
+      key: toKeymapSpec(chord),
+      scope: "search-panel",
+      run: cancelSearch,
+    })),
+  ),
+];
+
 /** The extensions the editing surface is built from. */
 function editorExtensions(hooks: EditorHooks = {}): Extension[] {
   return [
@@ -87,8 +169,16 @@ function editorExtensions(hooks: EditorHooks = {}): Extension[] {
     // without this the standard bindings claim `C-f`, `C-a`, `C-k` and their
     // neighbours on macOS and the Emacs commands never see them. `Return` is
     // the one exception, taken back just above.
-    Prec.highest([markdownReturn, emacsKeymap()]),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+    searchOrigin,
+    // The suppressed chords are taken out of CodeMirror's own keymaps as well
+    // as out of the Emacs one, so a chord Editor declines to answer falls
+    // through to the browser wherever it was bound.
+    Prec.highest([...searchCancel, markdownReturn, emacsKeymap()]),
+    keymap.of([
+      ...withoutSuppressed(defaultKeymap),
+      ...withoutSuppressed(historyKeymap),
+      ...withoutSuppressed(searchKeymap),
+    ]),
     theme,
     EditorView.updateListener.of((update) => {
       if (update.docChanged || update.selectionSet) {
@@ -165,6 +255,28 @@ export function createEditor(
  */
 export function setDocument(view: EditorView, doc: string): void {
   view.setState(stateFor(doc, hooksByView.get(view) ?? {}));
+}
+
+/**
+ * Put the cursor on a one-based line and bring it into view.
+ *
+ * The sidebar names a heading by its line, because a line is the same number
+ * in Rust, in the core, and in CodeMirror while a byte offset is not. A line
+ * past the end of the document is clamped rather than refused: the tree may
+ * have been drawn from a chapter that has since been shortened on disk.
+ */
+export function revealLine(view: EditorView, line: number): void {
+  const clamped = Math.max(1, Math.min(line, view.state.doc.lines));
+  const at = view.state.doc.line(clamped).from;
+  view.dispatch({
+    selection: EditorSelection.cursor(at),
+    scrollIntoView: true,
+  });
+}
+
+/** Where the cursor sat when the open search panel was opened, if anywhere. */
+export function searchOriginOf(view: EditorView): number | null {
+  return view.state.field(searchOrigin, false) ?? null;
 }
 
 /** The cursor's one-based line and column. */

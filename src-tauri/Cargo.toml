@@ -24,6 +24,28 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 serde_yml = "=0.0.12"
+notify = "=8.2.0"
+notify-debouncer-full = "=0.7.0"
+serde_json = "=1.0.151"
+sha2 = "=0.10.9"
+percent-encoding = "=2.3.2"
+getrandom = "=0.3.4"
+time = { version = "=0.3.55", features = ["formatting"] }
+ureq = "=3.4.0"
+tauri-plugin-opener = "=2.5.5"
+
+# Phone-native decoding is Apple's, because no Rust crate decodes HEIC at a
+# licence and provisioning cost this repository can pay.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-image-io = { version = "=0.3.2", features = [
+  "CGImageSource",
+  "CGImageDestination",
+  "CGImageProperties",
+  "objc2-core-graphics",
+  "std",
+] }
+objc2-core-foundation = { version = "=0.3.2", features = ["CFData", "CFDictionary", "CFString", "CFNumber", "CFURL", "CFBase"] }
+objc2-core-graphics = { version = "=0.3.2", features = ["CGImage"] }
 
 [dev-dependencies]
 tempfile = "3"

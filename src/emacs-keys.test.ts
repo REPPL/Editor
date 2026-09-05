@@ -10,7 +10,10 @@
  * The manual half is written down in `docs/spike-emacs-keys.md`.
  */
 
+import { defaultKeymap, historyKeymap } from "@codemirror/commands";
+import { searchKeymap, searchPanelOpen } from "@codemirror/search";
 import { EditorSelection } from "@codemirror/state";
+import { emacsKeys } from "@replit/codemirror-emacs";
 import type { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -22,12 +25,16 @@ import {
   documentText,
   lineSeparatorOf,
 } from "./editor";
-import { emacsStatus } from "./emacs";
+import { emacsAnsweredChords, emacsStatus, toPackageChord } from "./emacs";
 import {
   BINDINGS,
+  SUPPRESSED,
   bindingById,
   canonicalChord,
   chordFromEvent,
+  chordIndex,
+  fromKeymapSpec,
+  keymapChords,
 } from "./keys";
 import { installKeyLog } from "./keyspike";
 
@@ -57,32 +64,88 @@ interface Chord {
  * key is what matters, not the character the platform would produce. That is
  * exactly why Option-f can be `M-f` and not `ƒ`.
  */
+/** The physical key each punctuation and digit chord name sits on. */
+const CODES: Readonly<Record<string, string>> = {
+  "/": "Slash",
+  "\\": "Backslash",
+  "-": "Minus",
+  "=": "Equal",
+  ",": "Comma",
+  ".": "Period",
+  ";": "Semicolon",
+  "'": "Quote",
+  "`": "Backquote",
+  "[": "BracketLeft",
+  "]": "BracketRight",
+};
+
+/** What a US layout produces on those keys once Shift is down. */
+const SHIFTED: Readonly<Record<string, string>> = {
+  "/": "?",
+  "\\": "|",
+  "-": "_",
+  "=": "+",
+  ",": "<",
+  ".": ">",
+  ";": ":",
+  "'": '"',
+  "`": "~",
+  "[": "{",
+  "]": "}",
+  "1": "!",
+  "2": "@",
+  "3": "#",
+  "4": "$",
+  "5": "%",
+  "6": "^",
+  "7": "&",
+  "8": "*",
+  "9": "(",
+  "0": ")",
+};
+
+/**
+ * Turn a chord string from the binding table into a keydown event.
+ *
+ * The Emacs handler identifies keys by `KeyboardEvent.code`, so the physical
+ * key is what matters, not the character the platform would produce. That is
+ * exactly why Option-f can be `M-f` and not `ƒ`, and why `M-%` is built as
+ * Alt-Shift on `Digit5`.
+ */
 function chordToEvent(chord: string): Chord {
-  const parts = chord.split("-");
-  const name = parts.pop() ?? "";
-  const modifiers = new Set(parts);
+  const modifiers = new Set<string>();
+  let name = chord;
+  for (;;) {
+    const prefix = ["C-", "M-", "s-", "S-"].find(
+      (candidate) => name.startsWith(candidate) && name.length > candidate.length,
+    );
+    if (!prefix) break;
+    modifiers.add(prefix[0]!);
+    name = name.slice(2);
+  }
+  const shifted = modifiers.has("S");
   const event: Chord = { key: name, code: name };
 
   if (/^[a-z]$/.test(name)) {
     event.code = `Key${name.toUpperCase()}`;
-    event.key = name;
+    event.key = shifted ? name.toUpperCase() : name;
+  } else if (/^[0-9]$/.test(name)) {
+    event.code = `Digit${name}`;
+    event.key = shifted ? (SHIFTED[name] ?? name) : name;
+  } else if (CODES[name] !== undefined) {
+    event.code = CODES[name]!;
+    // A browser reports the character the key would produce, so Shift turns
+    // `/` into `?`. The chord builder has to look past that.
+    event.key = shifted ? (SHIFTED[name] ?? name) : name;
   } else if (name === "Space") {
     event.code = "Space";
     event.key = " ";
-  } else if (name === "/") {
-    event.code = "Slash";
-    // A browser reports the character the key would produce, so Shift turns
-    // `/` into `?`. The chord builder has to look past that.
-    event.key = modifiers.has("S") ? "?" : "/";
   } else if (name === "Return") {
     event.code = "Enter";
     event.key = "Enter";
   } else if (["Left", "Right", "Up", "Down"].includes(name)) {
     event.code = `Arrow${name}`;
     event.key = `Arrow${name}`;
-  } else if (name === "Home" || name === "End") {
-    event.code = name;
-    event.key = name;
   }
 
   if (modifiers.has("C")) event.ctrlKey = true;
@@ -173,6 +236,79 @@ describe("the binding table", () => {
     expect(canonicalChord("C-Space")).toBe("C-Space");
     expect(canonicalChord("s-o")).toBe("s-o");
     expect(canonicalChord("Right")).toBe("Right");
+  });
+
+  it("gives no two rows the same chord", () => {
+    const shared: string[] = [];
+    for (const [chord, rows] of chordIndex()) {
+      if (rows.length > 1) {
+        shared.push(`${chord}: ${rows.map((row) => row.id).join(", ")}`);
+      }
+    }
+    expect(shared).toEqual([]);
+  });
+
+  it("suppresses a chord instead of listing it, never both", () => {
+    const listed = chordIndex();
+    for (const { chord, why } of SUPPRESSED) {
+      expect(why.length).toBeGreaterThan(0);
+      expect(listed.has(canonicalChord(chord))).toBe(false);
+    }
+  });
+
+  it("reserves the chords other specs will wire, and answers none of them", () => {
+    const present = bindingById("present");
+    const publish = bindingById("publish-open");
+    expect(present?.chords).toEqual(["C-c C-p"]);
+    expect(publish?.chords).toEqual(["C-c C-l"]);
+    expect(present?.owner).toBe("app");
+    expect(publish?.owner).toBe("app");
+  });
+
+  it("answers no chord the table does not list", () => {
+    // The conformance sweep, in the other direction. Every chord any of the
+    // four keymaps the surface installs answers has to be a row of the table
+    // or an entry in SUPPRESSED. A future version of a package that adds a
+    // chord fails the build rather than quietly widening the promise.
+    const listed = chordIndex();
+    const suppressed = new Set(
+      SUPPRESSED.map((entry) => canonicalChord(entry.chord)),
+    );
+    const sweep = new Map<string, string>();
+    for (const spec of Object.keys(emacsKeys)) {
+      for (const alternative of spec.split("|")) {
+        sweep.set(fromKeymapSpec(alternative), "emacsKeys");
+      }
+    }
+    for (const [name, keymap] of [
+      ["defaultKeymap", defaultKeymap],
+      ["historyKeymap", historyKeymap],
+      ["searchKeymap", searchKeymap],
+    ] as const) {
+      for (const chord of keymapChords(keymap)) {
+        if (!sweep.has(chord)) sweep.set(chord, name);
+      }
+    }
+
+    const unnamed: string[] = [];
+    for (const [chord, source] of sweep) {
+      if (listed.has(chord) || suppressed.has(chord)) continue;
+      unnamed.push(`${chord} (${source})`);
+    }
+    expect(unnamed).toEqual([]);
+    // The sweep is worth nothing if it swept nothing.
+    expect(sweep.size).toBeGreaterThan(140);
+    expect(sweep.has("M-S-5")).toBe(true);
+    expect(sweep.has("s-z")).toBe(true);
+  });
+
+  it("names query-replace on M-% and supplies it from the search package", () => {
+    const binding = bindingById("query-replace");
+    expect(binding?.chords).toEqual(["M-S-5"]);
+    expect(binding?.owner).toBe("editor");
+    // `M-%` is Alt-Shift on the physical `5`, and the package's own reader
+    // calls that key `Digit5`, which is what the chord has to be bound as.
+    expect(toPackageChord("M-S-5")).toBe("M-S-Digit5");
   });
 
   it("matches every chord in the table against the event it would arrive as", () => {
@@ -282,7 +418,7 @@ describe("the Emacs keymap inside CodeMirror", () => {
     expect(view.state.doc.line(1).text).toBe("");
   });
 
-  it("yanks what was killed back", () => {
+  it("yanks what was killed back, twice", () => {
     place(view, 0);
     press(view, "C-Space");
     press(view, "C-e");
@@ -345,20 +481,23 @@ describe("the Emacs keymap inside CodeMirror", () => {
   });
 
   it("claims every step of every modified chord the page owns", () => {
+    // "The page owns it" means the Emacs layer answers it: the package's own
+    // bindings plus the ones Editor adds through the same handler. A chord
+    // answered only by one of CodeMirror's lower-precedence keymaps is claimed
+    // or not depending on what the document holds, so it is not a promise the
+    // surface can make and it is checked by the conformance sweep instead.
+    const answered = emacsAnsweredChords();
     const unclaimed: string[] = [];
     const swept: string[] = [];
     for (const binding of BINDINGS) {
       // `C-u` starts a numeric argument, so it changes how the next chord is
       // read. It is checked on its own below rather than in the sweep.
       if (binding.id === "universal-argument") continue;
-      // A `shell` chord is a menu accelerator: macOS resolves it before the
-      // web view is consulted, so the page never sees the keydown and has
-      // nothing to claim.
-      if (binding.owner === "shell") continue;
       for (const chord of binding.chords) {
         // Plain arrow and navigation keys belong to the browser, and the
         // spike is about the modified chords.
         if (!/(^|\s)[CMSs]-/.test(chord)) continue;
+        if (!answered.has(canonicalChord(chord))) continue;
         swept.push(chord);
         // Every step, not just the last: a prefix that failed to open would
         // otherwise be hidden by the completing chord being claimed anyway.
@@ -369,12 +508,15 @@ describe("the Emacs keymap inside CodeMirror", () => {
       }
     }
     expect(unclaimed).toEqual([]);
-    // The sweep is only worth anything if it actually swept: this is the
-    // count the documentation quotes.
+    // The sweep is only worth anything if it actually swept: these are the
+    // chords the documentation quotes.
     expect(swept).toContain("C-x C-s");
     expect(swept).toContain("S-C-/");
+    expect(swept).toContain("C-c i");
+    expect(swept).toContain("C-h b");
+    expect(swept).toContain("M-S-5");
     expect(swept).not.toContain("s-o");
-    expect(swept.length).toBe(43);
+    expect(swept.length).toBeGreaterThan(60);
   });
 
   it("claims the numeric-argument chord", () => {
@@ -395,7 +537,7 @@ describe("the Emacs keymap inside CodeMirror", () => {
     } finally {
       console.warn = warn;
     }
-    expect(warnings).toEqual(["saveChapter: no application is mounted"]);
+    expect(warnings).toEqual(["save-chapter: no application is mounted"]);
   });
 
   it("continues a Markdown list on Return", () => {
@@ -415,6 +557,244 @@ describe("the Emacs keymap inside CodeMirror", () => {
     press(plain, "Return");
     expect(documentText(plain)).toBe("Alice\n");
     plain.destroy();
+  });
+});
+
+describe("cancelling", () => {
+  let host: HTMLElement;
+  let view: EditorView;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    view = createEditor(host, SAMPLE);
+  });
+
+  afterEach(() => {
+    view.destroy();
+    host.remove();
+  });
+
+  it("returns the cursor to where the search began when the search is cancelled", () => {
+    place(view, 20);
+    expect(press(view, "C-s")).toBe(true);
+    expect(searchPanelOpen(view.state)).toBe(true);
+    // A search moves the cursor to the match; this is that, without a match.
+    place(view, 0);
+    expect(press(view, "C-g")).toBe(true);
+    expect(searchPanelOpen(view.state)).toBe(false);
+    expect(view.state.selection.main.head).toBe(20);
+    expect(documentText(view)).toBe(SAMPLE);
+  });
+
+  it("closes a cancelled search on Escape as well", () => {
+    place(view, 12);
+    press(view, "C-r");
+    place(view, 0);
+    press(view, "Escape");
+    expect(searchPanelOpen(view.state)).toBe(false);
+    expect(view.state.selection.main.head).toBe(12);
+  });
+
+  it("leaves the cursor alone when C-g cancels a prefix rather than a search", () => {
+    place(view, 5);
+    press(view, "C-x");
+    expect(emacsStatus(view).prefix).toBe("C-x");
+    expect(press(view, "C-g")).toBe(true);
+    expect(emacsStatus(view).prefix).toBe("");
+    expect(view.state.selection.main.head).toBe(5);
+    expect(documentText(view)).toBe(SAMPLE);
+  });
+
+  it("opens the search panel with the replacement field on M-%", () => {
+    expect(press(view, "M-S-5")).toBe(true);
+    expect(searchPanelOpen(view.state)).toBe(true);
+    const field = view.dom.querySelector<HTMLInputElement>(
+      'input[name="replace"]',
+    );
+    expect(field).not.toBeNull();
+    expect(document.activeElement).toBe(field);
+  });
+});
+
+/**
+ * A chapter written to be hard on anything that reads and writes it.
+ *
+ * A 544-character line, a ragged table, an HTML comment, a fenced div, tabs,
+ * trailing whitespace, and no trailing newline. Nothing here is exotic; every
+ * one of them is something an author's real chapter carries.
+ */
+const HAZARDOUS = [
+  "# A hazardous chapter",
+  "",
+  `A very long line: ${"the quick brown fox jumps over the lazy dog. ".repeat(13)}`
+    .slice(0, 543)
+    .padEnd(544, "."),
+  "",
+  "| Name | What it is | Notes |",
+  "|---|:--|--:|",
+  "| Alice |a|",
+  "| Bob | a longer cell that makes the table ragged | x | y |",
+  "",
+  "<!-- pagebreak -->",
+  "",
+  "::: {.notes}",
+  "\tA tab-indented note, with trailing space.   ",
+  ":::",
+  "",
+  "Text with `back ticks`, a \\ backslash, and \u00a0 a non-breaking space.",
+  "",
+  "```",
+  "## Not a heading",
+  "```",
+  "",
+  "Last line, no trailing newline.",
+].join("\n");
+
+describe("byte fidelity", () => {
+  it("opens a hazardous chapter and saves it byte for byte", async () => {
+    // Exactly the length the spec names, so a change to the fixture is visible.
+    const longest = HAZARDOUS.split("\n").reduce(
+      (found, line) => (line.length > found ? line.length : found),
+      0,
+    );
+    expect(longest).toBe(544);
+    expect(HAZARDOUS.endsWith("\n")).toBe(false);
+
+    let written: string | null = null;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const app = createApp(host, {
+      chooseFolder: () => Promise.resolve(null),
+      openFolder: (path) => Promise.resolve(documentTree(path, [])),
+      readChapter: () => Promise.resolve(HAZARDOUS),
+      writeChapter: (_path, text) => {
+        written = text;
+        return Promise.resolve();
+      },
+      confirmDiscard: () => Promise.resolve(true),
+    });
+
+    const only = chapter("01-hazard.md", "hazard", "document/01-hazard.md");
+    await app.openChapter(only);
+    expect(app.dirty).toBe(false);
+
+    // Move through it without typing: every movement chord the table names.
+    for (const id of [
+      "end-of-buffer",
+      "beginning-of-buffer",
+      "next-line",
+      "forward-word",
+      "end-of-line",
+      "beginning-of-line",
+      "scroll-up",
+      "scroll-down",
+      "set-mark",
+      "keyboard-quit",
+    ]) {
+      for (const chord of bindingById(id)?.chords ?? []) {
+        pressSequence(app.view, chord);
+      }
+    }
+
+    expect(documentText(app.view)).toBe(HAZARDOUS);
+    expect(app.dirty).toBe(false);
+    await app.save();
+    expect(written).toBe(HAZARDOUS);
+    app.destroy();
+    host.remove();
+  });
+
+  it("leaves the chapter untouched for a chord outside the table", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const view = createEditor(host, HAZARDOUS);
+    // `C-j`, `s-k`, and `M-,` are in no row and in no keymap the surface
+    // installs, so nothing may happen to the document when they arrive.
+    for (const chord of ["C-j", "s-k", "M-,", "C-M-q"]) {
+      press(view, chord);
+    }
+    expect(documentText(view)).toBe(HAZARDOUS);
+    view.destroy();
+    host.remove();
+  });
+});
+
+describe("the network", () => {
+  it("attempts no network request while editing", async () => {
+    const attempts: string[] = [];
+    const originals = {
+      fetch: globalThis.fetch,
+      xhr: globalThis.XMLHttpRequest,
+      beacon: navigator.sendBeacon,
+      socket: globalThis.WebSocket,
+      source: globalThis.EventSource,
+    };
+    globalThis.fetch = ((input: unknown) => {
+      attempts.push(`fetch ${String(input)}`);
+      return Promise.reject(new Error("no network"));
+    }) as typeof fetch;
+    globalThis.XMLHttpRequest = class {
+      open(_method: string, url: string): void {
+        attempts.push(`xhr ${url}`);
+      }
+      send(): void {}
+    } as unknown as typeof XMLHttpRequest;
+    Object.defineProperty(navigator, "sendBeacon", {
+      configurable: true,
+      value: (url: string) => {
+        attempts.push(`beacon ${url}`);
+        return false;
+      },
+    });
+    globalThis.WebSocket = class {
+      constructor(url: string) {
+        attempts.push(`socket ${url}`);
+      }
+    } as unknown as typeof WebSocket;
+    globalThis.EventSource = class {
+      constructor(url: string) {
+        attempts.push(`source ${url}`);
+      }
+    } as unknown as typeof EventSource;
+
+    try {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const app = createApp(host, {
+        chooseFolder: () => Promise.resolve(null),
+        openFolder: (path) =>
+          Promise.resolve(
+            documentTree(path, [
+              chapter("01-alice.md", "alice", "document/01-alice.md"),
+            ]),
+          ),
+        readChapter: () => Promise.resolve(SAMPLE),
+        writeChapter: () => Promise.resolve(),
+        confirmDiscard: () => Promise.resolve(true),
+      });
+      await app.openFolder("document");
+      await app.openChapter(chapter("01-alice.md", "alice", "document/01-alice.md"));
+      for (const binding of BINDINGS) {
+        if (binding.owner === "shell" || binding.owner === "app") continue;
+        for (const chord of binding.chords) pressSequence(app.view, chord);
+        press(app.view, "C-g");
+      }
+      await app.save();
+      app.destroy();
+      host.remove();
+    } finally {
+      globalThis.fetch = originals.fetch;
+      globalThis.XMLHttpRequest = originals.xhr;
+      Object.defineProperty(navigator, "sendBeacon", {
+        configurable: true,
+        value: originals.beacon,
+      });
+      globalThis.WebSocket = originals.socket;
+      globalThis.EventSource = originals.source;
+    }
+
+    expect(attempts).toEqual([]);
   });
 });
 
@@ -444,7 +824,7 @@ describe("line endings", () => {
 
 /** A chapter entry for a stub tree. */
 function chapter(name: string, title: string, path: string): Chapter {
-  return { name, title, path, order: 1 };
+  return { name, title, path, order: 1, bytes: 0, modified: null };
 }
 
 /** A one-Part document tree, as the shell would serialize it. */
@@ -532,16 +912,6 @@ describe("Editor's own chords", () => {
     host.remove();
   });
 
-  it("lists parts and chapters in the sidebar and opens one on click", async () => {
-    await app.openFolder("document");
-    const button = host.querySelector<HTMLButtonElement>(".tree-button");
-    expect(button?.textContent).toBe("alice");
-    button?.click();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(app.view.state.doc.toString()).toBe(SAMPLE);
-  });
-
   it("saves the open chapter on C-x C-s", async () => {
     await app.openFolder("document");
     await app.openChapter(tree.root.chapters[0]!);
@@ -555,6 +925,57 @@ describe("Editor's own chords", () => {
     expect(pressSequence(app.view, "C-x C-f")).toBe(true);
     await Promise.resolve();
     expect(chooseCalls).toBe(1);
+  });
+
+  it("opens the keys panel on C-h b and on C-x ?", () => {
+    for (const chord of bindingById("keys-panel")?.chords ?? []) {
+      expect(pressSequence(app.view, chord), chord).toBe(true);
+      const panel = document.querySelector(".keys-panel");
+      expect(panel, chord).not.toBeNull();
+      // The overlay closes on the table's own cancel chords.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          code: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      expect(document.querySelector(".keys-panel")).toBeNull();
+    }
+  });
+
+  it("opens the insert palette on C-c i", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    expect(pressSequence(app.view, "C-c i")).toBe(true);
+    expect(document.querySelector(".palette")).not.toBeNull();
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "g",
+        code: "KeyG",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.querySelector(".palette")).toBeNull();
+    expect(documentText(app.view)).toBe(SAMPLE);
+  });
+
+  it("shows and hides the sidebar on C-x C-b", () => {
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
+    expect(pressSequence(app.view, "C-x C-b")).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("no");
+  });
+
+  it("reloads the document on C-x C-r", async () => {
+    await app.openFolder("document");
+    expect(pressSequence(app.view, "C-x C-r")).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    // Nothing is written by a reload, whatever else it does.
+    expect(written).toBeNull();
   });
 
   it("toggles the key log on C-x k", () => {

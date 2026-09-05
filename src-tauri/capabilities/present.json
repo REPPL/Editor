@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "present",
+  "description": "The present window shows a deck and nothing else. It needs the core defaults so that it can hear when a new deck is waiting; it is given no dialog, no window destruction, and no permission the editing window has.",
+  "windows": [
+    "present"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

@@ -7,10 +7,16 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 
 import { createApp, type AppServices } from "./app";
+import { documentText } from "./editor";
 import {
+  CHANGED_EVENT,
+  addChapter,
   inShell,
   openFolder,
+  presentChapter,
   readChapter,
+  readChapters,
+  readDocumentMetadata,
   setDirty,
   writeChapter,
 } from "./doctree";
@@ -29,12 +35,20 @@ const services: AppServices = {
   },
   openFolder,
   readChapter,
+  readChapters,
   writeChapter,
+  addChapter,
+  readDocumentMetadata,
   confirmDiscard(question) {
     return confirm(question, { title: "Editor", kind: "warning" });
   },
   reportDirty(dirty) {
     void setDirty(dirty);
+  },
+  async subscribe<T>(event: string, handler: (payload: T) => void) {
+    return listen<T>(event, (received) => {
+      handler(received.payload);
+    });
   },
 };
 
@@ -43,9 +57,29 @@ if (!root) throw new Error("missing #app element");
 
 const app = createApp(root, services);
 
+// Present, `C-c C-p`. The row is the binding table's; the action is the deck
+// bundle's. The buffer's text is presented, not the file's, so an unsaved edit
+// presents, and nothing is written anywhere.
+app.registerCommand("present", () => {
+  const path = app.chapterPath;
+  if (path === null) {
+    app.announce("No chapter to present");
+    return;
+  }
+  void presentChapter(documentText(app.view), path).catch((error: unknown) => {
+    app.announce(String(error));
+  });
+});
+
 if (inShell()) {
   void listen(OPEN_FOLDER_EVENT, () => {
     void app.promptForFolder();
+  });
+
+  // The folder changed underneath us. The page re-walks rather than trusting a
+  // diff: the walk is the only thing that decides order.
+  void listen(CHANGED_EVENT, () => {
+    void app.reload();
   });
 
   // The shell stops the close and hands it here, because only the page knows
