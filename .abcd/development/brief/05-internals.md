@@ -63,6 +63,7 @@ bibliography: references.bib
 citation_style: numeric
 theme: default
 asset_threshold_bytes: 8388608
+fill_column: 80
 id: qyk6kiuzjsmfrhpsa4bg5fijxu     # minted on first publish
 variant_tokens:                   # one per variant, minted with the id
   full: gdplb4oupvmji7zcbu3vtu2onq

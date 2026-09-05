@@ -48,6 +48,7 @@ Three kinds:
 | 29 | Start a new document | standalone | — | 1 |
 | 30 | Move between the editor and the sidebar without the mouse | standalone | — | 1 |
 | 31 | Export what I have made to a folder I choose | standalone | — | 1 |
+| 32 | Edit prose with the Emacs commands my hands already know | standalone | — | 1 |
 
 ## The intents
 
@@ -151,6 +152,29 @@ folder dialog and reveal-in-Finder, and the vendored deck engine.
 Order: phase 1, after 5, 6 and 7, which give it something to write. Amended
 into the map after the maintainer used the app and found no way to write
 the deck or the article to disk, or to see what a publish would push.
+
+**32. Edit prose with the Emacs commands my hands already know** —
+standalone.
+Surfaces: the editor (editing, the modeline's prompts).
+Overlaps: intent 2, which owns the binding table's shape, the keys panel,
+the cancel contract, and the sweep that checks the table for conformance —
+the boundary is that 2 owns the table and 32 owns seventeen rows in it and
+what each does to the text; intent 3, whose insert palette keeps its own
+chord — 3 owns what an entry inserts, 32 owns only that those entries are
+also listed and run by the `M-x` command palette; intent 30, which owns
+focus between panes — the boundary is the text: 32 never moves focus out
+of the chapter, so `M-r` moves the cursor within the view and nothing
+else; and intent 18, the same rows in a browser with no shell to claim
+keys.
+Plumbing excluded: the key table's data shape, the fill algorithm, the
+completion index over the chapter's words.
+Order: phase 1, with 2. Amended into the map after the maintainer used the
+app and found the table carried movement and killing but not the commands
+a writer of prose presses hourly — filling a paragraph, moving by
+sentence, transposing two words, completing a word from the text. It is
+tier one of `../research/notes/2026-09-05-emacs-vocabulary-gap.md`; that
+note's outline vocabulary is a later intent, decided with the chord
+conflicts it lists.
 
 ### Bundle: The deck (phase 1)
 
