@@ -235,9 +235,130 @@ disagree with the chapter, because it is the chapter.
 
 ## Audit Notes
 
-<!-- abcd-review: OWED receipt=rcp-dc84ec01ebb0 -->
-Fidelity review OWED (receipt rcp-dc84ec01ebb0).
+<!-- abcd-review: INGESTED receipt=rcp-dc84ec01ebb0 -->
+Fidelity review — receipt rcp-dc84ec01ebb0 (verifier intent-auditor claude-fable-5-1).
 
+Provenance: intent-auditor@claude-fable-5-1 · rubric_hash sha256:542ed2cd51ff938717a3f47b2b332e8d47910beec0ca7ecdfd238ae7edf5ced5 · prompt_hash sha256:bb621a2bfb3f51fc633cebe943f22d48027979ca2f93e96ae51ebf2bb02ffdf2
+Input attestations: diff:e41596a^..HEAD (1327728)@sha256:6343ab4e968dd2ce947b393ad874bb85af80f3bbb074f2d20e2e98bfd2353d7e; manual-checklist:.abcd/.work.local/logs/acceptance/spc-2609051353412219.md@-;
+
+Acceptance rollup: MET 7 · MET_WITH_CONCERNS 2 · NOT_MET 0 · INCONCLUSIVE 2
+
+Per-criterion verdicts:
+- ac-1 — MET_WITH_CONCERNS: The two Section slides are horizontal columns in source order with each paragraph in notes and an empty face (deck.test.ts:44-59), notes are hidden from the audience (slides.css:72-74), and C-c C-p invokes present_chapter (keys.ts:726-731, main.ts:79-85); the concern is that the delivered deck holds THREE horizontal slides, not two, because a chapter-title slide is prepended (deck.test.ts:46-50, deck.ts:197-217), a divergence the spec records openly under Risks and DECISIONS.md:61 rather than a signed-off amendment of the criterion.
+  evidence: src/core/deck.test.ts:46 — "["The Lantern Papers"], ["Beginnings"], ["Findings"]"
+  evidence: src/core/deck.test.ts:53 — "textOf(beginnings?.notes ?? [])).toEqual(["The first winter was the coldest."])"
+  evidence: src/core/render/slides.css:72 — ".reveal aside.notes { display: none; }"
+  evidence: src/main.ts:79 — "app.registerCommand("present", () => {"
+  evidence: .abcd/work/DECISIONS.md:61 — "a chapter title opens the deck"
+- ac-2 — MET: Both Sub-sections hang beneath Beginnings in source order with their own paragraph as notes, and Findings is the next column (deck.test.ts:67-100); the renderer nests them inside one < section> so reveal.js moves down to them and right to Findings (slides.ts:237-247, slides.test.ts:37-48).
+  evidence: src/core/deck.test.ts:90 — "["Beginnings", "The first year", "The second year"], ["Findings"]"
+  evidence: src/core/deck.ts:211 — "if (level >= 3) { build.axis = "vertical"; hangBeneath(build, slide);"
+  evidence: src/core/render/slides.test.ts:44 — "toMatch(/< section>< section [^>]*id="beginnings"/)"
+- ac-3 — MET: Each image paragraph after prose becomes its own kind=image slide in source order carrying src, alt-as-caption and title-as-credit (deck.test.ts:102-127), rendered as < figure class="full-bleed"> with caption and credit spans (slides.test.ts:56-73) and a full-bleed stylesheet rule (slides.css:138).
+  evidence: src/core/deck.test.ts:119 — "caption: "The lantern at dusk", credit: "Photograph by Carol""
+  evidence: src/core/deck.test.ts:126 — "expect((first?.line ?? 0) < (second?.line ?? 0)).toBe(true)"
+  evidence: src/core/render/slides.test.ts:71 — "< span class="caption">The lantern at dusk< /span>"
+  evidence: src/core/render/slides.css:138 — ".reveal .full-bleed img {"
+- ac-4 — MET: A first-block image is pushed onto the heading slide's face while a later image opens its own slide (deck.ts:245-254, deck.test.ts:129-145); the implementation widens the exception to the first block of any empty non-divider slide, which contains the promised case.
+  evidence: src/core/deck.ts:247 — "if (current !== null && current.kind !== "divider" && isEmpty(current)) { current.face.push(block);"
+  evidence: src/core/deck.test.ts:142 — "expect(shape(plan)).toEqual([["Beginnings"], [""]])"
+- ac-5 — MET: Level-4 headings open no slide and fold heading plus text into the current slide's notes in source order (deck.ts:342-345, deck.ts:423-426), and the column shape shows the second Sub-section directly beneath the first (deck.test.ts:147-179).
+  evidence: src/core/deck.ts:423 — "if (block.kind === "heading" && (block.level ?? 1) >= 4) { if (inVariant(block, variant)) foldHeading(build, block);"
+  evidence: src/core/deck.test.ts:172 — "["One.", "A note on dates", "Dates were kept badly.", "A note on counts", "Counts were kept worse."]"
+- ac-6 — MET: The Present path holds text in a Mutex and creates or focuses a window with no filesystem write anywhere (present.rs:226-241, 263-295), the web view builds a string (present.ts:131-141); the Rust test on the command's own path asserts chapter bytes and the full folder listing unchanged (present.rs:467-494), and the vitest asserts the same over examples/presentation (present.test.ts:50-64); 12 Rust and 103 vitest tests pass at HEAD.
+  evidence: src-tauri/src/present.rs:492 — "assert_eq!(fs::read(&chapter).expect("read"), before_bytes);"
+  evidence: src-tauri/src/present.rs:493 — "assert_eq!(listing(&root), before_listing, "Present wrote a file");"
+  evidence: src/present.test.ts:60 — "writes no deck file anywhere in the document folder"
+  evidence: src/present.ts:131 — "Pure: text in, markup out. It reads no file, writes none"
+- ac-7 — INCONCLUSIVE: Only a real layout can show no horizontal scroll and wholly visible headline/caption/image at 390/820/1280: the automated check states plainly that jsdom lays nothing out and scrollWidth is always zero (legibility.test.ts:3-13, 119-125), the spec maps this criterion to a manual width check, and every row of section 5 of the acceptance log is unticked; an unresolved risk is present.css:10-15 setting body overflow:hidden while slides are min-height 100svh normal flow, which could clip a tall slide at 390 px.
+  evidence: src/core/render/legibility.test.ts:120 — "Both numbers are zero in jsdom, which lays nothing out."
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609051353412219.md:96 — "- [ ] **390 CSS px.** No slide scrolls sideways"
+  evidence: src/present.css:14 — "overflow: hidden;"
+- ac-8 — INCONCLUSIVE: The delivery turns touch, controls and keyboard on in DECK_CONFIG (slides.ts:62-75, slides.test.ts:217-221) but a flag is an offer, not a working move; the spec maps this criterion to a manual check at 390 px and the section 2 rows (arrow, on-screen controls, swipe, none inert) are all unticked, so whether each of the three moves is unverified.
+  evidence: src/core/render/slides.ts:66 — "touch: true, keyboard: true,"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609051353412219.md:34 — "- [ ] The on-screen controls in the corner move the deck the same way."
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609051353412219.md:38 — "- [ ] None of the three is offered and inert"
+- ac-9 — MET: A Section of one paragraph yields one column of one slide, walkSlides yields one, and an empty draft is dropped so no blank column follows (deck.test.ts:199-210, deck.ts:379-384, 434-436).
+  evidence: src/core/deck.test.ts:201 — "expect(plan.columns).toHaveLength(1); expect(plan.columns[0]?.slides).toHaveLength(1);"
+  evidence: src/core/deck.ts:436 — "if (slides.length > 0) columns.push({ slides });"
+- ac-10 — MET: A second Present replaces the held DeckSource and emits to the existing window instead of opening another (present.rs:53-60, 275-282; test 423-444), the window replaces the mounted fragment and resyncs rather than appending (present.ts:168-182, present.test.ts:133-140), the fragment is rebuilt from the new text with the renamed headline and added paragraph (present.test.ts:108-119), and nothing is written to the folder (ac-6 evidence).
+  evidence: src-tauri/src/present.rs:275 — "if let Some(window) = app.get_webview_window(PRESENT_WINDOW) { window.emit(DECK_EVENT, ())"
+  evidence: src/present.ts:176 — "reveal.sync(); reveal.slide(0, 0);"
+  evidence: src/present.test.ts:115 — "expect(second).toContain("Beginnings renamed");"
+  evidence: src/present.test.ts:138 — "expect(slides?.querySelectorAll("section")).toHaveLength(1);"
+- ac-11 — MET_WITH_CONCERNS: Five of the six binding disciplines are demonstrated: one source (examples.test.ts:103-123 builds deck and article from one parse and asserts each headline is its heading's text), byte-fidelity (present.test.ts:50-58, present.rs:467-494), degrade gracefully (degrade.test.ts), no machine in the document (assets.test.ts:48, slides.test.ts:203-208), network only on publish (vendored engine at src/vendor/reveal, present.html:16-26 loads only bundle paths, slides.test.ts:229-234); the concern is that the legibility discipline has only the unticked manual rows behind it (see ac-7), and variant fidelity does not bind until phase 3.
+  evidence: src/core/examples.test.ts:112 — "makes each slide headline its heading's own text"
+  evidence: src/core/assets.test.ts:48 — "reports an absolute or climbing reference and resolves nothing"
+  evidence: present.html:25 — "< script type="module" src="/src/vendor/reveal/reveal.js">< /script>"
+  evidence: src/core/degrade.test.ts:2 — "Degrade gracefully in a plain tool."
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609051353412219.md:96 — "- [ ] **390 CSS px.**"
+
+Gap audit:
+- honoured:
+  - Headings are the slides and the prose beneath each is its speaker note; Sections run horizontally, Sub-sections hang beneath
+    evidence: src/core/deck.ts:202 — "function openHeading(build: Build, block: Block)"
+    evidence: src/core/deck.test.ts:90 — "["Beginnings", "The first year", "The second year"]"
+  - Every image becomes a full-bleed slide at its place in the text, with caption and credit
+    evidence: src/core/render/slides.test.ts:68 — "< figure class="full-bleed">"
+  - Nothing is stored: the deck is a string in memory and Present writes nothing into the document folder
+    evidence: src-tauri/src/present.rs:493 — "Present wrote a file"
+    evidence: src/present.test.ts:60 — "writes no deck file anywhere"
+  - Present a second time shows the new text with no second copy
+    evidence: src-tauri/src/present.rs:437 — "A second Present replaces the first rather than adding to it."
+  - The same deck runs in the app and on the presenter site from one renderer, engine vendored not fetched
+    evidence: src/publish/build.ts:439 — "renderSlides("
+    evidence: src/core/render/slides.ts:45 — "export const DECK_ENGINE_FILES"
+  - Present is reachable by chord from the editor and presents the buffer's text
+    evidence: src/keys.ts:728 — "chords: ["C-c C-p"]"
+    evidence: src/main.ts:85 — "void presentChapter(documentText(app.view), path)"
+- diverged:
+  - A two-Section chapter yields two horizontal slides: the delivery prepends a chapter-title slide, giving three
+    evidence: src/core/deck.test.ts:61 — "opens the deck with the chapter's title"
+    evidence: .abcd/development/specs/closed/spc-2609051353412219-present-a-chapter-with-no-slide-markup.md:0 — "The title slide against the first criterion"
+  - Speaker notes are read from a split view opened with `s` inside the present window, not reveal.js's speaker view, because of the script-src 'self' policy
+    evidence: src/present.ts:10 — "The notes are a split view inside this window rather than reveal.js's own speaker popup."
+    evidence: .abcd/work/DECISIONS.md:84 — "Speaker notes are a split view inside the present window"
+  - The site deck build named in the spec as scripts/build-deck.ts landed as part of src/publish/build.ts instead
+    evidence: src/publish/build.ts:90 — "export const DECK_PATH = "slides/index.html";"
+  - The first-image exception applies to the first block of any empty slide, not only the first block after a heading
+    evidence: src/core/deck.ts:239 — "taken here as the first block of any slide that has nothing on it yet"
+- missing:
+  - Bob sees the deck at phone, iPad and desktop widths with nothing to scroll sideways or pinch, every headline, caption and image wholly visible: no automated measurement exists and no manual row is ticked
+    evidence: src/core/render/legibility.test.ts:3 — "jsdom performs no layout"
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609051353412219.md:96 — "- [ ] **390 CSS px.**"
+  - Swipe, on-screen controls and arrow keys each demonstrably move the deck at 390 px: only configuration flags are proven, every manual row is unticked
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609051353412219.md:35 — "- [ ] With a trackpad or touch screen, a swipe left and right"
+  - The deck renders in full with the network off (the discipline's manual row in section 8) is unticked
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609051353412219.md:128 — "- [ ] Turn the machine's network off."
+
+Scope-condition dispositions:
+- cond-2609051353414168 — survived: The bundle's other member shipped in the same closing commit and this build reads every override from the canon table that member owns, so neither shipped alone.
+  evidence: .abcd/development/intents/shipped/itd-2609051335458626-shape-the-deck-in-the-same-text.md:0 — "shipped/"
+  evidence: src/core/deck.ts:270 — "placementOf(block, "slides")"
+- cond-2609051353412397 — survived: The deck runs in a Tauri 2 webview window and is written for the presenter site by the publish build; nothing targets the single HTML file.
+  evidence: src-tauri/src/present.rs:283 — "tauri::WebviewWindowBuilder::new("
+  evidence: src/publish/build.ts:90 — "DECK_PATH = "slides/index.html""
+- cond-2609051353415666 — survived: One author on one machine holds: a single Mutex< Option< DeckSource>> and one present window, with no collaboration path; the audience-device half of the condition was not exercised beyond that.
+  evidence: src-tauri/src/present.rs:49 — "pub struct PendingDeck(Mutex< Option< DeckSource>>);"
+- cond-2609051353419859 — survived: Phase 1 presents the document's default variant with copied assets only: the shell refuses an asset at or above the copied-asset threshold and carries the default variant on DeckSource; no criterion was made to depend on citations, the PDF or annotations.
+  evidence: src-tauri/src/present.rs:166 — "if metadata.len() >= threshold {"
+  evidence: src-tauri/src/present.rs:210 — "pub fn default_variant(root: &Path) -> String"
+- cond-2609051353416905 — survived: Present begins at the open buffer: the command takes the editor view's text and the current path and never opens a folder or builds a tree itself.
+  evidence: src/main.ts:85 — "void presentChapter(documentText(app.view), path)"
+  evidence: src-tauri/src/present.rs:232 — "document::confine_chapter(root, &chapter_path)?;"
+- cond-2609051353414652 — narrowed: The condition put the Article column out of scope, yet this delivery ships src/core/render/article.ts rendering headings, figures and rules from the same tree; the spec scopes it as an unstyled skeleton for the one-source proof, so the boundary now holds only for the user-facing Tufte article.
+  narrowing: holds for the styled, user-facing Tufte article only; the article HTML skeleton for the same constructs was delivered under this intent
+  evidence: src/core/render/article.ts:0 — "renderArticle"
+  evidence: src/core/examples.test.ts:104 — "builds deck and article skeleton from one parseChapter result"
+- cond-2609051353416297 — survived: The deck starts from references already in the chapter and reads their bytes through the shell; the drop gesture and the copy into assets/ shipped separately in src/drop.ts and drop-target.ts.
+  evidence: src/present.ts:156 — "for (const reference of referencesOf(parseChapter(text)))"
+  evidence: src/drop.ts:0 — "drop"
+- cond-2609051353419812 — untested: Nothing in the delivered range touches rehearsal cards or an annotation sidecar, so the boundary with map #25 was neither exercised nor contradicted.
+- cond-2609051353412520 — survived: Present mints no id, hash or link; the publish build consumes the same buildChapterDecks/renderSlides and owns the version folder, so the deck at the link is this deck.
+  evidence: src/publish/build.ts:434 — "const plans = buildChapterDecks("
+  evidence: src-tauri/src/present.rs:263 — "pub async fn present_chapter"
+- cond-2609051353412029 — survived: A citation parses and renders as the literal text the author wrote; nothing resolves a key or builds a reference list.
+  evidence: src/core/render/slides.test.ts:195 — "< span class="citation">[@smith2020, p. 4]< /span>"
 ## Grounds
 
 - pursued: headline-as-slide and text-as-notes yields a usable first deck with no authoring; wrong if the maintainer's real talks need authored breaks on most sections

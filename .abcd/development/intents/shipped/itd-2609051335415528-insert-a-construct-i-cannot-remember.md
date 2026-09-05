@@ -168,9 +168,114 @@ plain-tool guarantee affordable to the person paying for it.
 
 ## Audit Notes
 
-<!-- abcd-review: OWED receipt=rcp-04d6e441c952 -->
-Fidelity review OWED (receipt rcp-04d6e441c952).
+<!-- abcd-review: INGESTED receipt=rcp-04d6e441c952 -->
+Fidelity review — receipt rcp-04d6e441c952 (verifier abcd:intent-auditor claude-fable-5-1).
 
+Provenance: abcd:intent-auditor@claude-fable-5-1 · rubric_hash sha256:542ed2cd51ff938717a3f47b2b332e8d47910beec0ca7ecdfd238ae7edf5ced5 · prompt_hash sha256:26f8290996a68d169eab15aa3c0279e6b40030f1e892df1605261bca55c03548
+Input attestations: diff:e41596a^..HEAD@sha256:6343ab4e968dd2ce947b393ad874bb85af80f3bbb074f2d20e2e98bfd2353d7e;
+
+Acceptance rollup: MET 4 · MET_WITH_CONCERNS 4 · NOT_MET 0 · INCONCLUSIVE 1
+
+Per-criterion verdicts:
+- ac-1 — MET: inserts.ts:127-128 carries the columns form character for character as 05-internals.md section 3 writes it (outer .columns, two .column width="50%" divs, closing fences); on a blank line insertionFor adds no prefix or suffix (palette.ts:85-89) and palette.test.ts:117-135 asserts the buffer equals SAMPLE with form.text spliced in and the cursor on line 7, the first column's body line; test suite passes at HEAD
+  evidence: src/core/inserts.ts:128 — "'::: {.columns}\n::: {.column width="50%"}\n▮\n:::\n::: {.column width="50%"}\n\n:::\n:::\n'"
+  evidence: src/palette.test.ts:126 — "SAMPLE.slice(0, at) + form.text + SAMPLE.slice(at)"
+  evidence: src/palette.test.ts:133 — "expect(line.number).toBe(7)"
+  evidence: .abcd/development/brief/05-internals.md:164 — "::: {.columns}"
+- ac-2 — MET_WITH_CONCERNS: inserts.ts:156 writes '::: {.notes}\n▮\n:::\n'; palette.test.ts:137-150 asserts line 3 is unchanged, lines 5 and 7 are the fences, and the cursor sits on the empty body line 6; palette.test.ts:212-250 asserts every byte outside the insertion is the chapter as it was. Concern: 'anywhere in a chapter' is proven on a blank line only — with the cursor mid-line, palette.ts:85-89 splits the cursor's line around the block (prefix "\n\n", suffix "\n"), a spec-signed-off behaviour but a change to that line
+  evidence: src/core/inserts.ts:156 — "form: "::: {.notes}\n▮\n:::\n""
+  evidence: src/palette.test.ts:144 — "expect(view.state.doc.line(3).text).toBe(before)"
+  evidence: src/palette.ts:87 — "const prefix = before.trim() === "" ? "" : "\n\n";"
+- ac-3 — MET: palette.ts:69-77 appends form.text (' {.divider}') at the heading line's end and inserts no block, refusing off a heading; palette.test.ts:152-163 asserts the heading reads '... {.divider}', the line count is unchanged at 5 and the whole document equals the one-line replacement; inserts.test.ts:87 parses '## Interlude {.divider}' to a heading carrying class divider
+  evidence: src/palette.ts:75 — "const at = line.to;"
+  evidence: src/palette.test.ts:159 — "expect(view.state.doc.lines).toBe(5)"
+  evidence: src/core/inserts.test.ts:87 — "parseChapter(`## Interlude${form.text}\n`)"
+- ac-4 — MET_WITH_CONCERNS: inserts.test.ts:219-240 parses all sixteen forms and asserts node kind, classes, attribute pairs and (for columns) the two .column children; palette.test.ts:212-250 asserts the buffer after each insertion is the original bytes plus the form. Concern: no serialiser exists in the delivered tree (tree.ts:72 says it 'arrives with the serialiser'), so 'parsed and serialised ... returns byte for byte' is satisfied only in the degenerate form the spec signed off — the buffer is the file's text and nothing re-serialises — not by a parse-then-serialise round trip
+  evidence: src/core/inserts.test.ts:222 — "expect(node.kind, form.id).toBe(form.expects.nodeKind)"
+  evidence: src/palette.test.ts:241 — "expect(text.slice(0, at), form.id).toBe(start.slice(0, at))"
+  evidence: src/core/tree.ts:72 — "the fidelity harness that needs one arrives with the serialiser"
+- ac-5 — MET: overlay.ts:132-137 closes on every chord of keyboard-quit, which keys.ts:389 defines as ["C-g", "Escape"]; palette.test.ts:180-189 opens the palette, types 'col', presses each chord in turn and asserts the palette is gone and the document equals SAMPLE; emacs-keys.test.ts:948-964 repeats it from the real C-c i chord
+  evidence: src/keys.ts:389 — "chords: ["C-g", "Escape"],"
+  evidence: src/overlay.ts:132 — "if (chordsOf("keyboard-quit").includes(chord)) {"
+  evidence: src/palette.test.ts:187 — "expect(documentText(view)).toBe(SAMPLE);"
+- ac-6 — MET: inserts.test.ts:298-324 builds a chapter holding all sixteen forms with prose between them, renders it with an unconfigured MarkdownIt('commonmark'), and asserts every prose paragraph appears in source order, the last paragraph is reached, and the sentinel typed inside each construct survives
+  evidence: src/core/inserts.test.ts:302 — "const plain = new MarkdownIt("commonmark");"
+  evidence: src/core/inserts.test.ts:310 — "expect(html).toContain("The last paragraph of the chapter.");"
+  evidence: src/core/inserts.test.ts:322 — "expect(html, sentinel).toContain(sentinel);"
+- ac-7 — MET_WITH_CONCERNS: Compared each of the sixteen forms in inserts.ts:92-308 against 05-internals.md section 3 by hand: the seven offered in phase 1 (slide-split, divider, columns, speaker-notes, credit, page-break, footnote — inserts.test.ts:118-127) match section 3 verbatim, and every held-back row names a section 3 construct; inserts.test.ts:173-217 holds the shapes and class markers against the brief. Concerns: the automated 'spells every construct' check is a substring check on '{.class' and attribute pairs, not a form-equality check; three held-back forms are deliberate reductions the spec records (video without poster/caption and with one 'local:' source, citation as bare key, footnote inline only)
+  evidence: src/core/inserts.test.ts:209 — "expect(brief, `${form.id}: ${marker}`).toContain(marker);"
+  evidence: src/core/inserts.ts:238 — "form: "::: {.video}\n- local: ▮\n:::\n""
+  evidence: .abcd/development/brief/05-internals.md:204 — "::: {.video poster="assets/keynote-poster.jpg" caption="The second half"}"
+- ac-8 — INCONCLUSIVE: The only proof of legibility at 390, 820 and 1280 CSS px is manual check M6, and every row of the acceptance checklist is unticked; style.css:226 sizes the overlay at min(560px, 92vw) and style.css:317 sets overflow-wrap: anywhere on rows, which is consistent with the claim but no test or recorded run exercises the three widths, and Return-inserts-at-cursor is only proven in jsdom
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609051353398011.md:10 — "- [ ] At 1280: `C-c i` opens the palette"
+  evidence: src/style.css:226 — "width: min(560px, 92vw);"
+  evidence: src/style.css:317 — "overflow-wrap: anywhere;"
+- ac-9 — MET_WITH_CONCERNS: Five of six inherited disciplines cite automated proof: byte-fidelity (palette.test.ts:212-250), no machine in the document (inserts.test.ts:242-248), one source (palette.test.ts:264-283 sweep), degrade gracefully (inserts.test.ts:298-324), network only on publish (palette.ts and inserts.ts import no network API; document.test.ts:520-545 stubs fetch/XHR and asserts none). Concerns: 'legible on three device classes' rests solely on unticked manual M6 and is unverified; and the one-source sweep omits drop-target.ts, whose line 76 carries a second literal spelling of the video form as a fallback
+  evidence: src/palette.test.ts:279 — "expect(source.includes(":::"), file).toBe(false);"
+  evidence: src/core/inserts.test.ts:244 — "expect(form.text, form.id).not.toMatch(/(^|[\s:="])[~/]/);"
+  evidence: src/document.test.ts:521 — "it("attempts no network request while a document is open""
+  evidence: src/drop-target.ts:76 — "const form = VIDEO_FORM?.text ?? "::: {.video}\n- local: \n:::\n";"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609051353398011.md:13 — "- [ ] At 390: the same"
+
+Gap audit:
+- honoured:
+  - one chord opens a filterable palette and Return puts the canonical form at the cursor with the cursor where the content goes
+    evidence: src/keys.ts:695 — "id: "insert-palette","
+    evidence: src/palette.ts:105 — "view.dispatch({"
+    evidence: src/emacs-keys.test.ts:948 — "it("opens the insert palette on C-c i""
+  - the canon is written once as data and the palette is the app's writer of it
+    evidence: src/core/inserts.ts:343 — "export const INSERT_FORMS: readonly InsertForm[] = DRAFTS.map(finish);"
+    evidence: src/palette.ts:15 — "import { formsVisibleIn, matchForms,"
+  - the palette is an overlay on the shared contract: takes the keyboard, moves on table chords, cancels on the cancel chord
+    evidence: src/palette.ts:164 — "overlay = openOverlay({"
+    evidence: src/overlay.ts:163 — "document.addEventListener("keydown", onKeydown, true);"
+  - typing 'col' reaches Columns first
+    evidence: src/palette.test.ts:114 — "expect(offered()[0]).toBe("columns");"
+  - every form degrades in a plain CommonMark tool
+    evidence: src/core/inserts.test.ts:299 — "renders every paragraph, in order, and reaches the end of the file"
+  - a later phase adds an entry by a number, not a form: held-back rows carry their form and tests now
+    evidence: src/core/inserts.ts:351 — "export function formsVisibleIn(phase: number)"
+    evidence: src/core/inserts.test.ts:128 — "expect(formsVisibleIn(4)).toHaveLength(16);"
+- diverged:
+  - the press release lists fourteen constructs; the table carries sixteen rows (the rule split and the egg's second form added), recorded in the spec's Risks
+    evidence: src/core/inserts.test.ts:107 — "expect(INSERT_FORMS).toHaveLength(16);"
+  - the spec and the checklist say phase 1 offers six forms; the delivered palette offers seven, footnote included because canon.ts seeds Footnote in phase 1 and the deck renders it
+    evidence: src/core/inserts.test.ts:119 — "expect(formsVisibleIn(1).map((form) => form.id)).toEqual(["
+    evidence: src/core/canon.ts:268 — "phase: 1,"
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609051353398011.md:10 — "the six offered labels are"
+  - the canon's phase lives in canon.ts rather than as a visibleFrom number on each row as the spec's Construct shape described
+    evidence: src/core/inserts.ts:324 — "visibleFrom: phaseOf(draft.canon),"
+  - the palette is not the only spelling of a canonical form in the app: drop-target.ts carries a fallback literal of the video form outside inserts.ts, and the one-source sweep does not cover that file
+    evidence: src/drop-target.ts:76 — "?? "::: {.video}\n- local: \n:::\n""
+    evidence: src/palette.test.ts:268 — "const writers = ["
+  - byte-fidelity is proven as buffer equality, not as a parse-then-serialise round trip; no serialiser is delivered
+    evidence: src/core/tree.ts:72 — "arrives with the serialiser"
+- missing:
+  - legibility at 390, 820 and 1280 CSS px with Return still inserting — manual M6 has no ticked row and no automated substitute
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609051353398011.md:10 — "- [ ] At 1280"
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609051353398011.md:12 — "- [ ] At 820: the same."
+  - the whole manual checklist (the six forms in the window, divider refusal in the modeline, plain-viewer degrade) is unrun
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609051353398011.md:20 — "- [ ] Slide split on a blank line inserts `---`."
+
+Scope-condition dispositions:
+- cond-2609051353399760 — untested: the palette is DOM code exercised only under vitest/jsdom in the delivered range; the one check that runs it inside the Tauri desktop shell is manual M6, which has no ticked row, so the desktop-host assumption was neither exercised nor contradicted
+- cond-2609051353399534 — survived: the palette acts on the single EditorView's main selection head and app.ts hands it the one open view, so one author at one cursor in one chapter is exactly what the delivered code assumes
+  evidence: src/palette.ts:66 — "const head = state.selection.main.head;"
+  evidence: src/app.ts:312 — "openPalette(view, { host: overlayHost, announce });"
+- cond-2609051353392265 — survived: phase 1 offers the slide constructs the condition names (rule split, divider, columns, notes, credit) plus page break and footnote, both of which the deck renders in phase 1, so the entry-follows-rendering rule the condition states is what gates visibility; the full sixteen-row table covers every construct the condition lists
+  evidence: src/core/inserts.test.ts:119 — "expect(formsVisibleIn(1).map((form) => form.id)).toEqual(["
+  evidence: src/core/render/slides.ts:170 — "if (line.kind === "footnote") {"
+  evidence: src/palette.ts:27 — "export const PALETTE_PHASE = 1;"
+- cond-2609051353398378 — survived: palette.ts and inserts.ts contain no rendering logic; what a construct means lives in canon.ts's placement table and the renderers, and inserts.ts reads only the phase from that table
+  evidence: src/core/inserts.ts:23 — "import { rowById } from "./canon";"
+  evidence: src/core/inserts.ts:339 — "return row.phase;"
+- cond-2609051353396605 — survived: the palette is built on the bundle's shared overlay contract and adds one row to the shared binding table rather than owning either, as a bundle member would
+  evidence: src/palette.ts:20 — "import { openOverlay, type Overlay } from "./overlay";"
+  evidence: src/keys.ts:697 — "chords: ["C-c i"],"
+- cond-2609051353396144 — narrowed: the canon is quoted from 05-internals.md section 3 and the parse path (parse.ts) is inherited and exercised over every form, but the serialise half of the inherited round-trip path does not exist in the delivered tree, so the round-trip proof is parse plus buffer-equality only
+  narrowing: holds for the canon text and the parse path; the serialise path the condition assumed is absent, so byte-fidelity is proven by buffer equality rather than by parse-then-serialise
+  evidence: src/core/inserts.test.ts:19 — "const INTERNALS = ".abcd/development/brief/05-internals.md";"
+  evidence: src/core/tree.ts:72 — "arrives with the serialiser"
 ## Grounds
 
 - pursued: an insert palette removes the need to remember fenced-div syntax; wrong if authors still hand-type constructs incorrectly or the palette's forms drift from the canon
