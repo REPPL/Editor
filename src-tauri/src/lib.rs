@@ -15,6 +15,7 @@ pub mod assets;
 pub mod convert;
 pub mod devharness;
 pub mod document;
+pub mod export;
 pub mod metadata;
 pub mod present;
 pub mod publish;
@@ -293,6 +294,8 @@ pub fn run() {
             publish::check_deploy,
             publish::read_publish_log,
             publish::open_published_link,
+            export::export_rendering,
+            export::reveal_staged_version,
             devharness::dev_harness,
             devharness::dev_log_key,
             present::present_log

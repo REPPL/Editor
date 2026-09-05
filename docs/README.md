@@ -27,6 +27,9 @@ Task-oriented. Open one when you have something specific to do.
   picture, and what to do when a drop is refused.
 - [Connect the production repository](how-to-connect-the-production-repository.md)
   — set up the git repository and the static host that publishing pushes to.
+- [Export a folder you can carry](how-to-export-a-folder.md) — write the deck
+  or the article as a folder that opens from disk, and look at what a publish
+  would push before pushing it.
 
 ## Reference
 

@@ -138,6 +138,8 @@ export function createPublishServices(
       const built = buildVersion(document.tree, variant, {
         rendered: renderVariant(document.tree, variant, {
           title: document.title,
+          // The site build: its chrome is the one kept at the site root.
+          host: "site",
         }),
       });
       return {

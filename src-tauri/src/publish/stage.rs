@@ -162,6 +162,32 @@ pub const TOOLING: [(&str, &str); 2] = [
     ),
 ];
 
+/// The chrome an exported folder carries, for one kind of rendering.
+///
+/// The bytes are the site's own — the constants `scaffold` writes at the site
+/// root — so the deck a folder runs is the deck the site serves. The site's
+/// own root files are not among them: the shell's `index.html` would collide
+/// with the article's, and none of the rest means anything in a folder.
+pub fn chrome_for_folder(kind: &str) -> Result<Vec<(&'static str, &'static str)>, String> {
+    let named: &[&str] = match kind {
+        "deck" => &["presenter/slides.css", "presenter/deck.js"],
+        "article" => &["presenter/article.css"],
+        other => return Err(format!("{other} is not a rendering an export writes")),
+    };
+    let mut chrome: Vec<(&'static str, &'static str)> = Vec::new();
+    if kind == "deck" {
+        chrome.extend(ENGINE.iter().copied());
+    }
+    for name in named {
+        let found = CHROME
+            .iter()
+            .find(|(path, _)| path == name)
+            .ok_or_else(|| format!("the site carries no {name}"))?;
+        chrome.push(*found);
+    }
+    Ok(chrome)
+}
+
 /// What a stage produced.
 #[derive(Debug, Clone)]
 pub struct Staged {
@@ -398,7 +424,15 @@ fn relative_to_repo(layout: &SiteLayout, path: &Path) -> String {
     out
 }
 
-fn copy_tree(from: &Path, to: &Path, written: &mut impl FnMut(&Path)) -> Result<(), String> {
+/// Copy one tree into another, reporting every file written.
+///
+/// `pub(crate)` because an export copies its staged tree into the folder Alice
+/// chose with the same walk a publish installs a version with.
+pub(crate) fn copy_tree(
+    from: &Path,
+    to: &Path,
+    written: &mut impl FnMut(&Path),
+) -> Result<(), String> {
     fs::create_dir_all(to).map_err(|error| format!("cannot create {}: {error}", to.display()))?;
     let read =
         fs::read_dir(from).map_err(|error| format!("cannot read {}: {error}", from.display()))?;

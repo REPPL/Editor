@@ -37,6 +37,8 @@ import {
 } from "./publish/services";
 import { createSettingsPanel, mountSettingsPanel } from "./settings-panel";
 import { createSettingsServices } from "./settings";
+import { createExportPanel, mountExportPanel } from "./export-panel";
+import { createExportServices } from "./export/services";
 import "./style.css";
 
 /** The event the shell emits when the Open Folder menu item fires. */
@@ -127,6 +129,19 @@ mountPublishPanel(app, publishPanel);
 
 const settingsPanel = createSettingsPanel(createSettingsServices());
 mountSettingsPanel(app, settingsPanel);
+
+// Export, `C-c C-e`: the third overlay through the same two extension points.
+// It builds through the publish path's own builder, so the folder Alice
+// carries and the version the site serves are one build.
+const exportPanel = createExportPanel(
+  createExportServices(loadForPublish, () => app.documentRoot),
+  {
+    announce: (message) => {
+      app.announce(message);
+    },
+  },
+);
+mountExportPanel(app, exportPanel);
 
 if (inShell()) {
   void listen(OPEN_FOLDER_EVENT, () => {

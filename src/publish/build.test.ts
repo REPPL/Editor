@@ -36,7 +36,7 @@ function presentation(): DocumentSource {
 
 function build(tree: DocumentSource, variant = "talk"): ReturnType<typeof buildVersion> {
   return buildVersion(tree, variant, {
-    rendered: renderVariant(tree, variant, { title: "Macromarketing 2026" }),
+    rendered: renderVariant(tree, variant, { title: "Macromarketing 2026", host: "site" }),
   });
 }
 
@@ -129,7 +129,7 @@ describe("buildVersion", () => {
     // The article is one page per document, and an outline id is unique within
     // one chapter only: without a prefix, two chapters opening the same way
     // would send both contents entries to the first one.
-    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026" });
+    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026", host: "site" });
     const navs = rendered.article.match(/<nav class="contents">/g) ?? [];
     expect(navs).toHaveLength(1);
     const targets = [...rendered.article.matchAll(/<nav class="contents">([\s\S]*?)<\/nav>/g)]
@@ -191,7 +191,7 @@ describe("the asset plan", () => {
     );
     const tree = { chapters: [{ path: "01-part/01-chapter.md", chapter }] };
     const built = buildVersion(tree, "talk", {
-      rendered: renderVariant(tree, "talk", { title: "A document" }),
+      rendered: renderVariant(tree, "talk", { title: "A document", host: "site" }),
     });
     expect(built.copies).toEqual([
       {
@@ -365,7 +365,7 @@ describe("slide ids across a whole document", () => {
   }
 
   it("gives no two slides the same id, across chapters", () => {
-    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026" });
+    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026", host: "site" });
     const ids = idsOf(rendered.deck);
     expect(ids.length).toBeGreaterThan(1);
     expect(new Set(ids).size).toBe(ids.length);
@@ -380,8 +380,90 @@ describe("slide ids across a whole document", () => {
         { path: "01-parts/02-two.md", chapter: parseChapter(two) },
       ],
     };
-    const ids = idsOf(renderVariant(tree, "talk", { title: "Two chapters" }).deck);
+    const ids = idsOf(renderVariant(tree, "talk", { title: "Two chapters", host: "site" }).deck);
     expect(ids.filter((id) => id === "why-this-matters")).toHaveLength(1);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * The folder host: one build, two chrome bases.
+ *
+ * The export writes the same version the publish stages, into a folder that
+ * carries its own copy of the chrome. So the two builds differ in the
+ * attributes that name the chrome and in nothing else, and these tests are
+ * where that is held true rather than assumed.
+ * ------------------------------------------------------------------------- */
+
+/** Every `href` and `src` a page names. */
+function references(page: string): string[] {
+  return [...page.matchAll(/(?:href|src)="([^"]*)"/g)].map((match) => match[1] ?? "");
+}
+
+function rendered(host: "site" | "folder"): ReturnType<typeof renderVariant> {
+  return renderVariant(presentation(), "talk", { title: "Macromarketing 2026", host });
+}
+
+describe("the folder host", () => {
+  it("an exported page is the staged page with the chrome base substituted, byte for byte", () => {
+    const site = rendered("site");
+    const folder = rendered("folder");
+
+    // The deck sits one folder in, at `slides/index.html`, so it climbs one.
+    const deckSubstituted = site.deck.split('="/presenter').join('="../presenter');
+    expect(folder.deck).toBe(deckSubstituted);
+    // The article sits at the folder's root.
+    const articleSubstituted = site.article.split('="/presenter').join('="presenter');
+    expect(folder.article).toBe(articleSubstituted);
+
+    // Which is to say: the difference is the chrome attributes and nothing
+    // else. Every other reference — every asset — is the same string.
+    const chrome = (page: string): string[] =>
+      references(page).filter((url) => url.includes("presenter/"));
+    const rest = (page: string): string[] =>
+      references(page).filter((url) => !url.includes("presenter/"));
+    expect(chrome(site.deck).length).toBeGreaterThan(0);
+    expect(rest(folder.deck)).toEqual(rest(site.deck));
+    expect(rest(folder.article)).toEqual(rest(site.article));
+
+    // And the assets a version carries are one plan, whatever the host.
+    expect(buildVersion(presentation(), "talk", { rendered: folder }).copies).toEqual(
+      buildVersion(presentation(), "talk", { rendered: site }).copies,
+    );
+  });
+
+  it("a folder build names its engine beside it, and nothing above the folder", () => {
+    const folder = rendered("folder");
+    for (const name of [
+      "../presenter/reveal/reset.css",
+      "../presenter/reveal/reveal.css",
+      "../presenter/slides.css",
+      "../presenter/reveal/reveal.js",
+      "../presenter/reveal/plugin/notes/notes.js",
+      "../presenter/deck.js",
+    ]) {
+      expect(folder.deck).toContain(name);
+    }
+    expect(folder.article).toContain('href="presenter/article.css"');
+    expect(folder.deck).not.toContain('="/presenter');
+    expect(folder.article).not.toContain('="/presenter');
+  });
+
+  it("names nothing above the folder it is written into", () => {
+    const folder = rendered("folder");
+    // The article is at the folder's root, so nothing it names may climb at
+    // all; the deck is one folder in, so it may climb exactly one.
+    for (const url of references(folder.article)) {
+      expect(url, url).not.toMatch(/^(?:[a-z][a-z0-9+.-]*:|\/|\.\.)/i);
+    }
+    for (const url of references(folder.deck)) {
+      expect(url, url).not.toMatch(/^(?:[a-z][a-z0-9+.-]*:|\/)/i);
+      expect(url, url).not.toContain("../../");
+    }
+    for (const page of [folder.article, folder.deck]) {
+      expect(page).not.toContain("file:");
+      expect(page).not.toContain("/Users/");
+      expect(page).not.toContain(EXAMPLES);
+    }
   });
 });

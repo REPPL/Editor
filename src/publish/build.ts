@@ -454,10 +454,39 @@ function normalisePath(path: string): string | null {
 /** Where the shared chrome sits at the site root, for every version. */
 export const CHROME_FOLDER = "/presenter";
 
+/**
+ * Where the chrome sits beside a folder written to disk.
+ *
+ * The site keeps its chrome once at its root, so a built page names it
+ * `/presenter/…`; that path resolves to nothing under a `file:` URL. A folder
+ * carries its own copy at the folder's root instead, and the pages address it
+ * relatively: `presenter` from the article, `../presenter` from the deck one
+ * folder down. Nothing else about the build changes.
+ */
+export const FOLDER_CHROME = "presenter";
+
+/** Where a built page will be read from. */
+export type BuildHost = "site" | "folder";
+
 /** What the renderers need besides the tree. */
 export interface RenderOptions {
   /** The document's title, from `document.yaml`. */
   readonly title: string;
+  /** Where the pages will be read from: the site, or a folder on disk. */
+  readonly host: BuildHost;
+}
+
+/**
+ * The base a page names its chrome by.
+ *
+ * One function, so the two envelopes cannot answer differently and a page's
+ * host is the only thing that decides it.
+ */
+export function chromeBase(host: BuildHost, rendering: "article" | "slides"): string {
+  if (host === "site") {
+    return CHROME_FOLDER;
+  }
+  return rendering === "slides" ? `../${FOLDER_CHROME}` : FOLDER_CHROME;
 }
 
 /** Render one variant's article and deck. */
@@ -506,13 +535,25 @@ export function renderVariant(
   );
 
   return {
-    article: articleDocument(options.title, article),
-    deck: deckDocument(options.title, fragments.join("\n")),
+    article: articleDocument(
+      options.title,
+      article,
+      chromeBase(options.host, "article"),
+    ),
+    deck: deckDocument(
+      options.title,
+      fragments.join("\n"),
+      chromeBase(options.host, "slides"),
+    ),
   };
 }
 
 /** The article page: one column, one stylesheet, no fixed width. */
-export function articleDocument(title: string, body: string): string {
+export function articleDocument(
+  title: string,
+  body: string,
+  chrome: string = CHROME_FOLDER,
+): string {
   return [
     "<!doctype html>",
     '<html lang="en">',
@@ -520,7 +561,7 @@ export function articleDocument(title: string, body: string): string {
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${escapeText(title)}</title>`,
-    `<link rel="stylesheet" href="${CHROME_FOLDER}/article.css">`,
+    `<link rel="stylesheet" href="${chrome}/article.css">`,
     "</head>",
     '<body class="article">',
     "<main>",
@@ -532,8 +573,12 @@ export function articleDocument(title: string, body: string): string {
   ].join("\n");
 }
 
-/** The deck page: the engine and the stylesheet come from the site root. */
-export function deckDocument(title: string, fragment: string): string {
+/** The deck page: the engine and the stylesheet come from the chrome base. */
+export function deckDocument(
+  title: string,
+  fragment: string,
+  chrome: string = CHROME_FOLDER,
+): string {
   return [
     "<!doctype html>",
     '<html lang="en">',
@@ -541,17 +586,17 @@ export function deckDocument(title: string, fragment: string): string {
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">',
     `<title>${escapeText(title)}</title>`,
-    `<link rel="stylesheet" href="${CHROME_FOLDER}/reveal/reset.css">`,
-    `<link rel="stylesheet" href="${CHROME_FOLDER}/reveal/reveal.css">`,
-    `<link rel="stylesheet" href="${CHROME_FOLDER}/slides.css">`,
+    `<link rel="stylesheet" href="${chrome}/reveal/reset.css">`,
+    `<link rel="stylesheet" href="${chrome}/reveal/reveal.css">`,
+    `<link rel="stylesheet" href="${chrome}/slides.css">`,
     "</head>",
     "<body>",
     '<div class="reveal"><div class="slides">',
     fragment,
     "</div></div>",
-    `<script src="${CHROME_FOLDER}/reveal/reveal.js"></script>`,
-    `<script src="${CHROME_FOLDER}/reveal/plugin/notes/notes.js"></script>`,
-    `<script src="${CHROME_FOLDER}/deck.js"></script>`,
+    `<script src="${chrome}/reveal/reveal.js"></script>`,
+    `<script src="${chrome}/reveal/plugin/notes/notes.js"></script>`,
+    `<script src="${chrome}/deck.js"></script>`,
     "</body>",
     "</html>",
     "",
