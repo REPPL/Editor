@@ -47,6 +47,7 @@ Three kinds:
 | 28 | Take a document off the site | standalone | — | 6 |
 | 29 | Start a new document | standalone | — | 1 |
 | 30 | Move between the editor and the sidebar without the mouse | standalone | — | 1 |
+| 31 | Export what I have made to a folder I choose | standalone | — | 1 |
 
 ## The intents
 
@@ -129,6 +130,27 @@ Plumbing excluded: which pane holds focus, the focus ring, and the shell's
 claim on `C-x` as a prefix.
 Order: phase 1, with 1 and 2. Amended into the map after the maintainer
 used the app and found the sidebar reachable only by pointing at it.
+
+**31. Export what I have made to a folder I choose** — standalone.
+Surfaces: the editor (the export panel); slides and the online article, as
+the folders it writes; publish (the dry run's staged folder, opened for
+inspection).
+Overlaps: intent 7, which owns publishing and the dry run's staging — the
+boundary is that 7 owns what a publish builds, stages, and pushes, and 31
+owns only the row that names the dry run, states what it writes, and opens
+the staged folder; intents 5 and 6, which own what the deck contains — 31
+owns only that the deck they define is written into a chosen folder with
+its engine and assets beside it; intents 9 and 10, which own the article
+page 31 writes out; intent 17, which owns the single HTML file — 31 lists
+it as not yet available with its phase and writes no such file; intent 21,
+which owns the PDF the pipeline renders and the app never does, listed the
+same way; and intent 2, which owns the binding table and the contract every
+overlay obeys — 31 adds one row to that table and inherits the contract.
+Plumbing excluded: the version builder every export shares, the native
+folder dialog and reveal-in-Finder, and the vendored deck engine.
+Order: phase 1, after 5, 6 and 7, which give it something to write. Amended
+into the map after the maintainer used the app and found no way to write
+the deck or the article to disk, or to see what a publish would push.
 
 ### Bundle: The deck (phase 1)
 

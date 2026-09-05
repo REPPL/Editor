@@ -138,9 +138,6 @@ Not built, and not to be designed around:
 - **Author themes.** One built-in article style and one deck theme. The
   reader's light, dark, and sepia are three palettes of that one style,
   not themes an author chooses.
-- **A local export of the renderings as files.** The single HTML file is
-  the local artefact; there is no folder of article and deck files to
-  serve.
 - **Hosting or transcoding video.** Video is linked; the site carries only
   what publish uploads.
 - **Assets reachable from anywhere for editing away from the computer.**
