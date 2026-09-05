@@ -11,32 +11,15 @@ public on GitHub under the maintainer's account and licensed MIT.
 
 ## Current phase
 
-Phase 0. The design record is complete and current: the seven-chapter
-brief and its glossary under `../development/brief/`, five ADRs under
-`../development/decisions/adrs/`, twenty-nine intents across
-`../development/intents/planned/` and `drafts/`, and ten disciplines every
-spec inherits. Read `../development/brief/README.md` first; it says which
-chapter answers what.
-
-The buildable skeleton is in place: a Tauri 2 shell under `src-tauri/`, a
-TypeScript frontend at the root with CodeMirror and its Emacs keymap, a
-Vitest harness, and the spike's findings in `docs/`. The commands that
-build, test, and lint it are in `AGENTS.md` and are the ones that were
-run.
-
-The story is: create on the desktop app; edit text anywhere in a single
-self-contained HTML file that imports and exports Markdown; publish with
-one action that builds, commits under the document's stable id, pushes to
-the production repository, and lets Cloudflare Pages deploy a presenter
-page plus every document. One book-shaped source — Parts, Chapters,
-Sections, Sub-sections, Sub-sub-sections — renders three ways: a
-Tufte-style article, a journal PDF through Typst in the pipeline, and web
-slides, all sharing footnotes and a bibliography file, all legible at 390,
-820, and 1280 CSS pixels. Editing uses full Emacs key bindings. The locked
-decisions are in `../development/brief/02-constraints.md`, which wins over
-any other chapter. The next substantive work is phase 1: the folder and
-the sidebar, the editing surface against its binding table, the copied
-asset drop, the deck, and the first unlisted publish.
+Phase one, the deck, has shipped: eight intents under
+`../development/intents/shipped/`, each with its closed spec and an
+ingested fidelity audit; release 0.1.0 is cut in `CHANGELOG.md` and tagged
+locally. The app builds as a release bundle. What phase one has not had is a
+human at the keyboard: the manual acceptance rows under
+`../.work.local/logs/acceptance/` are all unticked, and every audit records
+the three-width legibility criteria as inconclusive for that reason. Phase
+two, the article, is next (intents 9 to 12 in
+`../development/brief/07-intent-map.md`).
 
 ## Sharp edges
 
