@@ -210,3 +210,8 @@ _Empty. Populated by intent-auditor when intent moves to shipped/._
 ## Grounds
 
 - pursued: one window-switching vocabulary shared by the editor, the sidebar, and every panel keeps the hands on the keyboard; wrong if the tree needs gestures a chord cannot express
+
+## Maintainer note, 2026-09-05
+
+- The chord for the other window is `C-x C-o` as well as `C-x o`; both
+  cycle focus.
