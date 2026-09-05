@@ -1,8 +1,8 @@
 ---
 id: itd-2609051921482691
 slug: alice-cannot-move-between-the-editing-surface-and-the-sideba
-spec_id: null
-kind: null
+spec_id: spc-2609051925374395
+kind: standalone
 suggested_kind: null
 reclassification_history: []
 builds_on: []
@@ -110,18 +110,18 @@ combination becomes its precondition.
 
 ## Scope Conditions
 
-- Platform: the desktop app — the Tauri 2 shell with the system web view —
+- Platform: the desktop app — the Tauri 2 shell with the system web view — <!-- cond: cond-2609051925377283 -->
   on macOS, which is where the shell can claim key combinations back from
   the platform. The tablet path, where there is no shell to claim
   anything, is out.
-- Population: Alice, the maintainer, editing a document she has open.
+- Population: Alice, the maintainer, editing a document she has open. <!-- cond: cond-2609051925378745 -->
   Nothing here is seen by a reader of a published rendering.
-- Assumption: the binding table exists and the spike has settled what
+- Assumption: the binding table exists and the spike has settled what <!-- cond: cond-2609051925379060 -->
   "full Emacs bindings" means, since every chord here is a row in that
   table rather than a chord of its own invention.
-- Widths: the flow holds at 1280, 820 and 390 CSS pixels, with the sidebar
+- Widths: the flow holds at 1280, 820 and 390 CSS pixels, with the sidebar <!-- cond: cond-2609051925372330 -->
   as a column at the widest and as a drawer at the narrower two.
-- Boundary with intent 1, *Open a folder and see the book*
+- Boundary with intent 1, *Open a folder and see the book* <!-- cond: cond-2609051925372563 -->
   (`itd-2609051335399446`): 1 owns the sidebar itself — the tree drawn
   from the file system, its Parts, Chapters and heading levels, its
   badges, and what opens when a node is clicked. This intent adds no node,
@@ -129,19 +129,19 @@ combination becomes its precondition.
   keyboard, moving in it, and getting back. Where a click and Return must
   agree — a heading node opening its chapter scrolled to that heading —
   the behaviour is 1's and this intent inherits it.
-- Boundary with intent 2, *Edit with the Emacs bindings I already know*
+- Boundary with intent 2, *Edit with the Emacs bindings I already know* <!-- cond: cond-2609051925374969 -->
   (`itd-2609051335406422`): 2 owns the binding table's shape, the keys
   panel, the tooltips, the prefix-key state and the one-cancel-chord
   contract. This intent owns no part of that machinery; it registers rows
   in the table 2 defines and reuses 2's cancel contract for `C-g`. The
   chords the *text* answers are 2's; the chords the sidebar and the panels
   answer are this intent's.
-- Boundary with intent 26, *Move through the article by keyboard*
+- Boundary with intent 26, *Move through the article by keyboard* <!-- cond: cond-2609051925377047 -->
   (`itd-2609051402083398`): 26 owns keyboard movement inside a reading
   view — the published article and what it shares with the editor's
   vocabulary. This intent stops at the app's own chrome and never reaches
   a rendering.
-- Boundary with intent 3, *Insert a construct I cannot remember*: 3 owns
+- Boundary with intent 3, *Insert a construct I cannot remember*: 3 owns <!-- cond: cond-2609051925377969 -->
   the palette's entries and what each one inserts at the cursor. This
   intent owns only that the palette is one of the panes `C-x o` reaches
   and leaves, in the same order as any other panel.
@@ -206,3 +206,7 @@ is where it would sit.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: one window-switching vocabulary shared by the editor, the sidebar, and every panel keeps the hands on the keyboard; wrong if the tree needs gestures a chord cannot express
