@@ -58,10 +58,17 @@ export const DECK_ENGINE_FILES: readonly string[] = [
  * slide reflows to the reader's width instead of being scaled to fit. Keyboard,
  * touch and the on-screen controls are all on, because the criterion is that
  * none of the three is offered without working.
+ *
+ * `controlsBackArrows` is `visible` rather than the engine's own `faded`: the
+ * faded back arrow is drawn at three-tenths opacity even when there is a slide
+ * to go back to, which is indistinguishable from the disabled one and reads as
+ * a control that has stopped working. A control must say where the deck can
+ * go, so the back arrow is dim when it is disabled and plain when it is not.
  */
 export const DECK_CONFIG = {
   disableLayout: true,
   controls: true,
+  controlsBackArrows: "visible",
   controlsTutorial: false,
   progress: true,
   touch: true,

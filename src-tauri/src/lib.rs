@@ -294,7 +294,8 @@ pub fn run() {
             publish::read_publish_log,
             publish::open_published_link,
             devharness::dev_harness,
-            devharness::dev_log_key
+            devharness::dev_log_key,
+            present::present_log
         ])
         .setup(|app| {
             // A release build fails as readily as a debug one, and a failure

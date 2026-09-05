@@ -13,6 +13,7 @@
 var CONFIG = {
   "disableLayout": true,
   "controls": true,
+  "controlsBackArrows": "visible",
   "controlsTutorial": false,
   "progress": true,
   "touch": true,

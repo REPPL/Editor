@@ -22,18 +22,30 @@
  * the work lived.
  */
 
+import { invoke } from "@tauri-apps/api/core";
+
 import { dataResolver, referencesOf, type Resolver } from "./core/assets";
 import { buildDeck } from "./core/deck";
 import { parseChapter } from "./core/parse";
 import { DECK_CONFIG, renderSlides } from "./core/render/slides";
 import { inShell, pendingDeck, readAsset, type DeckSource } from "./doctree";
 
-/** The shape reveal.js exposes on the global, which is how it is vendored. */
+/**
+ * The shape reveal.js exposes on the global, which is how it is vendored.
+ *
+ * Everything but `initialize` is optional because it genuinely is: the
+ * vendored build hands out a stub carrying `initialize`, `on` and little else,
+ * and only copies the running deck's own methods — `sync`, `slide`,
+ * `getIndices` — onto the global when `initialize` is called. Declaring them
+ * as always present is how a call reached one of them before it existed.
+ */
 interface RevealEngine {
   initialize(config: Record<string, unknown>): Promise<void> | void;
-  sync(): void;
-  slide(horizontal: number, vertical?: number): void;
+  sync?(): void;
+  slide?(horizontal: number, vertical?: number): void;
   on?(type: string, listener: () => void): void;
+  getIndices?(): { h?: number; v?: number };
+  isReady?(): boolean;
 }
 
 /** The engine, once the vendored script has run. Absent in a test. */
@@ -62,6 +74,149 @@ export function notesOf(slide: Element | null): string {
 /** The headline one slide carries, for the speaker's "next" line. */
 export function headlineOf(slide: Element | null): string {
   return slide?.querySelector(".headline")?.textContent?.trim() ?? "";
+}
+
+/**
+ * What one box looks like to the layout engine, as the log records it.
+ *
+ * A slide that is not shown and a slide that is shown but has no height look
+ * the same from the outside, and the difference is the whole of the bug this
+ * shape was written for, so both the `display` and the measured height are
+ * here.
+ */
+export interface BoxReport {
+  /** Whether the element was on the page at all. */
+  readonly found: boolean;
+  readonly classes: string;
+  readonly display: string;
+  readonly position: string;
+  readonly width: number;
+  readonly height: number;
+  readonly fontSize: string;
+}
+
+/** One reading of the present window's state, one JSON object per line. */
+export interface DeckObservation {
+  readonly at: number;
+  /** What had just happened: `mount`, `ready`, `slidechanged`, `resize`. */
+  readonly phase: string;
+  /** Slides in the deck, stacks excluded. */
+  readonly slides: number;
+  /** Top-level `<section>`s, which is what reveal.js counts along. */
+  readonly columns: number;
+  /** Where reveal.js says it is, or `null` before it has run. */
+  readonly indexh: number | null;
+  readonly indexv: number | null;
+  /** Whether the engine's own methods exist yet. */
+  readonly engine: string;
+  /** The position of the slide carrying `present`, or −1 when none does. */
+  readonly presentAt: number;
+  readonly viewportWidth: number;
+  readonly viewportHeight: number;
+  readonly bodyFontSize: string;
+  /** The size the deck's own type scale resolves to at this viewport. */
+  readonly headlineFontSize: string;
+  readonly reveal: BoxReport;
+  readonly slidesBox: BoxReport;
+  /** The first three top-level sections, in order. */
+  readonly sections: readonly BoxReport[];
+  /** Each control the engine drew, and whether it is disabled. */
+  readonly controls: Readonly<Record<string, boolean>>;
+}
+
+/** How one box measures, or a plain "not there" when it is absent. */
+function boxReport(element: Element | null): BoxReport {
+  if (element === null) {
+    return {
+      found: false,
+      classes: "",
+      display: "",
+      position: "",
+      width: 0,
+      height: 0,
+      fontSize: "",
+    };
+  }
+  const style = getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  return {
+    found: true,
+    classes: element.className,
+    display: style.display,
+    position: style.position,
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    fontSize: style.fontSize,
+  };
+}
+
+/**
+ * Read the present window's state, without changing any of it.
+ *
+ * Pure in the sense that matters: it asks the page questions and answers them.
+ * The same function serves the log a scripted run reads back and the jsdom
+ * test that holds the shape of that log to what the bug needed to see.
+ */
+export function observeDeck(root: ParentNode, phase: string): DeckObservation {
+  const reveal = engine();
+  const indices = reveal?.getIndices?.() ?? null;
+  const columns = [...root.querySelectorAll(".reveal .slides > section")];
+  const slides = slideElements(root);
+  const controls: Record<string, boolean> = {};
+  for (const button of root.querySelectorAll(".reveal .controls button")) {
+    const name = [...button.classList].find((one) => one.startsWith("navigate-")) ?? "?";
+    controls[name] = (button as HTMLButtonElement).disabled;
+  }
+  const headline = root.querySelector(".reveal .slides section.present .headline");
+  return {
+    at: Date.now(),
+    phase,
+    slides: slides.length,
+    columns: columns.length,
+    indexh: indices?.h ?? null,
+    indexv: indices?.v ?? null,
+    engine:
+      reveal === null
+        ? "absent"
+        : [
+            "initialize",
+            typeof reveal.sync === "function" ? "sync" : "",
+            typeof reveal.slide === "function" ? "slide" : "",
+            reveal.isReady?.() === true ? "ready" : "",
+          ]
+            .filter((one) => one !== "")
+            .join("+"),
+    presentAt: slides.findIndex((slide) => slide.classList.contains("present")),
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    bodyFontSize: getComputedStyle(document.body).fontSize,
+    headlineFontSize:
+      headline === null ? "" : getComputedStyle(headline).fontSize,
+    reveal: boxReport(root.querySelector(".reveal")),
+    slidesBox: boxReport(root.querySelector(".reveal .slides")),
+    sections: columns.slice(0, 3).map((section) => boxReport(section)),
+    controls,
+  };
+}
+
+/**
+ * Append one observation to the run's log, when a run asked for one.
+ *
+ * `EDITOR_PRESENT_LOG` names the file, the shell resolves it and refuses
+ * anything outside its own scratch directories, and with the variable unset
+ * the command writes nothing and answers `false`. Nothing here is on the path
+ * of an ordinary launch.
+ */
+export async function logObservation(observation: DeckObservation): Promise<boolean> {
+  if (!inShell()) return false;
+  try {
+    return await invoke<boolean>("present_log", {
+      line: JSON.stringify(observation),
+    });
+  } catch (error) {
+    console.warn(`present log: ${String(error)}`);
+    return false;
+  }
 }
 
 /** The speaker's notes, in a split view beside the deck. */
@@ -164,20 +319,66 @@ export async function readAssets(
   return found;
 }
 
-/** Put a deck on the page and set the engine going, or resync a running one. */
+/**
+ * The first slide of a deck, which is the one a deck opens on.
+ *
+ * A column of several slides is a `<section>` holding them, so the slide is
+ * the innermost one; the column itself is not a slide and carries no face.
+ */
+export function firstSlide(slides: Element): Element[] {
+  const found: Element[] = [];
+  let section = slides.querySelector(":scope > section");
+  while (section !== null) {
+    found.push(section);
+    section = section.querySelector(":scope > section");
+  }
+  return found;
+}
+
+/**
+ * Tell a running engine which deck it has, and put it on the first slide.
+ *
+ * reveal.js reads the sections once, at the moment it starts, and keeps its
+ * own index of where it is. A fragment that lands after that leaves it holding
+ * an index of nothing: no section is marked `present`, so this stylesheet
+ * shows none of them, and the controls stay disabled because the engine
+ * believes there is nowhere to go. `sync()` makes it read the deck again and
+ * `slide(0, 0)` gives it somewhere to be — after which the first slide is up
+ * and the controls say what the deck can do.
+ */
+function settle(): void {
+  const reveal = engine();
+  reveal?.sync?.();
+  reveal?.slide?.(0, 0);
+}
+
+/**
+ * Put a deck on the page and set the engine going, or resync a running one.
+ *
+ * The engine is settled after the fragment lands in both directions: on the
+ * first deck once `initialize` has resolved — it resolves on the engine's own
+ * `ready`, which is the first moment `sync` and `slide` exist to be called —
+ * and on every deck after that as soon as the markup is in. Whichever order
+ * the two arrive in, the window ends up showing slide one.
+ */
 export function mountDeck(root: ParentNode, fragment: string, started: boolean): boolean {
   const slides = root.querySelector(".reveal .slides");
   if (slides === null) return started;
   slides.innerHTML = fragment;
+  // A deck opens on its first slide, and says so in the markup rather than
+  // waiting to be told. The engine sets the same class a moment later; until
+  // it does, this is the difference between a deck and a blank window.
+  for (const section of firstSlide(slides)) section.classList.add("present");
   const reveal = engine();
   if (reveal === null) return started;
   if (started) {
     // A second Present replaces the deck in the window that is already open.
-    reveal.sync();
-    reveal.slide(0, 0);
+    settle();
     return true;
   }
-  void reveal.initialize({ ...DECK_CONFIG });
+  Promise.resolve(reveal.initialize({ ...DECK_CONFIG })).then(settle, (error: unknown) => {
+    console.warn(`the deck engine: ${String(error)}`);
+  });
   return true;
 }
 
@@ -230,11 +431,21 @@ async function start(): Promise<void> {
     notes.draw(document);
   });
 
+  // Off unless the run named a file; see `present_log` in `present.rs` for
+  // what it accepts and where it refuses to write.
+  const record = (phase: string): void => {
+    void logObservation(observeDeck(document, phase));
+  };
+  window.addEventListener("resize", () => {
+    record("resize");
+  });
+
   const reveal = engine();
   if (reveal?.on) {
     for (const type of ["ready", "slidechanged"]) {
       reveal.on(type, () => {
         notes.draw(document);
+        record(type);
       });
     }
   }
@@ -246,6 +457,7 @@ async function start(): Promise<void> {
     } catch (error) {
       reportEmpty(String(error));
     }
+    record("mount");
   };
   const { listen } = await import("@tauri-apps/api/event");
   await listen("present://deck", () => {

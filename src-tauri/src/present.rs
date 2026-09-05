@@ -12,7 +12,10 @@
 //! extensions this phase carries, and refused above the copied-asset
 //! threshold `document.yaml` declares. What comes back is bytes, not a path.
 
+use std::env;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -323,6 +326,116 @@ pub async fn read_asset(
     .map_err(|error| format!("cannot read the image: {error}"))?
 }
 
+/// The variable naming the file the present window's state log is appended to.
+///
+/// Unset on every ordinary launch, and the present window writes nothing at
+/// all when it is unset. It exists because the two things that went wrong in
+/// the present window — a deck that showed no slide, and type that stopped
+/// growing with the window — are both facts about computed layout in a real
+/// WebView, and neither a jsdom test nor a person at the keyboard can report
+/// them exactly. A script that presses real keys can read this file back.
+pub const PRESENT_LOG_VAR: &str = "EDITOR_PRESENT_LOG";
+
+/// The longest line the present log accepts.
+///
+/// One observation is a short object. A cap keeps a runaway page from filling
+/// the disk one call at a time.
+const MAX_LOG_LINE: usize = 8192;
+
+/// The directories a present-log path may sit in.
+///
+/// The same two the key log allows: places the operating system already treats
+/// as scratch space, holding nothing the author would miss. The web view is a
+/// trust boundary, so the page never names the file — the path comes from the
+/// environment the process was started with and is measured against these.
+fn allowed_roots<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<PathBuf> {
+    use tauri::Manager;
+    let mut roots = vec![env::temp_dir()];
+    if let Ok(cache) = app.path().app_cache_dir() {
+        // The cache directory need not exist yet on a first run.
+        let _ = fs::create_dir_all(&cache);
+        roots.push(cache);
+    }
+    roots
+        .iter()
+        .filter_map(|root| root.canonicalize().ok())
+        .collect()
+}
+
+/// Resolve a present-log path, or say why it is refused.
+///
+/// The parent directory is canonicalised — so a path threaded through `..` or
+/// a symlink is measured where it actually lands — and the file name is joined
+/// back on, because the file itself need not exist yet.
+fn confine_log_path(raw: &Path, roots: &[PathBuf]) -> Result<PathBuf, String> {
+    let name = raw
+        .file_name()
+        .ok_or_else(|| format!("{PRESENT_LOG_VAR} must name a file"))?;
+    let parent = match raw.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+        _ => env::current_dir().map_err(|error| format!("{PRESENT_LOG_VAR}: {error}"))?,
+    };
+    let parent = parent.canonicalize().map_err(|error| {
+        format!(
+            "{PRESENT_LOG_VAR}: {} is unreadable: {error}",
+            parent.display()
+        )
+    })?;
+    if !roots.iter().any(|root| parent.starts_with(root)) {
+        return Err(format!(
+            "{PRESENT_LOG_VAR} must sit in the cache or temporary directory, not {}",
+            parent.display()
+        ));
+    }
+    Ok(parent.join(name))
+}
+
+/// The file the present window's observations go to, if the run asked for one.
+///
+/// Read from the environment the process was started with, never from the web
+/// view, and refused unless it lands in one of [`allowed_roots`].
+pub fn present_log_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<PathBuf> {
+    let raw = env::var_os(PRESENT_LOG_VAR)?;
+    match confine_log_path(Path::new(&raw), &allowed_roots(app)) {
+        Ok(resolved) => Some(resolved),
+        Err(error) => {
+            log::warn!("{error}");
+            None
+        }
+    }
+}
+
+/// Append one observation to the present log, if the run asked for one.
+///
+/// Answers whether anything was written, so the page can stop asking. A line
+/// with a break in it would read back as two observations, so it is refused
+/// rather than escaped: the caller writes one JSON object per call.
+#[tauri::command]
+pub fn present_log<R: tauri::Runtime>(
+    line: String,
+    app: tauri::AppHandle<R>,
+) -> Result<bool, String> {
+    let Some(path) = present_log_path(&app) else {
+        return Ok(false);
+    };
+    if line.len() > MAX_LOG_LINE {
+        return Err(format!(
+            "a present-log line may be at most {MAX_LOG_LINE} bytes"
+        ));
+    }
+    if line.contains(['\n', '\r']) {
+        return Err("a present-log line may not contain a line break".to_string());
+    }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|error| format!("cannot open the present log: {error}"))?;
+    writeln!(file, "{line}")
+        .map_err(|error| format!("cannot write the present log: {error}"))
+        .map(|()| true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,6 +684,54 @@ mod tests {
         .expect_err("refused");
         assert!(message.contains("outside the open document"), "{message}");
         assert!(pending.get().is_err(), "nothing was held");
+    }
+
+    /// A directory inside the temporary directory, named for one test.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = env::temp_dir().join(format!("editor-present-log-{name}"));
+        fs::create_dir_all(&dir).expect("cannot make the scratch directory");
+        dir
+    }
+
+    fn log_roots() -> Vec<PathBuf> {
+        vec![env::temp_dir()
+            .canonicalize()
+            .expect("the temporary directory is unreadable")]
+    }
+
+    #[test]
+    fn takes_a_present_log_inside_the_temporary_directory() {
+        let dir = scratch("inside");
+        let wanted = dir.join("present.jsonl");
+        let resolved = confine_log_path(&wanted, &log_roots()).expect("should be allowed");
+        assert_eq!(resolved.file_name(), wanted.file_name());
+        assert!(
+            resolved.starts_with(env::temp_dir().canonicalize().expect("temp")),
+            "{}",
+            resolved.display()
+        );
+    }
+
+    #[test]
+    fn refuses_a_present_log_outside_the_allowed_roots() {
+        let message = confine_log_path(Path::new("/etc/hosts"), &log_roots())
+            .expect_err("outside the scratch directories");
+        assert!(
+            message.contains("cache or temporary directory"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn refuses_a_present_log_that_climbs_out_through_a_parent() {
+        let dir = scratch("climb");
+        let climb = dir.join("../".repeat(10) + "etc/hosts");
+        let message =
+            confine_log_path(&climb, &log_roots()).expect_err("outside the scratch directories");
+        assert!(
+            message.contains("cache or temporary directory"),
+            "{message}"
+        );
     }
 
     #[test]

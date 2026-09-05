@@ -13,13 +13,31 @@
  */
 
 .reveal {
-  position: static;
+  /*
+   * Positioned, so that the engine's own on-screen controls and its progress
+   * bar sit over the deck rather than over the window. With the speaker's
+   * notes open the deck is a column of the window, and a control placed
+   * against the viewport would land on the notes instead.
+   */
+  position: relative;
   width: 100%;
   height: auto;
   overflow: visible;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  /* The reader's own base size, never a scaled one. */
-  font-size: clamp(1rem, 0.7rem + 1.4vw, 1.9rem);
+  /*
+   * The deck's type scale: one length, in the window's own units, that every
+   * other size on a slide is a multiple of.
+   *
+   * The engine runs with `disableLayout: true` and so scales nothing, which
+   * means this is the only thing that answers "make the window bigger". Both
+   * axes are in it, because a window can be made taller as well as wider and
+   * a projector is a different shape from a laptop; the floor keeps a 390 px
+   * phone readable and the ceiling is far enough away that no window anyone
+   * presents from ever reaches it. There is no fixed canvas anywhere: a slide
+   * reflows at the size it is given rather than being scaled to fit one.
+   */
+  --deck-type: clamp(1.05rem, 0.3rem + 1.5vw + 0.7vh, 5rem);
+  font-size: var(--deck-type);
   line-height: 1.45;
   color: #1a1a1a;
   background: #fdfdfc;
@@ -73,16 +91,21 @@
   display: none;
 }
 
+/*
+ * Every headline is a multiple of the deck's type scale, never a scale of its
+ * own: one `clamp` grows and the whole slide grows with it, in proportion, at
+ * every window size.
+ */
 .reveal .headline {
   margin: 0 0 0.4em;
-  font-size: clamp(1.5rem, 1rem + 3.4vw, 3.2rem);
+  font-size: 1.9em;
   line-height: 1.15;
   font-weight: 600;
   text-wrap: balance;
 }
 
 .reveal .slide-subsection .headline {
-  font-size: clamp(1.3rem, 0.9rem + 2.6vw, 2.5rem);
+  font-size: 1.5em;
 }
 
 .reveal .slide-divider {
@@ -92,7 +115,7 @@
 
 .reveal .slide-divider .headline {
   margin: 0;
-  font-size: clamp(1.8rem, 1.1rem + 4.2vw, 4rem);
+  font-size: 2.4em;
 }
 
 .reveal .face > * {

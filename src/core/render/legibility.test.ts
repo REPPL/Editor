@@ -56,6 +56,50 @@ function declarations(property: string): string[] {
   return found;
 }
 
+/**
+ * The deck's type scale, evaluated at one window size.
+ *
+ * jsdom does not evaluate `clamp()`, so the rule is read out of the stylesheet
+ * and worked out here instead. That is enough to answer the one question the
+ * maintainer asked — does a bigger window mean bigger type — without a layout
+ * engine, and it fails the day the rule stops depending on the window.
+ */
+function typeScaleAt(width: number, height: number, root = 16): number {
+  const rule = declarations("--deck-type")[0] ?? "";
+  const clamp = /^clamp\((.+),(.+),(.+)\)$/.exec(rule.trim());
+  if (clamp === null) throw new Error(`--deck-type is not a clamp: ${rule}`);
+  const term = (expression: string): number => {
+    let total = 0;
+    for (const part of expression.split("+")) {
+      const found = /^\s*(-?[\d.]+)(rem|vw|vh|vmin|vmax|px)\s*$/.exec(part);
+      if (found === null) throw new Error(`unreadable length: ${part}`);
+      const value = Number(found[1]);
+      switch (found[2]) {
+        case "rem":
+          total += value * root;
+          break;
+        case "vw":
+          total += (value * width) / 100;
+          break;
+        case "vh":
+          total += (value * height) / 100;
+          break;
+        case "vmin":
+          total += (value * Math.min(width, height)) / 100;
+          break;
+        case "vmax":
+          total += (value * Math.max(width, height)) / 100;
+          break;
+        default:
+          total += value;
+      }
+    }
+    return total;
+  };
+  const [, low = "", middle = "", high = ""] = clamp;
+  return Math.min(Math.max(term(middle), term(low)), term(high));
+}
+
 describe("the deck at 390 CSS px", () => {
   beforeEach(() => {
     mount();
@@ -63,9 +107,10 @@ describe("the deck at 390 CSS px", () => {
 
   it("leaves the body font unscaled", () => {
     // Nothing in the deck touches the page's own base size, so the reader's
-    // 16px stays 16px; the slide's own size is a clamp whose floor is 1rem.
+    // 16px stays 16px; the slide's own size is the deck's type scale, whose
+    // floor is a little over 1rem.
     expect(window.getComputedStyle(document.body).fontSize).toBe("16px");
-    expect(declarations("font-size")).toContain("clamp(1rem, 0.7rem + 1.4vw, 1.9rem)");
+    expect(declarations("font-size")).toContain("var(--deck-type)");
     for (const size of declarations("font-size")) {
       expect(size, "no font size is a fixed pixel value").not.toMatch(/\d(px|pt)\b/);
     }
@@ -116,11 +161,88 @@ describe("the deck at 390 CSS px", () => {
     }
   });
 
+  it("keeps the deck's own scale off the floor at phone width", () => {
+    // The floor is the smallest the deck ever gets, and it is a little above
+    // the reader's own 16px rather than below it.
+    expect(typeScaleAt(PHONE, 844)).toBeGreaterThanOrEqual(16);
+  });
+
   it("reports no horizontal overflow, as far as jsdom can tell", () => {
     // Both numbers are zero in jsdom, which lays nothing out. The assertion is
     // kept so the shape of the check is written down where the manual one is
     // referenced, and so it starts failing the day a real layout arrives.
     const scrolling = document.scrollingElement ?? document.documentElement;
     expect(scrolling.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  });
+});
+
+/**
+ * A bigger window means bigger type.
+ *
+ * The engine runs with `disableLayout: true` and scales nothing, so the deck's
+ * own type scale is the only thing that answers a window being made larger.
+ * The maintainer's report was that it did not: the scale was capped in `rem`
+ * at about 1370 CSS px of width and read no height at all, so a deck enlarged
+ * on a large display or made taller stayed exactly the size it was. jsdom
+ * evaluates no `clamp()`, so the rule is read out of the stylesheet and worked
+ * out; that is enough to hold it to growing in both directions.
+ */
+describe("the deck's type scale", () => {
+  /** The window sizes the manual check uses, and a large display beyond them. */
+  const SIZES: readonly (readonly [number, number])[] = [
+    [PHONE, 844],
+    [820, 1180],
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+    [2560, 1440],
+  ];
+
+  it("grows with every step up in window size", () => {
+    const scales = SIZES.map(([width, height]) => typeScaleAt(width, height));
+    for (let index = 1; index < scales.length; index += 1) {
+      expect(
+        scales[index],
+        `${JSON.stringify(SIZES[index])} is no larger than ${JSON.stringify(
+          SIZES[index - 1],
+        )}`,
+      ).toBeGreaterThan(scales[index - 1] ?? 0);
+    }
+  });
+
+  it("is no smaller at the window Present opens than the rule it replaced", () => {
+    // `present_chapter` opens the present window at 1100 by 760, and the rule
+    // this replaced worked out to 26.6px there. The fix was that the old rule
+    // stopped growing past about 1370 CSS px and read no height at all — not
+    // that the deck was too small to begin with, so it does not start smaller.
+    expect(typeScaleAt(1100, 760)).toBeGreaterThanOrEqual(26);
+  });
+
+  it("grows when only the height grows, and when only the width does", () => {
+    // A window can be dragged taller as well as wider, and a projector is a
+    // different shape from a laptop, so the scale reads both axes.
+    expect(typeScaleAt(1280, 1024)).toBeGreaterThan(typeScaleAt(1280, 800));
+    expect(typeScaleAt(1600, 800)).toBeGreaterThan(typeScaleAt(1280, 800));
+  });
+
+  it("is nowhere near its ceiling at the largest window anyone presents from", () => {
+    // A ceiling that a real window reaches is the bug reported: past it, the
+    // deck stops answering. The 6K display is the far end of what a lectern
+    // machine drives.
+    expect(typeScaleAt(3008, 1692)).toBeGreaterThan(typeScaleAt(2560, 1440));
+  });
+
+  it("holds every other size on a slide to that one scale", () => {
+    // The headline and the divider are multiples of the deck's type, not
+    // scales of their own, so one rule grows and the whole slide grows with
+    // it. Nothing on a slide declares a viewport unit of its own.
+    expect(DECK_STYLESHEET).toMatch(/\.reveal \.headline \{[^}]*font-size: [\d.]+em/);
+    expect(DECK_STYLESHEET).toMatch(
+      /\.reveal \.slide-divider \.headline \{[^}]*font-size: [\d.]+em/,
+    );
+    const viewportSizes = declarations("font-size").filter((size) =>
+      /\d(vw|vh|vmin|vmax)\b/.test(size),
+    );
+    expect(viewportSizes, "only the deck's own scale reads the viewport").toEqual([]);
   });
 });
