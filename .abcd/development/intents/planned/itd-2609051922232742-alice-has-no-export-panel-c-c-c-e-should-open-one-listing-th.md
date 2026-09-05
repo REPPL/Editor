@@ -1,8 +1,8 @@
 ---
 id: itd-2609051922232742
 slug: alice-has-no-export-panel-c-c-c-e-should-open-one-listing-th
-spec_id: null
-kind: null
+spec_id: spc-2609051927564472
+kind: standalone
 suggested_kind: null
 reclassification_history: []
 builds_on: []
@@ -96,42 +96,42 @@ rather than a thing she discovers afterwards.
 
 ## Scope Conditions
 
-- Platform: the desktop app in its web view on macOS, with the shell's
+- Platform: the desktop app in its web view on macOS, with the shell's <!-- cond: cond-2609051927563540 -->
   native folder dialog and its reveal-in-Finder. There is no export panel
   in the single HTML file or on the presenter site.
-- Population: Alice, the author, at her own machine. Bob and Carol receive
+- Population: Alice, the author, at her own machine. Bob and Carol receive <!-- cond: cond-2609051927562061 -->
   a folder; neither has an export panel of their own.
-- Phase: this is phase 1, so an export carries copied assets only. A
+- Phase: this is phase 1, so an export carries copied assets only. A <!-- cond: cond-2609051927568274 -->
   referenced asset above the threshold is intent 15's
   (`itd-2609051402126424` sets the threshold and the roots; intent 15 owns
   what an export then links to), and this intent adds no behaviour of its
   own for one.
-- Boundary with intent 7 (`itd-2609051335468596`), publish: 7 owns
+- Boundary with intent 7 (`itd-2609051335468596`), publish: 7 owns <!-- cond: cond-2609051927560765 -->
   publishing, the stable id, the version hash, the flag, the push, and the
   dry run's staging — what is staged and where. This intent owns only the
   row that names the dry run in the panel, states what it writes, and
   opens the staged folder for Alice to look at.
-- Boundary with intents 5 and 6 (the deck bundle): 5 and 6 own what the
+- Boundary with intents 5 and 6 (the deck bundle): 5 and 6 own what the <!-- cond: cond-2609051927569197 -->
   deck contains — the default mapping and the constructs that shape it.
   This intent owns only that the deck those two define is written into a
   folder Alice chooses, with the engine and the assets beside it.
-- Boundary with the article bundle (intents 9 and 10, phase 2): those own
+- Boundary with the article bundle (intents 9 and 10, phase 2): those own <!-- cond: cond-2609051927560440 -->
   the page's layout, its margin notes, and its reader controls. This
   intent owns only that the built page and its assets are written into a
   folder; it adds nothing to what the page says.
-- Boundary with intent 17 (`itd-2609051335570842`), the single HTML file:
+- Boundary with intent 17 (`itd-2609051335570842`), the single HTML file: <!-- cond: cond-2609051927567253 -->
   17 owns the file, its embedding, and its offline behaviour. This intent
   owns only the row that lists it as not yet available and names the phase
   it arrives in.
-- Boundary with intent 21 (`itd-2609051336019782`), the journal PDF: 21
+- Boundary with intent 21 (`itd-2609051336019782`), the journal PDF: 21 <!-- cond: cond-2609051927561892 -->
   owns the printed artefact and the pipeline step that renders it, which
   never runs in the app. This intent owns only the row that lists it as
   not yet available and names its phase.
-- Boundary with intent 2 (the editing surface bundle): 2 owns the binding
+- Boundary with intent 2 (the editing surface bundle): 2 owns the binding <!-- cond: cond-2609051927562246 -->
   table and the contract every overlay obeys — that it takes the keyboard
   while open and that one cancel chord closes it. This intent contributes
   one entry to that table and obeys the contract; it does not restate it.
-- Assumption: the deck engine ships with the app, so an export copies it
+- Assumption: the deck engine ships with the app, so an export copies it <!-- cond: cond-2609051927563438 -->
   and needs no network to complete.
 
 ## Acceptance Criteria
@@ -188,3 +188,7 @@ rather than a thing she discovers afterwards.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: an export panel naming every destination before confirming keeps file writes explicit and gives the deck a way to disk; wrong if authors never open a folder export and the single file suffices
