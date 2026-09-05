@@ -267,6 +267,7 @@ pub fn run() {
         .manage(assets::DropQueue::default())
         .manage(watch::CurrentWatch::default())
         .manage(present::PendingDeck::default())
+        .manage(publish::PublishInProgress::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_folder,

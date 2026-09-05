@@ -22,6 +22,63 @@ export interface RenderContext {
   readonly rendering: "article" | "slides";
   /** The anchor a footnote reference points at, or null for no link. */
   readonly footnoteHref?: (label: string) => string | null;
+  /**
+   * What every id this rendering writes is prefixed with.
+   *
+   * An article is one page for a whole document, so two chapters' footnotes
+   * would otherwise write the same anchor twice.
+   */
+  readonly idPrefix?: string;
+  /**
+   * The variant being rendered; null or absent renders every variant.
+   *
+   * Blocks are filtered before they reach a renderer. Inline spans are not,
+   * because a span is inside a block that belongs to every variant — so the
+   * filter has to happen here, or a `.variant` span reaches a rendering it was
+   * marked out of.
+   */
+  readonly variant?: string | null;
+}
+
+/** Whether an inline node belongs to the variant being rendered. */
+export function inlineInVariant(node: Inline, variant: string | null | undefined): boolean {
+  if (variant === null || variant === undefined) return true;
+  const variants = node.variants ?? [];
+  return variants.length === 0 || variants.includes(variant);
+}
+
+/**
+ * The schemes a rendering will write into an `href`.
+ *
+ * A chapter is a file and a file can come from anywhere, so an address in one
+ * is the author's text rather than something to be trusted: `javascript:` and
+ * `data:` are addresses a published page must never hand a reader's browser.
+ * A reference with no scheme at all is relative, and relative is what a version
+ * folder is made of.
+ */
+const LINKABLE_SCHEMES = ["http", "https", "mailto"];
+
+/** Whether an address is one a rendering may link to. */
+export function isLinkable(url: string): boolean {
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url.trim());
+  return scheme === null || LINKABLE_SCHEMES.includes(scheme[1]?.toLowerCase() ?? "");
+}
+
+/**
+ * A declared width as a whole percentage the stylesheets carry a rule for.
+ *
+ * The site serves under `style-src 'self'`, which drops a `style` attribute on
+ * the floor, so a declared width reaches the page as a data attribute and the
+ * stylesheet holds the rule. The scale is fives, which is every width an author
+ * writes and a stylesheet that can be read in one screen.
+ */
+export function widthBucket(width: string | null | undefined): string | null {
+  if (width === null || width === undefined) return null;
+  const percent = /^(\d{1,3})\s*%$/.exec(width.trim());
+  if (percent === null) return null;
+  const value = Number(percent[1]);
+  if (value <= 0 || value > 100) return null;
+  return String(Math.min(100, Math.max(5, Math.round(value / 5) * 5)));
 }
 
 /** Escape text for a text node. */
@@ -71,10 +128,15 @@ function image(
       ["data-problem", resolution.problem],
     ])}>${escapeText(alt)}</span>`;
   }
+  // A width in pixels is an HTML width; a width in percent is not — the
+  // attribute takes no percentages — so it reaches the page as the data
+  // attribute the stylesheets carry a rule for.
+  const pixels = width !== null && /^\d+$/.test(width.trim()) ? width.trim() : null;
   return `<img${attributes([
     ["src", resolution.url],
     ["alt", alt],
-    ["width", width],
+    ["width", pixels],
+    ["data-width", widthBucket(width)],
   ])} />`;
 }
 
@@ -102,11 +164,15 @@ function inline(node: Inline, context: RenderContext): string {
       return `<strong>${children()}</strong>`;
     case "strike":
       return `<s>${children()}</s>`;
-    case "link":
+    case "link": {
+      const href = node.href ?? "";
+      // An address the rendering will not write stays as its text: the words
+      // the author wrote are on the page, and nothing is handed to a browser.
       return `<a${attributes([
-        ["href", node.href ?? ""],
+        ["href", isLinkable(href) ? href : null],
         ["title", node.title ?? null],
       ])}>${children()}</a>`;
+    }
     case "span":
       return `<span${attributes([["id", node.attributes.id]])}${classAttribute(
         node.attributes.classes,
@@ -125,7 +191,9 @@ function inline(node: Inline, context: RenderContext): string {
       const body =
         href === null
           ? marker
-          : `<a href="${escapeAttribute(href)}" id="fnref-${escapeAttribute(label)}">${marker}</a>`;
+          : `<a href="${escapeAttribute(href)}" id="${escapeAttribute(
+              context.idPrefix ?? "",
+            )}fnref-${escapeAttribute(label)}">${marker}</a>`;
       return `<sup class="footnote-reference">${body}</sup>`;
     }
     default:
@@ -138,14 +206,18 @@ export function renderInlines(
   nodes: readonly Inline[],
   context: RenderContext,
 ): string {
-  return nodes.map((node) => inline(node, context)).join("");
+  return nodes
+    .filter((node) => inlineInVariant(node, context.variant))
+    .map((node) => inline(node, context))
+    .join("");
 }
 
 /** Render one table cell. */
 function cell(item: TableCell, context: RenderContext): string {
   const tag = item.header ? "th" : "td";
-  const style = item.align === null ? null : `text-align: ${item.align}`;
-  return `<${tag}${attributes([["style", style]])}>${renderInlines(
+  // The alignment is a data attribute rather than a `style`: the site serves
+  // under `style-src 'self'`, which drops a style attribute unread.
+  return `<${tag}${attributes([["data-align", item.align]])}>${renderInlines(
     item.inlines,
     context,
   )}</${tag}>`;
@@ -277,8 +349,11 @@ export function renderVideo(block: Block, context: RenderContext): string {
     .map((source) => {
       const resolution = context.resolve(source.reference);
       const target = resolution.url ?? source.reference;
+      // A source that names a scheme this rendering will not write is listed
+      // as its own text: the author sees what they wrote, and no reader's
+      // browser is handed a `javascript:` or a `data:` address.
       return `<li${attributes([["data-role", source.role]])}><a${attributes([
-        ["href", target],
+        ["href", isLinkable(target) ? target : null],
       ])}>${escapeText(source.reference)}</a></li>`;
     })
     .join("");

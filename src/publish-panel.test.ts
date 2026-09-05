@@ -153,6 +153,78 @@ describe("what the panel says", () => {
   });
 });
 
+describe("what the panel refuses", () => {
+  it("fails the build step on a refusal and names every one, publishing nothing", async () => {
+    // A reference the build would not resolve is a picture missing from the
+    // published page. It stops the publish rather than going to the site as a
+    // gap nobody was told about.
+    const { panel, used } = panelWith({
+      build: vi.fn(() =>
+        Promise.resolve({
+          files: [],
+          copies: [],
+          refusals: [
+            {
+              chapter: "01-part/01-opening.md",
+              reference: "assets/missing.jpg",
+              reason: "the reference climbs above the document folder",
+            },
+            {
+              chapter: "01-part/02-method.md",
+              reference: "notes.txt",
+              reason: "a published version carries only the picture formats the app reads",
+            },
+          ],
+        }),
+      ),
+    });
+    await panel.open();
+    panel.element.querySelector<HTMLButtonElement>(".publish-run")?.click();
+    await vi.waitFor(() =>
+      expect(panel.element.querySelector('[data-step="build"]')).not.toBeNull(),
+    );
+    expect(
+      panel.element.querySelector('[data-step="build"]')?.getAttribute("data-state"),
+    ).toBe("failed");
+    const named = [...panel.element.querySelectorAll(".publish-refusal")].map(
+      (item) => item.getAttribute("data-reference"),
+    );
+    expect(named).toEqual(["assets/missing.jpg", "notes.txt"]);
+    expect(used.publish).not.toHaveBeenCalled();
+    expect(used.publishDryRun).not.toHaveBeenCalled();
+  });
+
+  it("says why it has nothing to publish rather than opening empty", async () => {
+    // `describe` reads the document: no folder open, an unreadable chapter or
+    // a buffer with unsaved edits all arrive here.
+    const { panel } = panelWith({
+      describe: vi.fn(() =>
+        Promise.reject(new Error("This chapter has unsaved edits. Save it with C-x C-s.")),
+      ),
+    });
+    await panel.open();
+    expect(panel.element.querySelector(".publish-failure")?.textContent).toContain(
+      "unsaved edits",
+    );
+    expect(panel.element.querySelector(".publish-run")).toBeNull();
+    expect(panel.element.querySelector(".publish-close")).not.toBeNull();
+  });
+
+  it("shows a build that throws as a refusal rather than losing it", async () => {
+    const { panel, used } = panelWith({
+      build: vi.fn(() => Promise.reject(new Error("01-part/02-method.md could not be read"))),
+    });
+    await panel.open();
+    panel.element.querySelector<HTMLButtonElement>(".publish-run")?.click();
+    await vi.waitFor(() =>
+      expect(panel.element.querySelector(".publish-step-failed")?.textContent).toContain(
+        "could not be read",
+      ),
+    );
+    expect(used.publish).not.toHaveBeenCalled();
+  });
+});
+
 describe("the links", () => {
   it("shows_the_stable_link_with_a_copy_action, the deck first", async () => {
     const { panel, used } = panelWith();

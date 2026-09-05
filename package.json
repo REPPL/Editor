@@ -11,8 +11,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . && tsc --noEmit && npm run lint:rust",
+    "lint": "eslint . && tsc --noEmit && npm run lint:docs && npm run lint:rust",
+    "lint:docs": "node tools/generate-canon-reference.mjs --check",
     "lint:rust": "cargo audit --file src-tauri/Cargo.lock",
+    "docs:canon": "node tools/generate-canon-reference.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

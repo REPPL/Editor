@@ -176,27 +176,97 @@
   margin-inline-end: 0.35em;
 }
 
+/*
+ * Columns, and the declared widths they take.
+ *
+ * Nothing rendered carries a `style` attribute: the site serves under
+ * `style-src 'self'`, which drops one unread, so a declared width reaches the
+ * page as `data-width` — a whole percentage on a scale of fives — and the rules
+ * live here. A column with no declared width takes an equal share of what is
+ * left, which is what `flex: 1 1 0` says.
+ */
 .reveal .columns {
-  display: grid;
-  grid-template-columns: var(--column-tracks, 1fr);
-  gap: clamp(0.8rem, 3vmin, 2.4rem);
+  --column-gap: clamp(0.8rem, 3vmin, 2.4rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--column-gap);
   align-items: start;
+}
+
+.reveal .column {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .reveal .column > :first-child {
   margin-block-start: 0;
 }
 
+.reveal .column[data-width="5"] { flex: 0 0 calc(5% - var(--column-gap)); }
+.reveal .column[data-width="10"] { flex: 0 0 calc(10% - var(--column-gap)); }
+.reveal .column[data-width="15"] { flex: 0 0 calc(15% - var(--column-gap)); }
+.reveal .column[data-width="20"] { flex: 0 0 calc(20% - var(--column-gap)); }
+.reveal .column[data-width="25"] { flex: 0 0 calc(25% - var(--column-gap)); }
+.reveal .column[data-width="30"] { flex: 0 0 calc(30% - var(--column-gap)); }
+.reveal .column[data-width="35"] { flex: 0 0 calc(35% - var(--column-gap)); }
+.reveal .column[data-width="40"] { flex: 0 0 calc(40% - var(--column-gap)); }
+.reveal .column[data-width="45"] { flex: 0 0 calc(45% - var(--column-gap)); }
+.reveal .column[data-width="50"] { flex: 0 0 calc(50% - var(--column-gap)); }
+.reveal .column[data-width="55"] { flex: 0 0 calc(55% - var(--column-gap)); }
+.reveal .column[data-width="60"] { flex: 0 0 calc(60% - var(--column-gap)); }
+.reveal .column[data-width="65"] { flex: 0 0 calc(65% - var(--column-gap)); }
+.reveal .column[data-width="70"] { flex: 0 0 calc(70% - var(--column-gap)); }
+.reveal .column[data-width="75"] { flex: 0 0 calc(75% - var(--column-gap)); }
+.reveal .column[data-width="80"] { flex: 0 0 calc(80% - var(--column-gap)); }
+.reveal .column[data-width="85"] { flex: 0 0 calc(85% - var(--column-gap)); }
+.reveal .column[data-width="90"] { flex: 0 0 calc(90% - var(--column-gap)); }
+.reveal .column[data-width="95"] { flex: 0 0 calc(95% - var(--column-gap)); }
+.reveal .column[data-width="100"] { flex: 0 0 100%; }
+
+/* A picture sized by the author, on the same scale and by the same rule. */
+.reveal img[data-width="5"] { width: 5%; height: auto; }
+.reveal img[data-width="10"] { width: 10%; height: auto; }
+.reveal img[data-width="15"] { width: 15%; height: auto; }
+.reveal img[data-width="20"] { width: 20%; height: auto; }
+.reveal img[data-width="25"] { width: 25%; height: auto; }
+.reveal img[data-width="30"] { width: 30%; height: auto; }
+.reveal img[data-width="35"] { width: 35%; height: auto; }
+.reveal img[data-width="40"] { width: 40%; height: auto; }
+.reveal img[data-width="45"] { width: 45%; height: auto; }
+.reveal img[data-width="50"] { width: 50%; height: auto; }
+.reveal img[data-width="55"] { width: 55%; height: auto; }
+.reveal img[data-width="60"] { width: 60%; height: auto; }
+.reveal img[data-width="65"] { width: 65%; height: auto; }
+.reveal img[data-width="70"] { width: 70%; height: auto; }
+.reveal img[data-width="75"] { width: 75%; height: auto; }
+.reveal img[data-width="80"] { width: 80%; height: auto; }
+.reveal img[data-width="85"] { width: 85%; height: auto; }
+.reveal img[data-width="90"] { width: 90%; height: auto; }
+.reveal img[data-width="95"] { width: 95%; height: auto; }
+.reveal img[data-width="100"] { width: 100%; height: auto; }
+
+/* A table cell aligned as the author's pipe table declared it. */
+.reveal th[data-align="left"],
+.reveal td[data-align="left"] { text-align: left; }
+.reveal th[data-align="center"],
+.reveal td[data-align="center"] { text-align: center; }
+.reveal th[data-align="right"],
+.reveal td[data-align="right"] { text-align: right; }
+
 /*
  * Below iPad width the columns stack in source order.
  *
- * The declared track sizes arrive as a custom property rather than as a
- * `grid-template-columns` on the element, so this rule replaces them without
- * an `!important` and the source order is what the reader gets.
+ * The declared shares are `flex` declarations rather than a `style` attribute,
+ * so laying the row out as a block replaces them without an `!important` and
+ * the source order is what the reader gets.
  */
 @media (max-width: 819px) {
   .reveal .columns {
-    grid-template-columns: 1fr;
+    display: block;
+  }
+
+  .reveal .column + .column {
+    margin-block-start: var(--column-gap);
   }
 }
 

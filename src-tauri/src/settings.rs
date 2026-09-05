@@ -182,17 +182,18 @@ pub fn check_argument(what: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Refuse a base URL that is not a plain `https://host` or `http://host`.
+/// Refuse a base URL that is not a plain `https://host`.
+///
+/// `https` and nothing else. The published link is unlisted, which is the whole
+/// of its protection: over `http` the address is on the wire in clear, and an
+/// unlisted link read off the wire is a link anybody holds.
 pub fn check_base_url(base_url: &str) -> Result<(), String> {
     if base_url.is_empty() {
         return Err("the site has no base URL".to_string());
     }
-    let rest = match base_url.strip_prefix("https://") {
-        Some(rest) => rest,
-        None => base_url
-            .strip_prefix("http://")
-            .ok_or_else(|| format!("the base URL is not http or https: {base_url}"))?,
-    };
+    let rest = base_url
+        .strip_prefix("https://")
+        .ok_or_else(|| format!("the base URL is not https: {base_url}"))?;
     if rest.is_empty() || rest.starts_with('/') {
         return Err(format!("the base URL names no host: {base_url}"));
     }
@@ -314,6 +315,10 @@ mod tests {
         assert!(check_base_url("file:///etc").is_err());
         assert!(check_base_url("example.invalid").is_err());
         assert!(check_base_url("https://").is_err());
+        // An unlisted link is protected by being unguessable, which `http`
+        // gives away on the wire.
+        let plain = check_base_url("http://example.invalid").expect_err("refused");
+        assert!(plain.contains("not https"), "{plain}");
         assert!(check_base_url("https://example.invalid").is_ok());
     }
 

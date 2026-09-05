@@ -117,6 +117,56 @@ pub struct DeployCheck {
     pub seen_at: Option<String>,
 }
 
+/// How long after a publish the link may be polled.
+///
+/// The panel watches for five minutes; this is the outer bound on the window in
+/// which the one outbound call in the crate can be made at all.
+pub const DEPLOY_WATCH_WINDOW: Duration = Duration::from_secs(10 * 60);
+
+/// The publish this session is waiting on, if any.
+///
+/// `check_deploy` is the only command that leaves the machine, and the promise
+/// is that it does so only during a publish Alice pressed. So the publish
+/// command opens this window on the hash it produced, and a poll for any other
+/// hash — or outside the window — is refused before a request is built.
+#[derive(Default)]
+pub struct PublishInProgress(std::sync::Mutex<Option<(String, std::time::Instant)>>);
+
+impl PublishInProgress {
+    /// Open the window on the version a publish just pushed.
+    pub fn started(&self, hash: &str) -> Result<(), String> {
+        let mut held = self.lock()?;
+        *held = Some((hash.to_string(), std::time::Instant::now()));
+        Ok(())
+    }
+
+    /// Whether a poll for this hash belongs to a publish that is still running.
+    pub fn watching(&self, hash: &str) -> Result<bool, String> {
+        let held = self.lock()?;
+        Ok(match held.as_ref() {
+            Some((watched, since)) => watched == hash && since.elapsed() < DEPLOY_WATCH_WINDOW,
+            None => false,
+        })
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn lock(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, Option<(String, std::time::Instant)>>, String> {
+        self.0
+            .lock()
+            .map_err(|_| "the publish state is unreadable".to_string())
+    }
+}
+
+/// Refuse a poll that no publish asked for.
+pub fn guard_deploy_check(watch: &PublishInProgress, expected_hash: &str) -> Result<(), String> {
+    if watch.watching(expected_hash)? {
+        return Ok(());
+    }
+    Err("no publish is waiting for this link".to_string())
+}
+
 /// The names one document publishes under.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identity {
@@ -300,17 +350,51 @@ fn write_identity_lines(
     }
 
     if let Some((variant, token)) = token {
-        let line = format!("  {variant}: {token}\n");
-        match block_end(&text, "variant_tokens:") {
-            Some(at) => text.insert_str(at, &line),
-            None => {
-                text.push_str("variant_tokens:\n");
-                text.push_str(&line);
+        // A flow mapping — `variant_tokens: {}`, or `{talk: aaa}` — is one
+        // line, so the entry goes inside its braces. Appending a block under it
+        // would leave the file with the key written twice, which is a document
+        // no YAML reader will take.
+        if let Some(at) = flow_insertion(&text, "variant_tokens:") {
+            let separator = if text[..at].trim_end().ends_with('{') {
+                ""
+            } else {
+                ", "
+            };
+            text.insert_str(at, &format!("{separator}{variant}: {token}"));
+        } else {
+            let line = format!("  {variant}: {token}\n");
+            match block_end(&text, "variant_tokens:") {
+                Some(at) => text.insert_str(at, &line),
+                None => {
+                    text.push_str("variant_tokens:\n");
+                    text.push_str(&line);
+                }
             }
         }
     }
 
     crate::document::write_chapter_text(path, &text)
+}
+
+/// The offset just inside a key's closing brace, where it carries a flow value.
+///
+/// `None` where the key is absent or its value is a block, which is what
+/// [`block_end`] then answers for.
+fn flow_insertion(text: &str, key: &str) -> Option<usize> {
+    let mut offset = 0usize;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim_end();
+        if let Some(value) = trimmed.strip_prefix(key) {
+            let value = value.trim();
+            if value.starts_with('{') && value.ends_with('}') {
+                let close = trimmed.rfind('}')?;
+                return Some(offset + close);
+            }
+            return None;
+        }
+        offset += line.len();
+    }
+    None
 }
 
 /// The byte offset just past a mapping block's last indented line.
@@ -500,19 +584,20 @@ pub fn run_publish(
         }
     }
 
-    // A republish of unchanged content has nothing to send: the site already
-    // serves this version, and the entry below records the publish anyway.
-    if !committed {
+    // What must be sent is not "did this publish commit" but "is anything on
+    // this branch not at the remote yet". A publish whose push failed left a
+    // commit behind; the retry writes nothing new, so it would commit nothing —
+    // and skipping the push there would record links the site never received.
+    let remote = &context.settings.publish.remote;
+    let branch = &context.settings.publish.branch;
+    let held = !committed && context.git.is_ahead(&repo, remote, branch)?;
+    if !committed && !held {
         outcome.steps.push(PublishStep::skipped(
             "push",
             "the site already serves this version",
         ));
     } else {
-        let pushed = context.git.push(
-            &repo,
-            &context.settings.publish.remote,
-            &context.settings.publish.branch,
-        )?;
+        let pushed = context.git.push(&repo, remote, branch)?;
         if !pushed.ok {
             // The commit stays: `git reset` could destroy work that is not
             // Editor's. The site still serves what it served before.
@@ -521,7 +606,11 @@ pub fn run_publish(
         outcome.pushed = true;
         outcome.steps.push(PublishStep::done(
             "push",
-            "pushed to the production repository",
+            if held {
+                "pushed the commit this machine was holding"
+            } else {
+                "pushed to the production repository"
+            },
         ));
     }
 
@@ -674,12 +763,19 @@ pub async fn publish(
     app: tauri::AppHandle,
     request: PublishRequest,
     root: tauri::State<'_, crate::DocumentRoot>,
+    watch: tauri::State<'_, PublishInProgress>,
 ) -> Result<PublishOutcome, String> {
     let document_root = root.get()?;
     let context = context_for(&app, document_root, false)?;
-    tauri::async_runtime::spawn_blocking(move || run_publish(&context, &request))
+    let outcome = tauri::async_runtime::spawn_blocking(move || run_publish(&context, &request))
         .await
-        .map_err(|error| format!("cannot publish: {error}"))?
+        .map_err(|error| format!("cannot publish: {error}"))??;
+    // The one outbound call in the crate is open only while this publish is
+    // waiting for its own version to appear at the link.
+    if outcome.pushed {
+        watch.started(&outcome.hash)?;
+    }
+    Ok(outcome)
 }
 
 /// Everything a publish does but the repository, git and the network.
@@ -703,7 +799,9 @@ pub async fn check_deploy(
     url: String,
     expected_hash: String,
     root: tauri::State<'_, crate::DocumentRoot>,
+    watch: tauri::State<'_, PublishInProgress>,
 ) -> Result<DeployCheck, String> {
+    guard_deploy_check(&watch, &expected_hash)?;
     let document_root = root.get()?;
     let (config, _cache) = app_dirs(&app)?;
     let settings = crate::settings::read_settings(&crate::settings::settings_path(&config))?;

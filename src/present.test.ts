@@ -75,6 +75,36 @@ describe("presenting a chapter", () => {
     expect(readFileSync(CHAPTER, "utf8")).toContain("## Denver, 1858");
   });
 
+  it("builds the variant a publish would build", () => {
+    // The shell hands the present window the document's default variant, so
+    // the deck at the lectern is the deck at the link — blocks and spans alike.
+    const source = [
+      "# One",
+      "",
+      "## Beginnings",
+      "",
+      '::: {.variant variant="full"}',
+      "Only in the paper.",
+      ":::",
+      "",
+      'A [talk aside]{.variant variant="talk"} and a [paper aside]{.variant variant="paper"}.',
+      "",
+    ].join("\n");
+
+    const talk = deckFragment(source, pathResolver(), "talk");
+    expect(talk).not.toContain("Only in the paper");
+    expect(talk).toContain("talk aside");
+    expect(talk).not.toContain("paper aside");
+
+    const full = deckFragment(source, pathResolver(), "full");
+    expect(full).toContain("Only in the paper");
+
+    // A document that declares no variant still presents everything.
+    const every = deckFragment(source, pathResolver());
+    expect(every).toContain("Only in the paper");
+    expect(every).toContain("paper aside");
+  });
+
   it("rebuilds the deck from the buffer on a second Present", () => {
     const first = deckFragment("# One\n\n## Beginnings\n\nA.\n", pathResolver());
     const second = deckFragment(

@@ -132,8 +132,12 @@ export function createNotesView(host: HTMLElement): NotesView {
  * between calls, so presenting the same chapter twice gives the same deck and
  * presenting new text gives the new talk.
  */
-export function deckFragment(text: string, resolve: Resolver): string {
-  return renderSlides(buildDeck(parseChapter(text)), resolve);
+export function deckFragment(
+  text: string,
+  resolve: Resolver,
+  variant: string | null = null,
+): string {
+  return renderSlides(buildDeck(parseChapter(text), { variant }), resolve, variant);
 }
 
 /**
@@ -181,7 +185,14 @@ export function mountDeck(root: ParentNode, fragment: string, started: boolean):
 export async function show(source: DeckSource, started: boolean): Promise<boolean> {
   const assets = await readAssets(source.text, source.chapterPath);
   document.title = source.chapterTitle;
-  return mountDeck(document, deckFragment(source.text, dataResolver(assets)), started);
+  // The document's default variant, which is the one a publish builds: the
+  // deck at the lectern is the deck at the link, blocks and all.
+  const variant = source.variant === "" ? null : source.variant;
+  return mountDeck(
+    document,
+    deckFragment(source.text, dataResolver(assets), variant),
+    started,
+  );
 }
 
 /** Say why there is nothing to show, on the page rather than in a console. */

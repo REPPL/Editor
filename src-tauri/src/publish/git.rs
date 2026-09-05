@@ -11,8 +11,15 @@
 //!
 //! Arguments pass as a vector and never as a shell string; `GIT_TERMINAL_PROMPT`
 //! and `GIT_OPTIONAL_LOCKS` are off, so a missing credential fails rather than
-//! prompting behind a window nobody can see; and a remote or branch beginning
+//! prompting behind a window nobody can see; `GIT_PROTOCOL_FROM_USER` is off,
+//! so a remote whose URL names `ext::` or another local transport is refused by
+//! git itself rather than running a command; and a remote or branch beginning
 //! with `-` is refused before it reaches the command line.
+//!
+//! The remote is a name the repository already declares, never a URL: the
+//! settings come from the web view, and a name `git remote` does not list is
+//! refused before the push. So the transports a publish can reach are the ones
+//! the author configured on this machine, in their own repository.
 //!
 //! Nothing here resets. On a failed push the commit stays: `git reset` could
 //! destroy work that is not Editor's.
@@ -81,7 +88,11 @@ impl Git {
             .arg(repo)
             .args(args)
             .env("GIT_TERMINAL_PROMPT", "0")
-            .env("GIT_OPTIONAL_LOCKS", "0");
+            .env("GIT_OPTIONAL_LOCKS", "0")
+            // A remote URL is the author's, but the settings that name a remote
+            // come from the web view: with this off, git refuses `ext::` and the
+            // other transports that would run a command of their own.
+            .env("GIT_PROTOCOL_FROM_USER", "0");
         let output = command
             .output()
             .map_err(|error| format!("cannot run git: {error}"))?;
@@ -137,10 +148,48 @@ impl Git {
         self.run(repo, &args)
     }
 
-    /// Push the branch the settings name.
+    /// The remotes this repository declares, in the order git lists them.
+    pub fn remotes(&self, repo: &Path) -> Result<Vec<String>, String> {
+        let output = self.run(repo, &["remote"])?;
+        if !output.ok {
+            return Err(output.reason());
+        }
+        Ok(output
+            .stdout
+            .lines()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .collect())
+    }
+
+    /// Whether `HEAD` carries commits the remote's branch does not.
+    ///
+    /// Read from the remote-tracking ref, which a successful push moves and a
+    /// failed one leaves where it was. That is what makes the next publish send
+    /// a commit the last one could not: nothing offline is asked of the network,
+    /// and a repository with no tracking ref yet has plainly not sent anything.
+    pub fn is_ahead(&self, repo: &Path, remote: &str, branch: &str) -> Result<bool, String> {
+        check_argument("remote", remote)?;
+        check_argument("branch", branch)?;
+        let range = format!("refs/remotes/{remote}/{branch}..HEAD");
+        let output = self.run(repo, &["rev-list", "--count", &range])?;
+        if !output.ok {
+            return Ok(true);
+        }
+        Ok(output.stdout.trim() != "0")
+    }
+
+    /// Push the branch the settings name, to a remote the repository declares.
     pub fn push(&self, repo: &Path, remote: &str, branch: &str) -> Result<GitOutput, String> {
         check_argument("remote", remote)?;
         check_argument("branch", branch)?;
+        let declared = self.remotes(repo)?;
+        if !declared.iter().any(|name| name == remote) {
+            return Err(format!(
+                "{remote} is not a remote of the production repository"
+            ));
+        }
         let refspec = format!("HEAD:{branch}");
         self.run(repo, &["push", remote, &refspec])
     }
@@ -194,17 +243,26 @@ mod tests {
         tempfile::tempdir().expect("temp dir")
     }
 
+    /// A fake that lists `origin`, so a push reaches the push itself.
+    fn with_origin(body: &str) -> FakeGit {
+        FakeGit::new(&format!(
+            "if [ \"$3\" = remote ]; then echo origin; exit 0; fi\n{body}"
+        ))
+    }
+
     #[test]
     fn git_runs_without_a_terminal_prompt() {
         // `git` is asked for its own environment, which is the one place the
         // variables are observable without a network.
-        let fake = FakeGit::new("printf '%s' \"$GIT_TERMINAL_PROMPT$GIT_OPTIONAL_LOCKS\"\nexit 0");
+        let fake = FakeGit::new(
+            "printf '%s' \"$GIT_TERMINAL_PROMPT$GIT_OPTIONAL_LOCKS$GIT_PROTOCOL_FROM_USER\"\nexit 0",
+        );
         let repo = repo();
         let output = fake
             .git()
             .add(repo.path(), &["site/index.html".to_string()])
             .expect("ran");
-        assert_eq!(output.stdout, "00");
+        assert_eq!(output.stdout, "000");
     }
 
     #[test]
@@ -226,11 +284,57 @@ mod tests {
 
     #[test]
     fn git_pushes_head_to_the_configured_branch() {
-        let fake = FakeGit::new("exit 0");
+        let fake = with_origin("exit 0");
         let repo = repo();
         fake.git().push(repo.path(), "origin", "main").expect("ran");
         let call = fake.calls().pop().expect("a call");
         assert!(call.ends_with("push origin HEAD:main"), "{call}");
+    }
+
+    #[test]
+    fn git_refuses_a_remote_the_repository_does_not_declare() {
+        // The settings come from the web view, so the remote must be a name the
+        // author's own repository already carries — never a URL, and never a
+        // transport that would run a command.
+        let fake = with_origin("exit 0");
+        let repo = repo();
+        for name in ["ext::sh", "upstream", "https://elsewhere.invalid/site.git"] {
+            let message = fake
+                .git()
+                .push(repo.path(), name, "main")
+                .expect_err("refused");
+            assert!(message.contains("not a remote"), "{message}");
+        }
+        assert!(
+            !fake.calls().iter().any(|call| call.contains(" push ")),
+            "nothing was pushed"
+        );
+    }
+
+    #[test]
+    fn git_reads_whether_head_is_ahead_of_the_remote_branch() {
+        let repo = repo();
+        let behind = FakeGit::new("echo 0\nexit 0");
+        assert!(!behind
+            .git()
+            .is_ahead(repo.path(), "origin", "main")
+            .expect("ran"));
+        let ahead = FakeGit::new("echo 2\nexit 0");
+        assert!(ahead
+            .git()
+            .is_ahead(repo.path(), "origin", "main")
+            .expect("ran"));
+        // No remote-tracking ref: nothing here has been sent.
+        let untracked = FakeGit::new("exit 128");
+        assert!(untracked
+            .git()
+            .is_ahead(repo.path(), "origin", "main")
+            .expect("ran"));
+        let call = ahead.calls().pop().expect("a call");
+        assert!(
+            call.ends_with("rev-list --count refs/remotes/origin/main..HEAD"),
+            "{call}"
+        );
     }
 
     #[test]
@@ -247,7 +351,7 @@ mod tests {
 
     #[test]
     fn a_failed_push_reports_gits_own_sentence_and_resets_nothing() {
-        let fake = FakeGit::new(
+        let fake = with_origin(
             "if [ \"$3\" = push ]; then echo 'fatal: could not read Username' >&2; exit 128; fi\nexit 0",
         );
         let repo = repo();

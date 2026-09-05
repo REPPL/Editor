@@ -34,11 +34,20 @@ export interface ArticleOptions {
   readonly variant?: string | null;
   /** Whether to write the contents list. */
   readonly contents?: boolean;
+  /**
+   * What every id this chapter writes is prefixed with.
+   *
+   * An article is one page for the whole document, and an outline id is unique
+   * within one chapter only — so two chapters each opening with "Beginnings"
+   * would write the same id twice and the contents list would send both entries
+   * to the first one. The build gives each chapter its own prefix.
+   */
+  readonly idPrefix?: string;
 }
 
 /** The anchor a footnote's marker points at. */
-function footnoteHref(label: string): string {
-  return `#fn-${label}`;
+function footnoteHrefWith(prefix: string): (label: string) => string {
+  return (label: string) => `#${prefix}fn-${label}`;
 }
 
 /** Whether a block belongs to the variant being rendered. */
@@ -62,11 +71,11 @@ function renderContents(nodes: readonly OutlineNode[]): string {
 }
 
 /** The heading ids the contents list points at, by the line they sit on. */
-function anchorsByLine(chapter: Chapter): Map<number, string> {
+function anchorsByLine(chapter: Chapter, prefix: string): Map<number, string> {
   const byLine = new Map<number, string>();
   const walk = (nodes: readonly OutlineNode[]): void => {
     for (const node of nodes) {
-      byLine.set(node.line, node.id);
+      byLine.set(node.line, `${prefix}${node.id}`);
       walk(node.children);
     }
   };
@@ -74,11 +83,38 @@ function anchorsByLine(chapter: Chapter): Map<number, string> {
   return byLine;
 }
 
+/**
+ * The contents list for a whole document, one entry per heading in reading
+ * order.
+ *
+ * The article is one page per document, so its contents list covers every
+ * chapter rather than the first. Each chapter's ids carry its own prefix, which
+ * is what keeps two chapters' identical headings pointing at different places.
+ */
+export function renderDocumentContents(
+  chapters: readonly { readonly chapter: Chapter; readonly idPrefix: string }[],
+): string {
+  const nodes = chapters.flatMap((entry) => prefixed(outlineOf(entry.chapter).nodes, entry.idPrefix));
+  const list = renderContents(nodes);
+  return list === "" ? "" : `<nav class="contents">${list}</nav>`;
+}
+
+/** The same nodes with every id prefixed, children included. */
+function prefixed(nodes: readonly OutlineNode[], prefix: string): OutlineNode[] {
+  return nodes.map((node) => ({
+    ...node,
+    id: `${prefix}${node.id}`,
+    children: prefixed(node.children, prefix),
+  }));
+}
+
 /** One article rendering, with the state a chapter's footnotes need. */
 interface Article {
   readonly context: RenderContext;
   readonly variant: string | null;
   readonly anchors: ReadonlyMap<number, string>;
+  /** What every id this chapter writes is prefixed with. */
+  readonly idPrefix: string;
 }
 
 /** A heading, to four levels, its classes carried and its anchor set. */
@@ -181,7 +217,8 @@ function renderFootnotes(chapter: Chapter, article: Article): string {
           : definition === undefined
             ? ""
             : renderBlocks(definition.blocks, article);
-      return `<li id="fn-${escapeAttribute(label)}"><a class="footnote-back" href="#fnref-${escapeAttribute(
+      const prefix = escapeAttribute(article.idPrefix);
+      return `<li id="${prefix}fn-${escapeAttribute(label)}"><a class="footnote-back" href="#${prefix}fnref-${escapeAttribute(
         label,
       )}">${escapeText(label)}</a>${body}</li>`;
     })
@@ -203,10 +240,18 @@ export function renderArticle(
   options: ArticleOptions = {},
 ): string {
   const variant = options.variant ?? null;
+  const idPrefix = options.idPrefix ?? "";
   const article: Article = {
-    context: { resolve, rendering: "article", footnoteHref },
+    context: {
+      resolve,
+      rendering: "article",
+      footnoteHref: footnoteHrefWith(idPrefix),
+      variant,
+      idPrefix,
+    },
     variant,
-    anchors: anchorsByLine(chapter),
+    anchors: anchorsByLine(chapter, idPrefix),
+    idPrefix,
   };
   const outline = outlineOf(chapter);
   const contents =

@@ -105,6 +105,62 @@ describe("buildVersion", () => {
       expect(file.text).not.toMatch(/https?:\/\//);
     }
   });
+
+  it("carries no style attribute on any element of a built page", () => {
+    // The site serves under `style-src 'self'`, which drops a style attribute
+    // unread — so a page that laid itself out in one would arrive at the link
+    // with its columns collapsed and its table alignment gone. Every declared
+    // size is a data attribute the site's stylesheets answer.
+    const built = build(presentation());
+    for (const file of built.files) {
+      expect(file.text, file.path).not.toMatch(/\sstyle\s*=/);
+      expect(file.text, file.path).not.toContain("<style");
+    }
+    // And the pages the site carries once, for every version.
+    for (const name of ["presenter/article.css", "presenter/deck.js", "index.html"]) {
+      const text = readFileSync(join(__dirname, "..", "..", "site", name), "utf8");
+      if (name.endsWith(".html")) {
+        expect(text, name).not.toMatch(/\sstyle\s*=/);
+      }
+    }
+  });
+
+  it("gives the whole document one contents list, chapter by chapter", () => {
+    // The article is one page per document, and an outline id is unique within
+    // one chapter only: without a prefix, two chapters opening the same way
+    // would send both contents entries to the first one.
+    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026" });
+    const navs = rendered.article.match(/<nav class="contents">/g) ?? [];
+    expect(navs).toHaveLength(1);
+    const targets = [...rendered.article.matchAll(/<nav class="contents">([\s\S]*?)<\/nav>/g)]
+      .flatMap((match) => [...(match[1] ?? "").matchAll(/href="#([^"]+)"/g)])
+      .map((match) => match[1] ?? "");
+    expect(targets.length).toBeGreaterThan(1);
+    expect(new Set(targets).size).toBe(targets.length);
+    // Every entry points at a heading that is on the page.
+    const ids = new Set(
+      [...rendered.article.matchAll(/<h[1-6][^>]*\sid="([^"]+)"/g)].map((m) => m[1] ?? ""),
+    );
+    for (const target of targets) {
+      expect(ids.has(target), target).toBe(true);
+    }
+    // Both chapters are represented, each under its own prefix.
+    expect(targets.some((id) => id.startsWith("c1-"))).toBe(true);
+    expect(targets.some((id) => id.startsWith("c2-"))).toBe(true);
+  });
+
+  it("wraps the deck in an envelope with no absolute URL and one configuration", () => {
+    // The envelope that ships is the site build's, because the site's policy
+    // forbids the inline script the core's own envelope used.
+    const deck = build(presentation()).files.find((file) => file.path === DECK_PATH);
+    const text = deck?.text ?? "";
+    expect(text).not.toMatch(/https?:\/\//);
+    expect(text).not.toContain("cdn");
+    expect(text).toContain('<div class="reveal"><div class="slides">');
+    expect(text).toContain('<link rel="stylesheet" href="/presenter/reveal/reveal.css">');
+    expect(text).toContain('<script src="/presenter/deck.js"></script>');
+    expect(text).not.toContain("Reveal.initialize");
+  });
 });
 
 describe("the asset plan", () => {
@@ -177,6 +233,59 @@ describe("the asset plan", () => {
     const full = assetPlan(tree, "full").copies.map((copy) => copy.to);
     expect(talk).toEqual(["assets/01-part/short.svg"]);
     expect(full).toContain("assets/01-part/long.svg");
+  });
+
+  it("refuses a reference to a file a published version does not carry", () => {
+    // The build names what the shell copies, and the shell holds the same list:
+    // a sidecar or a key beside a picture must not reach a public site.
+    const chapter = parseChapter(
+      [
+        "# A chapter",
+        "",
+        "::: {.video}",
+        "- local: assets/keynote.mp4",
+        ":::",
+        "",
+        "![A note](assets/notes.txt)",
+        "",
+        "![A lantern](assets/lantern.jpg)",
+        "",
+      ].join("\n"),
+    );
+    const { copies, refusals } = assetPlan(
+      { chapters: [{ path: "01-part/01-chapter.md", chapter }] },
+      "talk",
+    );
+    expect(copies.map((copy) => copy.from)).toEqual(["01-part/assets/lantern.jpg"]);
+    expect(refusals.map((refusal) => refusal.reference).sort()).toEqual([
+      "assets/keynote.mp4",
+      "assets/notes.txt",
+    ]);
+    for (const refusal of refusals) {
+      expect(refusal.reason).toContain("picture formats");
+    }
+  });
+
+  it("leaves out an asset an inline variant span does not carry", () => {
+    // A `.variant` span sits inside a block that belongs to every variant, so
+    // the block filter never sees it: without this the picture would be copied
+    // into a variant the renderers leave it out of.
+    const chapter = parseChapter(
+      [
+        "# A chapter",
+        "",
+        'Here is [![Only in the paper](assets/long.svg)]{.variant variant="full"} and ',
+        "![In every variant](assets/short.svg).",
+        "",
+      ].join("\n"),
+    );
+    const tree = { chapters: [{ path: "01-part/01-chapter.md", chapter }] };
+    expect(assetPlan(tree, "talk").copies.map((copy) => copy.to)).toEqual([
+      "assets/01-part/short.svg",
+    ]);
+    expect(assetPlan(tree, "full").copies.map((copy) => copy.to)).toContain(
+      "assets/01-part/long.svg",
+    );
   });
 
   it("resolves the same file to a deeper path for the deck", () => {

@@ -17,10 +17,10 @@
 
 import { classify, pathResolver, type Resolution, type Resolver } from "../core/assets";
 import { buildChapterDecks } from "../core/deck";
-import { renderArticle } from "../core/render/article";
+import { renderArticle, renderDocumentContents } from "../core/render/article";
 import { renderSlides } from "../core/render/slides";
-import type { Block, Chapter } from "../core/tree";
-import { walkChapterBlocks, walkInlines } from "../core/tree";
+import type { Block, Chapter, Inline } from "../core/tree";
+import { walkChapterBlocks } from "../core/tree";
 
 /** A text file to write into the version folder. */
 export interface BuiltFile {
@@ -249,12 +249,30 @@ function chapterReferences(chapter: Chapter, variant: string): string[] {
     if (block.kind !== "image") {
       // An image paragraph carries its reference on the block; walking its
       // inlines as well would count the same file twice.
-      for (const inline of walkInlines(block.inlines)) {
-        if (inline.kind === "image" && inline.src) {
-          references.push(inline.src);
-        }
-      }
+      references.push(...inlineReferences(block.inlines, variant));
     }
+  }
+  return references;
+}
+
+/**
+ * Every picture the inline nodes refer to, in this variant.
+ *
+ * `walkInlines` would flatten a `.variant` span into its neighbours, so a
+ * picture the author marked out of this variant would be copied into it: the
+ * renderers filter that span out, and the copies have to agree with them.
+ */
+function inlineReferences(nodes: readonly Inline[], variant: string): string[] {
+  const references: string[] = [];
+  for (const node of nodes) {
+    const variants = node.variants ?? [];
+    if (variants.length > 0 && !variants.includes(variant)) {
+      continue;
+    }
+    if (node.kind === "image" && node.src) {
+      references.push(node.src);
+    }
+    references.push(...inlineReferences(node.children, variant));
   }
   return references;
 }
@@ -262,6 +280,34 @@ function chapterReferences(chapter: Chapter, variant: string): string[] {
 /** Whether a block belongs to the variant being published. */
 function belongsTo(block: Block, variant: string): boolean {
   return block.variants.length === 0 || block.variants.includes(variant);
+}
+
+/**
+ * The file extensions a published version carries, lower-cased.
+ *
+ * The same list the shell holds a copy to — `ASSET_EXTENSIONS` in
+ * `src-tauri/src/document.rs` — so what the build asks for and what the shell
+ * will copy are one answer rather than two. A reference to anything else is
+ * refused and reported rather than quietly put on a public site.
+ */
+export const ASSET_EXTENSIONS: readonly string[] = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "svg",
+  "webp",
+  "avif",
+];
+
+/** Whether a name carries an extension a published version carries. */
+function isPublishableAsset(reference: string): boolean {
+  const name = basename(reference.split(/[?#]/)[0] ?? "");
+  const cut = name.lastIndexOf(".");
+  if (cut <= 0) {
+    return false;
+  }
+  return ASSET_EXTENSIONS.includes(name.slice(cut + 1).toLowerCase());
 }
 
 /** Whether a reference names a file this build may copy. */
@@ -275,7 +321,7 @@ function isCopyable(reference: string): boolean {
   if (reference.startsWith("/") || /^[a-z]:[\\/]/i.test(reference)) {
     return false; // absolute: no machine in the document
   }
-  return true;
+  return isPublishableAsset(reference);
 }
 
 function refusalReason(reference: string): string {
@@ -284,6 +330,9 @@ function refusalReason(reference: string): string {
   }
   if (reference.startsWith("/")) {
     return "the reference is absolute";
+  }
+  if (!isPublishableAsset(reference)) {
+    return "a published version carries only the picture formats the app reads";
   }
   return "the reference climbs above the document folder";
 }
@@ -355,13 +404,27 @@ export function renderVariant(
   variant: string,
   options: RenderOptions,
 ): RenderedVariant {
-  const article = tree.chapters
-    .map((input, index) =>
+  // The article is one page per document, so its contents list covers every
+  // chapter. Each chapter's ids carry a prefix of its own, because an outline
+  // id is unique within one chapter and two chapters may open the same way.
+  const idPrefix = (index: number): string => `c${String(index + 1)}-`;
+  const contents = renderDocumentContents(
+    tree.chapters.map((input, index) => ({
+      chapter: input.chapter,
+      idPrefix: idPrefix(index),
+    })),
+  );
+  const article = [
+    contents,
+    ...tree.chapters.map((input, index) =>
       renderArticle(input.chapter, createAssetResolver(input.path, "article"), {
         variant,
-        contents: index === 0,
+        contents: false,
+        idPrefix: idPrefix(index),
       }),
-    )
+    ),
+  ]
+    .filter((part) => part !== "")
     .join("\n");
 
   // One plan for the whole document, so the deck at the link is the deck the
@@ -373,7 +436,11 @@ export function renderVariant(
     { variant },
   );
   const fragments = tree.chapters.map((input, index) =>
-    renderSlides(plans[index] ?? { title: null, columns: [] }, createAssetResolver(input.path, "slides")),
+    renderSlides(
+      plans[index] ?? { title: null, columns: [] },
+      createAssetResolver(input.path, "slides"),
+      variant,
+    ),
   );
 
   return {

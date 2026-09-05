@@ -79,3 +79,39 @@ body.article hr {
   border-top: 1px solid GrayText;
   margin: 2rem 0;
 }
+
+/*
+ * Declared widths and table alignment, as rules rather than as style attributes.
+ *
+ * The site serves under `style-src 'self'`, which drops a `style` attribute on
+ * an element unread. So a width the author declared reaches the page as
+ * `data-width` — a whole percentage on a scale of fives — and a pipe table's
+ * alignment as `data-align`, and this is where they are answered.
+ */
+body.article img[data-width="5"] { width: 5%; height: auto; }
+body.article img[data-width="10"] { width: 10%; height: auto; }
+body.article img[data-width="15"] { width: 15%; height: auto; }
+body.article img[data-width="20"] { width: 20%; height: auto; }
+body.article img[data-width="25"] { width: 25%; height: auto; }
+body.article img[data-width="30"] { width: 30%; height: auto; }
+body.article img[data-width="35"] { width: 35%; height: auto; }
+body.article img[data-width="40"] { width: 40%; height: auto; }
+body.article img[data-width="45"] { width: 45%; height: auto; }
+body.article img[data-width="50"] { width: 50%; height: auto; }
+body.article img[data-width="55"] { width: 55%; height: auto; }
+body.article img[data-width="60"] { width: 60%; height: auto; }
+body.article img[data-width="65"] { width: 65%; height: auto; }
+body.article img[data-width="70"] { width: 70%; height: auto; }
+body.article img[data-width="75"] { width: 75%; height: auto; }
+body.article img[data-width="80"] { width: 80%; height: auto; }
+body.article img[data-width="85"] { width: 85%; height: auto; }
+body.article img[data-width="90"] { width: 90%; height: auto; }
+body.article img[data-width="95"] { width: 95%; height: auto; }
+body.article img[data-width="100"] { width: 100%; height: auto; }
+
+body.article th[data-align="left"],
+body.article td[data-align="left"] { text-align: left; }
+body.article th[data-align="center"],
+body.article td[data-align="center"] { text-align: center; }
+body.article th[data-align="right"],
+body.article td[data-align="right"] { text-align: right; }

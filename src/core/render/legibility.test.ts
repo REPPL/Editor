@@ -97,18 +97,22 @@ describe("the deck at 390 CSS px", () => {
 
   it("stacks the columns in source order below iPad width", () => {
     expect(DECK_STYLESHEET).toMatch(
-      /@media \(max-width: 819px\) \{\s*\.reveal \.columns \{\s*grid-template-columns: 1fr;/,
+      /@media \(max-width: 819px\) \{\s*\.reveal \.columns \{\s*display: block;/,
     );
   });
 
-  it("carries no inline size on any element of a real chapter's deck", () => {
-    for (const element of document.querySelectorAll<HTMLElement>("[style]")) {
-      const inline = element.getAttribute("style") ?? "";
-      expect(inline, inline).not.toMatch(/\d+px/);
-    }
+  it("carries no inline style at all on a real chapter's deck", () => {
+    // The site serves under `style-src 'self'`, which drops a style attribute
+    // unread: a deck that laid itself out in one would collapse at the link
+    // while looking right in the app. Every declared size is a data attribute
+    // the stylesheet answers.
+    expect(document.querySelectorAll("[style]")).toHaveLength(0);
     // An image sized by the author is sized in percent, never in pixels.
     for (const image of document.querySelectorAll("img[width]")) {
       expect(image.getAttribute("width")).not.toMatch(/^\d+$/);
+    }
+    for (const sized of document.querySelectorAll("[data-width]")) {
+      expect(sized.getAttribute("data-width")).toMatch(/^\d{1,3}$/);
     }
   });
 

@@ -72,9 +72,16 @@ describe("what the article carries", () => {
     expect(html).toContain('<span class="credit">Photograph by Carol</span>');
   });
 
-  it("honours an image's declared width", () => {
+  it("honours an image's declared width, with no inline style", () => {
+    // The site serves under `style-src 'self'` and the HTML `width` attribute
+    // takes no percentages, so a declared share reaches the page as a data
+    // attribute and `presenter/article.css` holds the rule.
     const html = article('![Dusk](assets/lantern.jpg){width="75%"}\n');
-    expect(html).toContain('width="75%"');
+    expect(html).toContain('data-width="75"');
+    expect(html).not.toContain("style=");
+    expect(html).not.toContain('width="75%"');
+    // A width in pixels is an HTML width and stays one.
+    expect(article('![Dusk](assets/lantern.jpg){width="320"}\n')).toContain('width="320"');
   });
 
   it("writes a footnote reference and its note", () => {

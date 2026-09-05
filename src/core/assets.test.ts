@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { classify, dataResolver, pathResolver, referencesOf, siteResolver } from "./assets";
+import { classify, dataResolver, pathResolver, referencesOf } from "./assets";
 import { parseChapter } from "./parse";
 
 describe("classifying a reference", () => {
@@ -56,8 +56,8 @@ describe("resolving", () => {
   });
 
   it("resolves a relative reference to the path the site copied it to", () => {
-    expect(siteResolver("assets/")("assets/lantern.jpg").url).toBe("assets/assets/lantern.jpg");
-    expect(siteResolver("")("assets/lantern.jpg").url).toBe("assets/lantern.jpg");
+    expect(pathResolver("assets/")("assets/lantern.jpg").url).toBe("assets/assets/lantern.jpg");
+    expect(pathResolver("")("assets/lantern.jpg").url).toBe("assets/lantern.jpg");
   });
 
   it("resolves a relative reference to the bytes the shell read", () => {

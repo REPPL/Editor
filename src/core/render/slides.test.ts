@@ -8,14 +8,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { pathResolver, siteResolver } from "../assets";
+import { pathResolver } from "../assets";
 import { buildDeck } from "../deck";
 import { parseChapter } from "../parse";
+import { isLinkable } from "./html";
 import {
   DECK_CONFIG,
   DECK_ENGINE_FILES,
   DECK_STYLESHEET,
-  deckDocument,
   renderSlides,
 } from "./slides";
 
@@ -78,7 +78,7 @@ describe("the fragment", () => {
     expect(html.replace(/<[^>]*>/g, "")).not.toMatch(/divider/);
   });
 
-  it("sizes the column tracks from the declared widths", () => {
+  it("sizes the columns from the declared widths, with no inline style", () => {
     const html = markup(
       [
         "## Comparison",
@@ -94,13 +94,81 @@ describe("the fragment", () => {
         "",
       ].join("\n"),
     );
-    expect(html).toContain('class="columns" style="--column-tracks: 60% 40%"');
-    expect(html).toContain('<div class="column"><p>Left.</p></div>');
-    // The stylesheet reads the property, and collapses it below iPad width.
-    expect(DECK_STYLESHEET).toContain("grid-template-columns: var(--column-tracks, 1fr)");
-    expect(DECK_STYLESHEET).toMatch(
-      /@media \(max-width: 819px\) \{\s*\.reveal \.columns \{\s*grid-template-columns: 1fr;/,
+    // The site serves under `style-src 'self'`, which drops a style attribute
+    // unread: the shares are data attributes and the stylesheet holds the rule.
+    expect(html).not.toContain("style=");
+    expect(html).toContain('class="columns" data-columns="2"');
+    expect(html).toContain('<div class="column" data-width="60"><p>Left.</p></div>');
+    expect(html).toContain('<div class="column" data-width="40"><p>Right.</p></div>');
+    expect(DECK_STYLESHEET).toContain(
+      '.reveal .column[data-width="60"] { flex: 0 0 calc(60% - var(--column-gap)); }',
     );
+    // And below iPad width they stack in source order.
+    expect(DECK_STYLESHEET).toMatch(
+      /@media \(max-width: 819px\) \{\s*\.reveal \.columns \{\s*display: block;/,
+    );
+  });
+
+  it("sizes a picture by a class rule rather than by a style attribute", () => {
+    const html = markup('![A lantern](assets/lantern.jpg){width="75%"}\n');
+    expect(html).not.toContain("style=");
+    expect(html).toContain('data-width="75"');
+    expect(html).not.toContain('width="75%"');
+    expect(DECK_STYLESHEET).toContain('.reveal img[data-width="75"] { width: 75%; height: auto; }');
+    // A width in pixels is an HTML width and stays one.
+    expect(markup('![A lantern](assets/lantern.jpg){width="320"}\n')).toContain('width="320"');
+  });
+
+  it("aligns a table cell by a data attribute the stylesheet reads", () => {
+    const html = markup(
+      ["## Numbers", "", "| a | b |", "|:--|--:|", "| 1 | 2 |", ""].join("\n"),
+    );
+    expect(html).not.toContain("style=");
+    expect(html).toContain('<td data-align="left">');
+    expect(html).toContain('<td data-align="right">');
+    expect(DECK_STYLESHEET).toContain('td[data-align="right"] { text-align: right; }');
+  });
+
+  it("keeps a variant span out of the variant it was marked against", () => {
+    const source = [
+      "## Beginnings",
+      "",
+      'A [talk only]{.variant variant="talk"} and [paper only]{.variant variant="paper"}.',
+      "",
+    ].join("\n");
+    const talk = renderSlides(
+      buildDeck(parseChapter(source), { variant: "talk" }),
+      pathResolver(),
+      "talk",
+    );
+    expect(talk).toContain("talk only");
+    expect(talk).not.toContain("paper only");
+  });
+
+  it("writes no href for a video source naming a scheme it will not link to", () => {
+    // A chapter is a file and a file can come from anywhere, so an address in
+    // one is the author's text rather than something to be handed to a browser.
+    const html = markup(
+      [
+        "## Beginnings",
+        "",
+        "::: {.video}",
+        "- remote: javascript:alert(1)",
+        "- remote: https://videos.example.org/keynote.mp4",
+        ":::",
+        "",
+      ].join("\n"),
+    );
+    expect(html).not.toContain('href="javascript:');
+    expect(html).toContain("javascript:alert(1)</a>");
+    expect(html).toContain('href="https://videos.example.org/keynote.mp4"');
+
+    expect(isLinkable("https://example.invalid/a")).toBe(true);
+    expect(isLinkable("assets/lantern.jpg")).toBe(true);
+    expect(isLinkable("mailto:alice@example.invalid")).toBe(true);
+    expect(isLinkable("javascript:alert(1)")).toBe(false);
+    expect(isLinkable("data:text/html,<script>")).toBe(false);
+    expect(isLinkable("file:///etc/hosts")).toBe(false);
   });
 
   it("renders a credit in the credit style", () => {
@@ -140,7 +208,7 @@ describe("the fragment", () => {
   });
 
   it("resolves a picture through the seam the host supplies", () => {
-    const html = markup("![A lantern](assets/lantern.jpg)\n", siteResolver("slides/"));
+    const html = markup("![A lantern](assets/lantern.jpg)\n", pathResolver("slides/"));
     expect(html).toContain('src="slides/assets/lantern.jpg"');
   });
 });
@@ -163,32 +231,5 @@ describe("the engine", () => {
     expect(DECK_ENGINE_FILES).toContain("reveal.css");
     expect(DECK_ENGINE_FILES).toContain("LICENSE");
     expect(DECK_ENGINE_FILES.some((file) => file.includes("theme"))).toBe(false);
-  });
-});
-
-describe("the document envelope", () => {
-  const html = deckDocument(markup("## Beginnings\n\nA.\n"), {
-    title: "The Lantern Papers",
-    engine: "linked",
-  });
-
-  it("names no absolute URL anywhere", () => {
-    expect(html).not.toMatch(/https?:\/\//);
-    expect(html).not.toContain("cdn");
-  });
-
-  it("links the engine and this deck's stylesheet by relative path", () => {
-    expect(html).toContain('<link rel="stylesheet" href="reveal/reveal.css" />');
-    expect(html).toContain('<link rel="stylesheet" href="slides.css" />');
-    expect(html).toContain('<script src="reveal/reveal.js"></script>');
-  });
-
-  it("carries the one configuration the app uses too", () => {
-    expect(html).toContain(JSON.stringify(DECK_CONFIG));
-  });
-
-  it("mounts the fragment inside the container reveal.js expects", () => {
-    expect(html).toContain('<div class="reveal"><div class="slides">');
-    expect(html).toContain('<section id="beginnings"');
   });
 });

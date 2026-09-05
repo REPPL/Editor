@@ -6,8 +6,8 @@
  * the vertical slides, an `<aside class="notes">` per slide, the foot line
  * under the face — with no `<html>`, no engine and no style around it. The app
  * mounts that fragment in a page that already carries the engine from the
- * bundle; `deckDocument` wraps it for a host that has to be given one. So no
- * host holds a copy of a rule.
+ * bundle; the site build wraps it in its own envelope, under the policy the
+ * site serves. So no host holds a copy of a rule.
  *
  * The engine is vendored, never fetched: `src/vendor/reveal/`, copied beside
  * every deck that is written. The deck runs from disk, and the app touches the
@@ -21,12 +21,12 @@ import type { Block } from "../tree";
 import {
   attributes,
   classAttribute,
-  escapeAttribute,
   escapeText,
   renderCommonBlock,
   renderFigure,
   renderInlines,
   renderVideo,
+  widthBucket,
   type RenderContext,
 } from "./html";
 
@@ -91,39 +91,37 @@ function headlineTag(slide: Slide): string {
 }
 
 /** The context every slide is rendered in. */
-function contextFor(resolve: Resolver): RenderContext {
-  return { resolve, rendering: "slides" };
-}
-
-/** The declared track sizes of a columns div, or null when it declares none. */
-function trackSizes(block: Block): string | null {
-  const widths = block.children
-    .filter((child) => child.attributes.classes.includes("column"))
-    .map((child) => child.attributes.pairs["width"] ?? "");
-  if (widths.length === 0) return null;
-  // A column with no declared width takes an equal share of what is left.
-  return widths.map((width) => (width === "" ? "1fr" : width)).join(" ");
+function contextFor(resolve: Resolver, variant: string | null): RenderContext {
+  return { resolve, rendering: "slides", variant };
 }
 
 /**
- * A columns div: a grid whose tracks are the widths the author declared.
+ * A columns div: a row whose columns take the shares the author declared.
  *
- * The tracks arrive as a custom property rather than as a computed
- * `grid-template-columns`, so the stylesheet's phone rule replaces them
- * without an `!important` and the columns stack in source order.
+ * The shares reach the page as data attributes and the stylesheet holds the
+ * rules, because the site serves under `style-src 'self'` and a `style`
+ * attribute is dropped there unread — which would collapse every column on the
+ * published deck while the app's own deck looked right.
  */
 function renderColumns(block: Block, context: RenderContext): string {
-  const tracks = trackSizes(block);
+  const count = block.children.filter((child) =>
+    child.attributes.classes.includes("column"),
+  ).length;
   const columns = block.children
     .map((child) =>
       child.attributes.classes.includes("column")
-        ? `<div class="column">${renderFlow(child.children, context)}</div>`
+        ? `<div class="column"${attributes([
+            ["data-width", widthBucket(child.attributes.pairs["width"] ?? null)],
+          ])}>${renderFlow(child.children, context)}</div>`
         : renderFlow([child], context),
     )
     .join("");
-  return `<div${classAttribute(["columns", ...block.attributes.classes.filter((name) => name !== "columns")])}${attributes(
-    [["style", tracks === null ? null : `--column-tracks: ${tracks}`]],
-  )}>${columns}</div>`;
+  return `<div${classAttribute([
+    "columns",
+    ...block.attributes.classes.filter((name) => name !== "columns"),
+  ])}${attributes([
+    ["data-columns", count === 0 ? null : String(count)],
+  ])}>${columns}</div>`;
 }
 
 /** An unrecognised div: its classes on the wrapper, its children in flow. */
@@ -230,8 +228,12 @@ function renderSlide(slide: Slide, context: RenderContext): string {
  * `<section>` holding them, which is how moving down reaches a Sub-section and
  * moving right reaches the next Section.
  */
-export function renderSlides(plan: DeckPlan, resolve: Resolver = pathResolver()): string {
-  const context = contextFor(resolve);
+export function renderSlides(
+  plan: DeckPlan,
+  resolve: Resolver = pathResolver(),
+  variant: string | null = null,
+): string {
+  const context = contextFor(resolve, variant);
   return plan.columns
     .map((column) => {
       const only = column.slides[0];
@@ -243,55 +245,4 @@ export function renderSlides(plan: DeckPlan, resolve: Resolver = pathResolver())
         .join("")}</section>`;
     })
     .join("");
-}
-
-/** What a host needs to be told to wrap a fragment into a page. */
-export interface DeckDocumentOptions {
-  /** The page title. */
-  readonly title: string;
-  /**
-   * How the engine reaches the page. `linked` names a relative path to the
-   * folder the build copied `DECK_ENGINE_FILES` into.
-   */
-  readonly engine: "linked";
-  /** The engine folder, relative to the written page. */
-  readonly enginePath?: string;
-  /** Where `DECK_STYLESHEET` was written, relative to the written page. */
-  readonly stylesheetPath?: string;
-  /** The language of the deck's text. */
-  readonly lang?: string;
-}
-
-/**
- * Wrap a fragment into a page a browser can open from disk.
- *
- * Every URL here is relative, so the deck opens from the published folder and
- * from a copy of that folder on a memory stick alike, and nothing is fetched.
- */
-export function deckDocument(fragment: string, options: DeckDocumentOptions): string {
-  const engine = options.enginePath ?? "reveal/";
-  const stylesheet_ = options.stylesheetPath ?? "slides.css";
-  const config = JSON.stringify(DECK_CONFIG);
-  return [
-    "<!doctype html>",
-    `<html lang="${escapeAttribute(options.lang ?? "en")}">`,
-    "<head>",
-    '<meta charset="utf-8" />',
-    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />',
-    `<title>${escapeText(options.title)}</title>`,
-    `<link rel="stylesheet" href="${escapeAttribute(engine)}reset.css" />`,
-    `<link rel="stylesheet" href="${escapeAttribute(engine)}reveal.css" />`,
-    `<link rel="stylesheet" href="${escapeAttribute(stylesheet_)}" />`,
-    "</head>",
-    "<body>",
-    '<div class="reveal"><div class="slides">',
-    fragment,
-    "</div></div>",
-    `<script src="${escapeAttribute(engine)}reveal.js"></script>`,
-    `<script src="${escapeAttribute(engine)}plugin/notes/notes.js"></script>`,
-    `<script>Reveal.initialize(Object.assign(${config}, { plugins: [RevealNotes] }));</script>`,
-    "</body>",
-    "</html>",
-    "",
-  ].join("\n");
 }

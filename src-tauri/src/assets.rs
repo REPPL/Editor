@@ -345,15 +345,39 @@ pub fn carries_metadata(bytes: &[u8]) -> bool {
     if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
         return riff_carries_metadata(bytes);
     }
+    if is_gif(bytes) {
+        return gif_carries_metadata(bytes);
+    }
+    if is_svg(bytes) {
+        return svg_carries_metadata(bytes);
+    }
     false
 }
 
+/// The format of a picture whose metadata this phase can neither read past nor
+/// take out, or `None` where the copy is safe to make.
+///
+/// AVIF keeps EXIF and XMP as items inside the ISO base media container, where
+/// removing one means rewriting the item table and every offset that points
+/// through it. Rewriting a container to strip a box is how a picture is quietly
+/// corrupted, so the drop is refused and the author is told what to do instead.
+pub fn unstrippable_metadata(bytes: &[u8]) -> Option<&'static str> {
+    if is_avif(bytes) && avif_carries_metadata(bytes) {
+        return Some("AVIF");
+    }
+    None
+}
+
 /// APP1 (EXIF and XMP), APP13 (IPTC), and comment segments.
+///
+/// Anything the walk cannot make sense of counts as metadata: a marker where
+/// none belongs means this is not the JPEG it claims to be, and the safe answer
+/// to "is there something in here" is yes.
 fn jpeg_carries_metadata(bytes: &[u8]) -> bool {
     let mut at = 2usize;
     while at + 4 <= bytes.len() {
         if bytes[at] != 0xFF {
-            return false;
+            return true;
         }
         let marker = bytes[at + 1];
         // Start of scan, or the end: no more headers to read.
@@ -365,11 +389,269 @@ fn jpeg_carries_metadata(bytes: &[u8]) -> bool {
         }
         let length = usize::from(u16::from_be_bytes([bytes[at + 2], bytes[at + 3]]));
         if length < 2 {
-            return false;
+            return true;
         }
         at += 2 + length;
     }
     false
+}
+
+/// Whether the bytes open as a GIF.
+fn is_gif(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")
+}
+
+/// Whether the bytes open as an AVIF: an ISO base media file branded `avif`.
+fn is_avif(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && bytes[8..].starts_with(b"avif")
+}
+
+/// Whether the bytes look like an SVG document.
+fn is_svg(bytes: &[u8]) -> bool {
+    let head = &bytes[..bytes.len().min(1024)];
+    let text = String::from_utf8_lossy(head);
+    text.contains("<svg") || (text.contains("<?xml") && bytes.len() > 4)
+}
+
+/// Where a GIF's blocks start: past the header, the screen descriptor, and the
+/// global colour table where one is declared.
+fn gif_blocks_start(bytes: &[u8]) -> Option<usize> {
+    if bytes.len() < 13 {
+        return None;
+    }
+    let flags = bytes[10];
+    let mut at = 13usize;
+    if flags & 0x80 != 0 {
+        let size = 3usize << ((flags & 0x07) + 1);
+        at = at.checked_add(size)?;
+    }
+    (at <= bytes.len()).then_some(at)
+}
+
+/// Comment (`0x21 0xFE`) and application (`0x21 0xFF`) extension blocks.
+///
+/// The application block is where a GIF carries XMP, which is where an editor
+/// writes the file's history and, with it, the author's own paths.
+fn gif_carries_metadata(bytes: &[u8]) -> bool {
+    let Some(mut at) = gif_blocks_start(bytes) else {
+        return true;
+    };
+    while at < bytes.len() {
+        match bytes[at] {
+            0x3B => return false,
+            0x21 => {
+                let Some(&label) = bytes.get(at + 1) else {
+                    return true;
+                };
+                if label == 0xFE || label == 0xFF {
+                    return true;
+                }
+                let Some(next) = gif_skip_sub_blocks(bytes, at + 2) else {
+                    return true;
+                };
+                at = next;
+            }
+            0x2C => {
+                let Some(next) = gif_skip_image(bytes, at) else {
+                    return true;
+                };
+                at = next;
+            }
+            // Not a block this reader knows: treat it as something to strip
+            // rather than as nothing at all.
+            _ => return true,
+        }
+    }
+    false
+}
+
+/// Step past a run of length-prefixed sub-blocks and the zero that ends them.
+fn gif_skip_sub_blocks(bytes: &[u8], mut at: usize) -> Option<usize> {
+    loop {
+        let length = usize::from(*bytes.get(at)?);
+        at = at.checked_add(1 + length)?;
+        if length == 0 {
+            return (at <= bytes.len()).then_some(at);
+        }
+    }
+}
+
+/// Step past one image descriptor, its local colour table, and its data.
+fn gif_skip_image(bytes: &[u8], at: usize) -> Option<usize> {
+    let flags = *bytes.get(at + 9)?;
+    let mut next = at.checked_add(10)?;
+    if flags & 0x80 != 0 {
+        next = next.checked_add(3usize << ((flags & 0x07) + 1))?;
+    }
+    // The LZW minimum code size, then the image's own sub-blocks.
+    next = next.checked_add(1)?;
+    gif_skip_sub_blocks(bytes, next)
+}
+
+/// A GIF without its comment and application extension blocks.
+fn strip_gif(bytes: &[u8]) -> Vec<u8> {
+    let Some(start) = gif_blocks_start(bytes) else {
+        return bytes.to_vec();
+    };
+    let mut out = Vec::with_capacity(bytes.len());
+    out.extend_from_slice(&bytes[..start]);
+    let mut at = start;
+    while at < bytes.len() {
+        match bytes[at] {
+            0x3B => {
+                out.push(0x3B);
+                return out;
+            }
+            0x21 => {
+                let Some(&label) = bytes.get(at + 1) else {
+                    break;
+                };
+                let Some(next) = gif_skip_sub_blocks(bytes, at + 2) else {
+                    break;
+                };
+                if label != 0xFE && label != 0xFF {
+                    out.extend_from_slice(&bytes[at..next]);
+                }
+                at = next;
+            }
+            0x2C => {
+                let Some(next) = gif_skip_image(bytes, at) else {
+                    break;
+                };
+                out.extend_from_slice(&bytes[at..next]);
+                at = next;
+            }
+            _ => break,
+        }
+    }
+    // A file this reader lost its place in keeps its tail rather than being
+    // truncated into something no reader will open.
+    out.extend_from_slice(&bytes[at..]);
+    out
+}
+
+/// Whether an SVG carries a comment, a metadata element, or a local path.
+fn svg_carries_metadata(bytes: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(bytes);
+    strip_svg_text(&text) != text
+}
+
+/// The elements an SVG editor writes its own record into.
+const SVG_METADATA_ELEMENTS: [&str; 3] =
+    ["metadata", "sodipodi:namedview", "inkscape:templateinfo"];
+
+/// An SVG without its comments, its metadata elements, and any attribute whose
+/// value names a file on the machine it was drawn on.
+fn strip_svg_text(text: &str) -> String {
+    let mut out = remove_between(text, "<!--", "-->");
+    for element in SVG_METADATA_ELEMENTS {
+        out = remove_between(&out, &format!("<{element}"), &format!("</{element}>"));
+        out = remove_empty_element(&out, element);
+    }
+    remove_local_path_attributes(&out)
+}
+
+/// Everything from each `open` to the `close` that follows it, taken out.
+fn remove_between(text: &str, open: &str, close: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(open) {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + open.len()..];
+        match after.find(close) {
+            Some(end) => rest = &after[end + close.len()..],
+            None => {
+                // No closing tag: this is not the element it looked like, and
+                // dropping the rest of the file would be a worse answer than
+                // leaving it alone.
+                out.push_str(open);
+                out.push_str(after);
+                return out;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// A self-closing `<name ... />` with no closing tag of its own.
+fn remove_empty_element(text: &str, name: &str) -> String {
+    let open = format!("<{name}");
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(&open) {
+        let after = &rest[start + open.len()..];
+        let Some(end) = after.find('>') else {
+            break;
+        };
+        if !after[..end].ends_with('/') {
+            let keep = start + open.len() + end + 1;
+            out.push_str(&rest[..keep]);
+            rest = &rest[keep..];
+            continue;
+        }
+        out.push_str(&rest[..start]);
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Every `name="value"` whose value names a file on somebody's machine.
+fn remove_local_path_attributes(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(quote) = rest.find('"') {
+        let after = &rest[quote + 1..];
+        let Some(end) = after.find('"') else {
+            break;
+        };
+        let value = &after[..end];
+        if !names_a_local_file(value) {
+            out.push_str(&rest[..quote + 1 + end + 1]);
+            rest = &rest[quote + 1 + end + 1..];
+            continue;
+        }
+        // Back up over ` name=` so the whole attribute goes, not its value.
+        let before = &rest[..quote];
+        let cut = before
+            .rfind(|c: char| c.is_whitespace())
+            .map(|at| at + 1)
+            .unwrap_or(0);
+        out.push_str(&before[..cut]);
+        rest = &rest[quote + 1 + end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether an attribute value names a file on the machine it was written on.
+fn names_a_local_file(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.starts_with("file:") {
+        return true;
+    }
+    // A Windows drive letter, or a POSIX absolute path with a folder in it.
+    if trimmed.len() > 2
+        && trimmed.as_bytes()[1] == b':'
+        && matches!(trimmed.as_bytes()[2], b'/' | b'\\')
+    {
+        return true;
+    }
+    trimmed.starts_with('/') && trimmed[1..].contains('/')
+}
+
+/// Whether an AVIF declares an EXIF or XMP item in its `meta` box.
+///
+/// Read as a declaration rather than parsed out: the item table names what the
+/// container carries, and a container that names either is refused.
+fn avif_carries_metadata(bytes: &[u8]) -> bool {
+    bytes
+        .windows(4)
+        .any(|window| window == b"Exif" || window == b"iTXt")
+        || bytes
+            .windows(19)
+            .any(|window| window == b"application/rdf+xml")
 }
 
 /// `eXIf` and the three text chunks.
@@ -409,6 +691,12 @@ pub fn without_metadata(bytes: &[u8]) -> Vec<u8> {
     }
     if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
         return strip_riff(bytes);
+    }
+    if is_gif(bytes) {
+        return strip_gif(bytes);
+    }
+    if is_svg(bytes) {
+        return strip_svg_text(&String::from_utf8_lossy(bytes)).into_bytes();
     }
     bytes.to_vec()
 }
@@ -768,13 +1056,8 @@ pub fn ingest(
     let digest = hash_file(&source)?;
     let id = id_of(&digest);
 
-    // Two drops of one file cost one copy, under any file name.
-    if let Some(reference) = reuse(context, manifest, &digest) {
-        let entry = manifest
-            .assets
-            .iter()
-            .find(|entry| entry.source_sha256 == digest)
-            .expect("reuse found it");
+    // Two drops of one file into one Part cost one copy, under any file name.
+    if let Some((entry, reference)) = reuse(context, manifest, &digest) {
         return Ok(DropOutcome {
             kind: entry.kind,
             reference,
@@ -873,6 +1156,12 @@ enum Payload {
 /// chapter's own PNGs and a spreadsheet arrive unchanged.
 fn prepare(source: &Path, class: Class) -> Result<(Payload, Option<&'static str>), String> {
     if let Class::PhoneNative(format) = class {
+        // The ceiling is checked before the file is read, so an image too large
+        // to decode never becomes memory in the first place.
+        let size = fs::metadata(source)
+            .map_err(|e| format!("cannot read the file: {e}"))?
+            .len();
+        convert::check_source_size(size)?;
         let bytes = fs::read(source).map_err(|e| format!("cannot read the file: {e}"))?;
         let jpeg = convert::to_web_jpeg(&bytes)
             .map_err(|error| format!("the {format} image could not be converted: {error}"))?;
@@ -880,6 +1169,11 @@ fn prepare(source: &Path, class: Class) -> Result<(Payload, Option<&'static str>
     }
     if class == Class::Image {
         let bytes = fs::read(source).map_err(|e| format!("cannot read the file: {e}"))?;
+        if let Some(format) = unstrippable_metadata(&bytes) {
+            return Err(format!(
+                "this {format} image carries metadata Editor cannot take out; export it without metadata and drop it again"
+            ));
+        }
         if carries_metadata(&bytes) {
             // Every format, JPEG included, keeps its own bytes and loses only
             // the boxes. Turning a picture the author already has back through
@@ -976,13 +1270,17 @@ fn copy_atomically(source: &Path, destination: &Path) -> Result<(), String> {
 
 /// The reference an entry already in the manifest still resolves to, if it
 /// does.
-fn reuse(context: &DropContext, manifest: &Manifest, digest: &str) -> Option<String> {
+fn reuse<'a>(
+    context: &DropContext,
+    manifest: &'a Manifest,
+    digest: &str,
+) -> Option<(&'a AssetEntry, String)> {
     let entry = manifest
         .assets
         .iter()
         .find(|entry| entry.source_sha256 == digest)?;
     if entry.mode == AssetMode::Referenced {
-        return Some(format!("asset:{}", entry.id));
+        return Some((entry, format!("asset:{}", entry.id)));
     }
     let on_disk = context.root.join(&entry.path);
     let metadata = fs::metadata(&on_disk).ok()?;
@@ -994,7 +1292,15 @@ fn reuse(context: &DropContext, manifest: &Manifest, digest: &str) -> Option<Str
         return None;
     }
     let relative = relative_from(context.chapter_folder, &resolved)?;
-    Some(encode_reference(&relative))
+    // A Part is self-contained: its chapters reference the pictures in its own
+    // `assets/` folder and nothing above it. A copy that lives in another Part
+    // is not reused — the bytes are copied into this Part as well — because a
+    // reference that climbs out of the Part is one the build refuses and one
+    // that breaks the moment either Part is moved.
+    if relative.starts_with("../") {
+        return None;
+    }
+    Some((entry, encode_reference(&relative)))
 }
 
 /// Record an asset that stays where it is, above the threshold.
@@ -1048,9 +1354,19 @@ fn reference_in_place(
     })
 }
 
-/// Append an entry, or replace the one with the same id.
+/// Append an entry, or replace the one for the same bytes in the same place.
+///
+/// Matched on the whole digest rather than on the id, which is sixteen hex
+/// characters of it: two different files sharing those sixteen characters must
+/// be two entries, not one entry silently overwriting the other. The path is
+/// part of the match because one file may be copied into two Parts, and each
+/// Part's copy is an entry of its own.
 fn record(manifest: &mut Manifest, entry: AssetEntry) {
-    match manifest.assets.iter_mut().find(|held| held.id == entry.id) {
+    match manifest
+        .assets
+        .iter_mut()
+        .find(|held| held.source_sha256 == entry.source_sha256 && held.path == entry.path)
+    {
         Some(held) => {
             let extra = std::mem::take(&mut held.extra);
             *held = AssetEntry { extra, ..entry };
@@ -1123,7 +1439,7 @@ pub fn run_drop(root: &Path, chapter: &str, paths: &[PathBuf]) -> Result<DropRep
         .ok_or_else(|| "the chapter has no folder".to_string())?
         .to_path_buf();
 
-    let threshold = metadata_threshold(root);
+    let threshold = metadata_threshold(root)?;
     let manifest_path = document::confine_path(root, MANIFEST_FILE)?;
     let mut manifest = read_manifest(&manifest_path)?;
     if manifest.threshold_bytes.is_none() {
@@ -1154,12 +1470,16 @@ pub fn run_drop(root: &Path, chapter: &str, paths: &[PathBuf]) -> Result<DropRep
 }
 
 /// The threshold, read once through the one metadata reader.
-fn metadata_threshold(root: &Path) -> u64 {
-    document::confine_path(root, crate::metadata::METADATA_FILE)
-        .ok()
-        .and_then(|path| crate::metadata::read_metadata(&path).ok())
-        .and_then(|metadata| metadata.asset_threshold_bytes)
-        .unwrap_or(DEFAULT_THRESHOLD_BYTES)
+///
+/// A `document.yaml` that will not parse is named rather than swallowed: the
+/// silent fall back to 8 MiB would copy in a file the author had said to leave
+/// where it is, and the first time they learn of it is when the folder is
+/// bigger than they meant it to be.
+fn metadata_threshold(root: &Path) -> Result<u64, String> {
+    let path = document::confine_path(root, crate::metadata::METADATA_FILE)?;
+    Ok(crate::metadata::read_metadata(&path)?
+        .asset_threshold_bytes
+        .unwrap_or(DEFAULT_THRESHOLD_BYTES))
 }
 
 /// What a pasted or dragged address should become. Nothing is written.
@@ -1317,6 +1637,209 @@ mod tests {
         let stripped = without_metadata(&png);
         assert!(!carries_metadata(&stripped));
         assert_eq!(stripped, PNG, "the original PNG, byte for byte");
+    }
+
+    /// A one-pixel GIF: header, screen descriptor, image, terminator.
+    fn gif_without_metadata() -> Vec<u8> {
+        let mut bytes = b"GIF89a".to_vec();
+        // 1x1, no global colour table.
+        bytes.extend_from_slice(&[0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]);
+        // One image descriptor at 0,0, 1x1, no local colour table.
+        bytes.extend_from_slice(&[0x2C, 0, 0, 0, 0, 0x01, 0x00, 0x01, 0x00, 0x00]);
+        // LZW minimum code size, one sub-block, the block terminator.
+        bytes.extend_from_slice(&[0x02, 0x02, 0x44, 0x01, 0x00]);
+        bytes.push(0x3B);
+        bytes
+    }
+
+    /// The same GIF with a comment extension carrying the author's machine.
+    fn gif_with_a_comment() -> Vec<u8> {
+        let plain = gif_without_metadata();
+        let mut bytes = plain[..13].to_vec();
+        let comment = b"drawn on alice-macbook";
+        bytes.extend_from_slice(&[0x21, 0xFE]);
+        bytes.push(u8::try_from(comment.len()).expect("short"));
+        bytes.extend_from_slice(comment);
+        bytes.push(0x00);
+        bytes.extend_from_slice(&plain[13..]);
+        bytes
+    }
+
+    #[test]
+    fn takes_a_gifs_comment_and_application_blocks_out() {
+        let plain = gif_without_metadata();
+        assert!(!carries_metadata(&plain));
+        let commented = gif_with_a_comment();
+        assert!(carries_metadata(&commented));
+        let stripped = without_metadata(&commented);
+        assert!(!carries_metadata(&stripped));
+        assert_eq!(stripped, plain, "the original GIF, byte for byte");
+        assert!(
+            !stripped.windows(5).any(|window| window == b"alice"),
+            "the comment survived"
+        );
+    }
+
+    #[test]
+    fn takes_an_svgs_comments_metadata_and_local_paths_out() {
+        // The absolute paths below are the illustrative machine paths this test
+        // exists to strip out. abcd-lint:allow illustrative refusal path
+        let drawn_on = "/Users/alice/figures";
+        let svg = format!(
+            concat!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">",
+                "<!-- drawn by Alice on 2026-09-05 -->",
+                "<metadata><dc:title>{root}/lantern.svg</dc:title></metadata>",
+                "<sodipodi:namedview id=\"base\" />",
+                "<image sodipodi:absref=\"{root}/lantern.png\" ",
+                "xlink:href=\"file://{root}/lantern.png\" width=\"10\" />",
+                "<path d=\"M 0 0 L 10 10\" />",
+                "</svg>",
+            ),
+            root = drawn_on
+        );
+        let svg = svg.as_str();
+        assert!(carries_metadata(svg.as_bytes()));
+        let stripped = String::from_utf8(without_metadata(svg.as_bytes())).expect("utf-8");
+
+        assert!(!stripped.contains("<!--"), "{stripped}");
+        assert!(!stripped.contains("<metadata"), "{stripped}");
+        assert!(!stripped.contains("sodipodi:namedview"), "{stripped}");
+        assert!(!stripped.contains(drawn_on), "{stripped}");
+        assert!(!stripped.contains("file://"), "{stripped}");
+        // And the picture itself is still there.
+        assert!(stripped.contains("<path d=\"M 0 0 L 10 10\""), "{stripped}");
+        assert!(stripped.contains("viewBox=\"0 0 10 10\""), "{stripped}");
+        assert!(stripped.contains("width=\"10\""), "{stripped}");
+        assert!(!carries_metadata(stripped.as_bytes()));
+    }
+
+    #[test]
+    fn refuses_an_avif_carrying_metadata_it_cannot_take_out() {
+        let mut plain = b"\0\0\0\x20ftypavif".to_vec();
+        plain.extend_from_slice(b"\0\0\0\0mif1miafMA1B");
+        assert_eq!(unstrippable_metadata(&plain), None);
+
+        let mut with_exif = plain.clone();
+        with_exif.extend_from_slice(b"\0\0\0\x20metainfe\0\0\0\0Exif\0");
+        assert_eq!(unstrippable_metadata(&with_exif), Some("AVIF"));
+
+        // And the drop says so rather than copying it.
+        let (_temp, root, chapter) = document(None);
+        let desk = desktop();
+        let source = desk.path().join("figure.avif");
+        fs::write(&source, &with_exif).expect("source");
+        let report = run_drop(
+            &root,
+            &chapter.to_string_lossy(),
+            std::slice::from_ref(&source),
+        )
+        .expect("drop");
+        assert!(report.accepted.is_empty());
+        assert!(
+            report.refused[0].reason.contains("cannot take out"),
+            "{:?}",
+            report.refused
+        );
+        assert!(!root.join("01-beginnings/assets").exists());
+    }
+
+    #[test]
+    fn a_jpeg_this_reader_loses_its_place_in_is_treated_as_carrying_metadata() {
+        // Fail closed: a marker where none belongs means this is not the file
+        // it claims to be, and the safe answer to "is anything in here" is yes.
+        let mut broken = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        broken.extend_from_slice(&[0u8; 14]);
+        broken.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+        assert!(carries_metadata(&broken), "a stray byte reads as metadata");
+
+        let mut zero_length = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x00, 0x00, 0x00];
+        zero_length.extend_from_slice(&[0xFF, 0xD9]);
+        assert!(carries_metadata(&zero_length), "a zero-length segment");
+    }
+
+    #[test]
+    fn a_second_drop_into_another_part_copies_rather_than_climbing_out_of_it() {
+        // A Part is self-contained: a reference that climbs out of it is one the
+        // publish build refuses and one that breaks when either Part moves.
+        let (_temp, root, chapter) = document(None);
+        fs::create_dir(root.join("02-middle")).expect("part");
+        let second_chapter = root.join("02-middle/01-method.md");
+        fs::write(&second_chapter, "# Method\n").expect("chapter");
+
+        let desk = desktop();
+        let source = desk.path().join("lantern.png");
+        fs::write(&source, PNG).expect("source");
+
+        let first = run_drop(
+            &root,
+            &chapter.to_string_lossy(),
+            std::slice::from_ref(&source),
+        )
+        .expect("drop");
+        let second = run_drop(
+            &root,
+            &second_chapter.to_string_lossy(),
+            std::slice::from_ref(&source),
+        )
+        .expect("drop");
+
+        assert_eq!(first.accepted[0].reference, "assets/lantern.png");
+        assert_eq!(second.accepted[0].reference, "assets/lantern.png");
+        assert!(!second.accepted[0].deduplicated, "each Part keeps its own");
+        assert!(root.join("01-beginnings/assets/lantern.png").is_file());
+        assert!(root.join("02-middle/assets/lantern.png").is_file());
+
+        // Two copies, two entries: one entry naming one of them would leave the
+        // other unrecorded.
+        let manifest = read_manifest(&root.join(MANIFEST_FILE)).expect("manifest");
+        assert_eq!(manifest.assets.len(), 2, "{:?}", manifest.assets);
+        let paths: Vec<&str> = manifest
+            .assets
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect();
+        assert!(
+            paths.contains(&"01-beginnings/assets/lantern.png"),
+            "{paths:?}"
+        );
+        assert!(paths.contains(&"02-middle/assets/lantern.png"), "{paths:?}");
+
+        // A third drop into the first Part is still one copy, not two.
+        let again = run_drop(
+            &root,
+            &chapter.to_string_lossy(),
+            std::slice::from_ref(&source),
+        )
+        .expect("drop");
+        assert!(again.accepted[0].deduplicated);
+        assert_eq!(
+            read_manifest(&root.join(MANIFEST_FILE))
+                .expect("manifest")
+                .assets
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn an_unparsable_document_yaml_stops_the_drop_rather_than_guessing() {
+        let (_temp, root, chapter) = document(None);
+        fs::write(root.join("document.yaml"), "title: [unclosed\n").expect("metadata");
+        let desk = desktop();
+        let source = desk.path().join("lantern.png");
+        fs::write(&source, PNG).expect("source");
+        let message = run_drop(
+            &root,
+            &chapter.to_string_lossy(),
+            std::slice::from_ref(&source),
+        )
+        .expect_err("refused");
+        assert!(message.contains("document.yaml"), "{message}");
+        assert!(
+            !root.join("01-beginnings/assets").exists(),
+            "nothing copied"
+        );
     }
 
     #[test]

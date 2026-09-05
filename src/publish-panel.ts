@@ -83,12 +83,25 @@ export interface DeployCheck {
   readonly hash: string | null;
 }
 
+/** A reference the build would not resolve, and why. */
+export interface BuildRefusal {
+  /** The chapter that carries the reference, relative to the document root. */
+  readonly chapter: string;
+  /** The reference exactly as it was written. */
+  readonly reference: string;
+  readonly reason: string;
+}
+
 /** What the panel needs from the world outside the page. */
 export interface PublishServices {
   /** The document's title and the variant to publish. */
   describe(): Promise<{ title: string; variant: string }>;
-  /** Build the version: the text files and the assets to copy. */
-  build(variant: string): Promise<{ files: BuiltFile[]; copies: AssetCopy[] }>;
+  /** Build the version: the text files, the assets to copy, and the refusals. */
+  build(variant: string): Promise<{
+    files: BuiltFile[];
+    copies: AssetCopy[];
+    refusals?: readonly BuildRefusal[];
+  }>;
   publish(request: {
     variant: string;
     flag: string;
@@ -278,12 +291,43 @@ export function createPublishPanel(
     answer();
   }
 
+  /** Say why a step failed, in one line the panel can show. */
+  function failStep(name: string, message: string): void {
+    const item = document.createElement("li");
+    item.className = "publish-step publish-step-failed";
+    item.dataset.step = name;
+    item.dataset.state = "failed";
+    item.textContent = `${name}: failed — ${message}`;
+    steps.append(item);
+  }
+
   async function run(dryRun: boolean): Promise<void> {
     stopWatching();
     steps.replaceChildren();
     links.replaceChildren();
-    const request = { variant, flag, ...(await services.build(variant)) };
+    // The build is inside the try: it reads the document, and a chapter that
+    // will not read is a refusal to show rather than an exception nobody sees.
     try {
+      const built = await services.build(variant);
+      const refusals = built.refusals ?? [];
+      if (refusals.length > 0) {
+        // A reference the build would not resolve is a picture missing from
+        // the published page. It stops the publish and is named, one line
+        // each, rather than going to the site as a gap.
+        failStep(
+          "build",
+          `${String(refusals.length)} reference${refusals.length === 1 ? "" : "s"} resolved to nothing, so nothing was published`,
+        );
+        for (const refusal of refusals) {
+          const item = document.createElement("li");
+          item.className = "publish-refusal";
+          item.dataset.reference = refusal.reference;
+          item.textContent = `${refusal.chapter}: ${refusal.reference} — ${refusal.reason}`;
+          steps.append(item);
+        }
+        return;
+      }
+      const request = { variant, flag, files: built.files, copies: built.copies };
       const outcome = dryRun
         ? await services.publishDryRun(request)
         : await services.publish(request);
@@ -350,9 +394,32 @@ export function createPublishPanel(
     }
   }
 
+  /** Say why the panel has nothing to offer, in the panel rather than nowhere. */
+  function drawRefusal(message: string): void {
+    const heading = document.createElement("h2");
+    heading.textContent = "Publish";
+    const failure = document.createElement("p");
+    failure.className = "publish-failure";
+    failure.textContent = message;
+    const actions = document.createElement("div");
+    actions.className = "publish-actions";
+    actions.append(button("Close", () => panel.close(), "publish-close"));
+    element.replaceChildren(heading, failure, actions);
+  }
+
   /** Build the panel's contents, fresh, every time it opens. */
   async function draw(): Promise<void> {
-    const described = await services.describe();
+    // The panel asks the application what it is about to publish, and that
+    // question reads the document. A refusal — no folder open, an unreadable
+    // chapter, a buffer with unsaved edits — is what the panel says, rather
+    // than an empty overlay and an exception in a console nobody has open.
+    let described: { title: string; variant: string };
+    try {
+      described = await services.describe();
+    } catch (error) {
+      drawRefusal(String(error));
+      return;
+    }
     variant = described.variant;
     flag = "unlisted";
 
@@ -437,7 +504,7 @@ export function createPublishPanel(
       open = true;
       element.hidden = false;
       await draw();
-      element.querySelector<HTMLElement>(".publish-run")?.focus();
+      element.querySelector<HTMLElement>(".publish-run, .publish-close")?.focus();
     },
     close(): void {
       open = false;

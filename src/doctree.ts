@@ -253,6 +253,11 @@ export interface DeckSource {
   readonly text: string;
   readonly chapterPath: string;
   readonly chapterTitle: string;
+  /**
+   * The document's default variant, or the empty string where it declares
+   * none. The deck is built for the variant a publish would build.
+   */
+  readonly variant: string;
 }
 
 /** One image the shell read, as bytes rather than as a path. */

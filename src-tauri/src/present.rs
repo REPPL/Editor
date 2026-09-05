@@ -35,6 +35,9 @@ pub struct DeckSource {
     pub chapter_path: String,
     /// What the present window puts in its title bar.
     pub chapter_title: String,
+    /// The document's default variant, so the deck rehearsed is the deck
+    /// published. Empty where the document declares none.
+    pub variant: String,
 }
 
 /// The one deck waiting to be collected.
@@ -148,17 +151,19 @@ pub fn asset_threshold(root: &Path) -> Result<u64, String> {
         .unwrap_or(DEFAULT_ASSET_THRESHOLD_BYTES))
 }
 
-/// Read one image, refusing anything above the threshold.
+/// Read one image, refusing anything at or above the threshold.
 ///
-/// The threshold is the copied-asset rule: a file larger than it is a
-/// referenced asset, which map #4 owns and which no rendering inlines.
+/// The threshold is the copied-asset rule, and it is one rule: a drop
+/// references rather than copies a file *at or above* it, so a file of exactly
+/// that size is a referenced asset — which map #4 owns and which no rendering
+/// inlines — and this reads the same edge the drop wrote.
 pub fn read_asset_bytes(path: &Path, threshold: u64) -> Result<AssetBytes, String> {
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.to_string_lossy().into_owned());
     let metadata = fs::metadata(path).map_err(|error| format!("cannot read {name}: {error}"))?;
-    if metadata.len() > threshold {
+    if metadata.len() >= threshold {
         return Err(format!("{name} is larger than the copied-asset threshold"));
     }
     let mime =
@@ -196,6 +201,45 @@ pub fn deck_title(text: &str, chapter_path: &str) -> String {
         .unwrap_or_else(|| chapter_path.to_string())
 }
 
+/// The variant a Present builds, which is the one a publish would build.
+///
+/// The document's declared default, else the first variant it declares, else
+/// nothing — the same answer the publish build takes, so the deck at the
+/// lectern is the deck at the link. A document with no metadata is not a
+/// failure: it simply declares no variant.
+pub fn default_variant(root: &Path) -> String {
+    let path = root.join(metadata::METADATA_FILE);
+    let Ok(metadata) = metadata::read_metadata(&path) else {
+        return String::new();
+    };
+    metadata
+        .default_variant
+        .or_else(|| metadata.variants.first().cloned())
+        .unwrap_or_default()
+}
+
+/// Hold one chapter for the present window, and answer what was held.
+///
+/// The path is confined before it is stored, so the present window can only
+/// ever be handed a chapter of the open document. Nothing is written: this is
+/// the whole of what Present does to the document folder.
+pub fn hold_chapter(
+    root: &Path,
+    pending: &PendingDeck,
+    text: String,
+    chapter_path: String,
+) -> Result<DeckSource, String> {
+    document::confine_chapter(root, &chapter_path)?;
+    let source = DeckSource {
+        chapter_title: deck_title(&text, &chapter_path),
+        variant: default_variant(root),
+        text,
+        chapter_path,
+    };
+    pending.set(source.clone())?;
+    Ok(source)
+}
+
 /// The window label the deck runs in.
 pub const PRESENT_WINDOW: &str = "present";
 
@@ -225,15 +269,7 @@ pub async fn present_chapter<R: tauri::Runtime>(
     pending: tauri::State<'_, PendingDeck>,
 ) -> Result<(), String> {
     let root = root.get()?;
-    // The path is confined before it is stored, so the present window can only
-    // ever be handed a chapter of the open document.
-    let chapter = document::confine_chapter(&root, &chapter_path)?;
-    let _ = chapter;
-    pending.set(DeckSource {
-        chapter_title: deck_title(&text, &chapter_path),
-        text,
-        chapter_path,
-    })?;
+    hold_chapter(&root, &pending, text, chapter_path)?;
 
     use tauri::{Emitter, Manager};
     if let Some(window) = app.get_webview_window(PRESENT_WINDOW) {
@@ -360,6 +396,11 @@ mod tests {
             message.contains("larger than the copied-asset threshold"),
             "{message}"
         );
+        // One edge, shared with the drop: at the threshold a file is a
+        // referenced asset, so it is not one this reads either.
+        let size = fs::metadata(&path).expect("metadata").len();
+        assert!(read_asset_bytes(&path, size).is_err(), "at the threshold");
+        assert!(read_asset_bytes(&path, size + 1).is_ok(), "below it");
         // And the refusal names the file, not the author's machine.
         assert!(
             !message.contains(root.to_string_lossy().as_ref()),
@@ -389,6 +430,7 @@ mod tests {
             text: "# One\n".to_string(),
             chapter_path: "01-part/01-alice.md".to_string(),
             chapter_title: "One".to_string(),
+            variant: "talk".to_string(),
         };
         pending.set(first.clone()).expect("held");
         assert_eq!(pending.get().expect("held"), first);
@@ -399,6 +441,105 @@ mod tests {
         };
         pending.set(second.clone()).expect("held");
         assert_eq!(pending.get().expect("held"), second);
+    }
+
+    /// Every file under a folder with its size, which is what "wrote nothing"
+    /// means when the claim is about a folder rather than about one file.
+    fn listing(folder: &Path) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut stack = vec![folder.to_path_buf()];
+        while let Some(next) = stack.pop() {
+            for entry in fs::read_dir(&next).expect("read") {
+                let entry = entry.expect("entry");
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let size = fs::metadata(&path).expect("metadata").len();
+                found.push(format!("{} {size}", path.display()));
+            }
+        }
+        found.sort();
+        found
+    }
+
+    #[test]
+    fn presenting_leaves_the_chapters_bytes_untouched() {
+        // Through the command's own path: the chapter is confined, held in the
+        // pending deck, and handed back — and the document folder is byte for
+        // byte what it was, because Present writes nothing at all.
+        let (_dir, root) = document();
+        let chapter = root.join("01-part/01-alice.md");
+        let before_bytes = fs::read(&chapter).expect("read");
+        let before_listing = listing(&root);
+
+        let pending = PendingDeck::default();
+        let edited = "# Alice\n\nAn unsaved paragraph.\n".to_string();
+        let held = hold_chapter(
+            &root,
+            &pending,
+            edited.clone(),
+            "01-part/01-alice.md".to_string(),
+        )
+        .expect("held");
+
+        assert_eq!(
+            held.text, edited,
+            "the buffer's text presents, not the file's"
+        );
+        assert_eq!(pending.get().expect("held"), held);
+        assert_eq!(fs::read(&chapter).expect("read"), before_bytes);
+        assert_eq!(listing(&root), before_listing, "Present wrote a file");
+    }
+
+    #[test]
+    fn presenting_carries_the_documents_default_variant() {
+        let (_dir, root) = document();
+        let pending = PendingDeck::default();
+        // No metadata: the document declares no variant, and that is not a
+        // failure.
+        let none = hold_chapter(
+            &root,
+            &pending,
+            "# Alice\n".to_string(),
+            "01-part/01-alice.md".to_string(),
+        )
+        .expect("held");
+        assert_eq!(none.variant, "");
+
+        fs::write(
+            root.join("document.yaml"),
+            "variants: [talk, full]\ndefault_variant: full\n",
+        )
+        .expect("yaml");
+        let declared = hold_chapter(
+            &root,
+            &pending,
+            "# Alice\n".to_string(),
+            "01-part/01-alice.md".to_string(),
+        )
+        .expect("held");
+        assert_eq!(declared.variant, "full");
+
+        // With no default declared, the first variant is the one presented.
+        fs::write(root.join("document.yaml"), "variants: [talk, full]\n").expect("yaml");
+        assert_eq!(default_variant(&root), "talk");
+    }
+
+    #[test]
+    fn presenting_refuses_a_chapter_outside_the_open_document() {
+        let (_dir, root) = document();
+        let pending = PendingDeck::default();
+        let message = hold_chapter(
+            &root,
+            &pending,
+            "# Elsewhere\n".to_string(),
+            "../elsewhere.md".to_string(),
+        )
+        .expect_err("refused");
+        assert!(message.contains("outside the open document"), "{message}");
+        assert!(pending.get().is_err(), "nothing was held");
     }
 
     #[test]

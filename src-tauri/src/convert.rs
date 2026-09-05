@@ -25,9 +25,46 @@ const JPEG_QUALITY: f64 = 0.82;
 #[cfg(target_os = "macos")]
 const JPEG_UTI: &str = "public.jpeg";
 
+/// The largest file this build hands to the decoder.
+///
+/// A decode is the one place a dropped file's own bytes decide how much memory
+/// Editor asks for, so the ceiling is stated rather than discovered: a phone
+/// photograph is a few tens of megabytes, and a file above this is refused with
+/// a sentence rather than taking the application down with it.
+pub const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// The largest decoded image this build re-encodes, in pixels.
+///
+/// Bytes bound the input; pixels bound what a decode expands to. Eighty
+/// megapixels is well above any camera a phone carries and well below the size
+/// at which a re-encode is the machine's whole memory.
+pub const MAX_PIXELS: u64 = 80_000_000;
+
 /// Whether this build can convert at all.
 pub const fn available() -> bool {
     cfg!(target_os = "macos")
+}
+
+/// Refuse a source too large to decode.
+pub fn check_source_size(bytes: u64) -> Result<(), String> {
+    if bytes > MAX_SOURCE_BYTES {
+        return Err(format!(
+            "the image is larger than the {} MiB an image conversion reads",
+            MAX_SOURCE_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(())
+}
+
+/// Refuse a decoded image with more pixels than a re-encode may hold.
+pub fn check_pixels(width: u64, height: u64) -> Result<(), String> {
+    if width.saturating_mul(height) > MAX_PIXELS {
+        return Err(format!(
+            "the image is larger than the {} megapixels an image conversion writes",
+            MAX_PIXELS / 1_000_000
+        ));
+    }
+    Ok(())
 }
 
 /// Decode `bytes` and re-encode them as a JPEG holding no metadata.
@@ -43,6 +80,7 @@ pub fn to_web_jpeg(bytes: &[u8]) -> Result<Vec<u8>, String> {
         kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks, CFBoolean, CFData,
         CFMutableData, CFMutableDictionary, CFNumber, CFString,
     };
+    use objc2_core_graphics::CGImage;
     use objc2_image_io::{
         kCGImageDestinationLossyCompressionQuality, kCGImageSourceCreateThumbnailFromImageAlways,
         kCGImageSourceCreateThumbnailWithTransform, CGImageDestination, CGImageSource,
@@ -51,6 +89,7 @@ pub fn to_web_jpeg(bytes: &[u8]) -> Result<Vec<u8>, String> {
     if bytes.is_empty() {
         return Err("the file is empty".to_string());
     }
+    check_source_size(bytes.len() as u64)?;
     let length = isize::try_from(bytes.len()).map_err(|_| "the file is too large".to_string())?;
 
     // SAFETY: `bytes` outlives the call, and `CFDataCreate` copies it.
@@ -91,6 +130,10 @@ pub fn to_web_jpeg(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let image = unsafe { source.thumbnail_at_index(0, Some(&read_options)) }
         .or_else(|| unsafe { source.image_at_index(0, None) })
         .ok_or_else(|| "the image cannot be decoded".to_string())?;
+    check_pixels(
+        CGImage::width(Some(&image)) as u64,
+        CGImage::height(Some(&image)) as u64,
+    )?;
 
     let written = CFMutableData::new(None, 0).ok_or_else(|| "cannot hold the JPEG".to_string())?;
     let uti = CFString::from_str(JPEG_UTI);
@@ -176,5 +219,20 @@ mod tests {
     #[test]
     fn says_whether_it_can_convert() {
         assert_eq!(available(), cfg!(target_os = "macos"));
+    }
+
+    #[test]
+    fn caps_what_a_conversion_reads_and_what_it_writes() {
+        // The ceilings are stated, not discovered: a decode is the one place a
+        // dropped file's own bytes decide how much memory Editor asks for.
+        assert!(check_source_size(MAX_SOURCE_BYTES).is_ok());
+        let message = check_source_size(MAX_SOURCE_BYTES + 1).expect_err("refused");
+        assert!(message.contains("MiB"), "{message}");
+
+        assert!(check_pixels(8000, 6000).is_ok());
+        let pixels = check_pixels(40_000, 40_000).expect_err("refused");
+        assert!(pixels.contains("megapixels"), "{pixels}");
+        // And the multiplication cannot itself overflow into a pass.
+        assert!(check_pixels(u64::MAX, u64::MAX).is_err());
     }
 }

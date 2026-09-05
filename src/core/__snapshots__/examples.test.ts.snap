@@ -118,8 +118,8 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 </section>
 <section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="11">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/congress.svg" alt="Congressional Research Service report R46327 on the OTA" />
 <figcaption>
@@ -131,7 +131,7 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 <strong>U.S.:</strong> Office of Technology Assessment <em>(1972 – 1995)</em>
 </p>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/tab.svg" alt="TAB's current work: rares earths, HR analytics, plastics in the oceans, horizon scanning" />
 <figcaption>
@@ -174,14 +174,14 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 <section id="adding-insult-to-injury" class="slide slide-section" data-kind="section" data-line="43">
 <h2 class="headline">Adding insult to injury?</h2>
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <blockquote>
 <p>The problem is that Treebeard operates at a very different speed than the Hobbits. It takes him a full day simply to say hello to another tree, so getting him and his peers to act fast enough is nearly impossible.
 --Dario Amodei, June 2026</p>
 </blockquote>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/amodei1.svg" alt="Dario Amodei's policy essay, published this month" />
 <figcaption>
@@ -206,8 +206,8 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 </section>
 <section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="7">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/two-perspectives1.svg" alt="Clients vs. users — the baby-mobile cartoon" />
 <figcaption>
@@ -215,7 +215,7 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 </figcaption>
 </figure>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/two-perspectives2.svg" alt="Marketing's perspective vs. the customer's perspective" />
 <figcaption>
@@ -257,14 +257,14 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 </section>
 <section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="36">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <blockquote>
 <p>I think that most people are underestimating just how radical the upside of AI could be, just as I think most people are underestimating how bad the risks could be.
 --Dario Amodei, "Machines of Loving Grace", October 2024</p>
 </blockquote>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/amodei2.svg" alt="Machines of Loving Grace, October 2024" />
 <figcaption>
@@ -280,14 +280,14 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 </section>
 <section id="slide-3" class="slide slide-continuation" data-kind="continuation" data-line="52">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <blockquote>
 <p>We tend to overestimate the effect of a technology in the short run and underestimate the effect in the long run.
 --Roy Amara</p>
 </blockquote>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/amaras-law.svg" alt="Amara's Law — IEEE Computer Society" />
 <figcaption>
@@ -633,8 +633,8 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 <section id="stay-in-touch" class="slide slide-section" data-kind="section" data-line="8">
 <h2 class="headline">Stay in touch!</h2>
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <figure class="full-bleed">
 <img src="assets/qrcode-linkedin.svg" alt="Scan to connect on LinkedIn." />
 <figcaption>
@@ -642,7 +642,7 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 </figcaption>
 </figure>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <p>
 <strong>Shamless self-promotion:</strong>
 </p>
@@ -662,8 +662,8 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 <section id="appendix-sources-1-of-2" class="slide slide-section refs" data-kind="section" data-line="25">
 <h2 class="headline">Appendix · Sources (1 of 2)</h2>
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <ul>
 <li>Colorado Encyclopedia — <em>Colorado Gold Rush</em>. coloradoencyclopedia.org/article/colorado-gold-rush</li>
 <li>Denver Public Library, Western History Collection — history.denverlibrary.org</li>
@@ -674,7 +674,7 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 <li>CRS (2020) — <em>The Office of Technology Assessment</em>, R46327. congress.gov/crs-product/R46327</li>
 </ul>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <ul>
 <li>Grunwald, A. (2014) — <em>Parlamentarische Technikfolgenabschätzung</em>, APuZ. bpb.de/shop/zeitschriften/apuz/177763</li>
 <li>TAB — <em>About us</em>. tab-beim-bundestag.de/english/about-us.php</li>
@@ -692,8 +692,8 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 <section id="appendix-sources-2-of-2" class="slide slide-section refs" data-kind="section" data-line="49">
 <h2 class="headline">Appendix · Sources (2 of 2)</h2>
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <ul>
 <li>McKinsey &amp; Gartner agentic-commerce projections, via nshift.com/blog/agentic-commerce-future-of-ecommerce</li>
 <li>Morgan Stanley projection, via commercetools.com/blog/ai-trends-shaping-agentic-commerce</li>
@@ -707,7 +707,7 @@ exports[`the built deck on every example chapter > examples/presentation/01-slid
 <li>Amodei, D. (Oct 2024) — <em>Machines of Loving Grace</em>. darioamodei.com</li>
 </ul>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <ul>
 <li>Lincoln Institute (Feb 2026) — <em>Data Drain: Land and Water Impacts of the AI Boom</em>. lincolninst.edu/publications/land-lines-magazine/articles/land-water-impacts-data-centers</li>
 <li>Baldé et al. (2024) — <em>Global E-waste Monitor 2024</em>, ITU/UNITAR. ewastemonitor.info/the-global-e-waste-monitor-2024</li>
@@ -1251,13 +1251,13 @@ exports[`the built deck on every example chapter > examples/talk/01-talk/04-exam
 </section>
 <section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="17">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <figure class="full-bleed full-bleed">
 <img src="assets/screenshot-2026-01-12-15-20-19.svg" />
 </figure>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed full-bleed">
 <img src="assets/screenshot-2026-01-12-15-20-00.svg" />
 </figure>
@@ -1267,13 +1267,13 @@ exports[`the built deck on every example chapter > examples/talk/01-talk/04-exam
 </section>
 <section id="slide-3" class="slide slide-continuation" data-kind="continuation" data-line="28">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <figure class="full-bleed full-bleed">
 <img src="assets/screenshot-2026-01-12-15-25-16.svg" />
 </figure>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed full-bleed">
 <img src="assets/screenshot-2026-01-12-15-20-46.svg" />
 </figure>
@@ -1590,15 +1590,15 @@ exports[`the built deck on every example chapter > examples/talk/01-talk/11-than
 </section>
 <section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="5">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <figure class="full-bleed full-bleed">
 <img src="assets/manuscript.svg" />
 </figure>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed">
-<img src="assets/qrcode-manuscript.svg" width="75%" />
+<img src="assets/qrcode-manuscript.svg" data-width="75" />
 </figure>
 </div>
 </div>
@@ -1606,15 +1606,15 @@ exports[`the built deck on every example chapter > examples/talk/01-talk/11-than
 </section>
 <section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="16">
 <div class="face">
-<div class="columns" style="--column-tracks: 50% 50%">
-<div class="column">
+<div class="columns" data-columns="2">
+<div class="column" data-width="50">
 <figure class="full-bleed full-bleed">
 <img src="assets/github-projects.svg" />
 </figure>
 </div>
-<div class="column">
+<div class="column" data-width="50">
 <figure class="full-bleed">
-<img src="assets/qrcode-projects.svg" width="75%" />
+<img src="assets/qrcode-projects.svg" data-width="75" />
 </figure>
 </div>
 </div>

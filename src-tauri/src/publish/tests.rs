@@ -27,11 +27,15 @@ case "$3" in
   rev-parse) exit 0 ;;
   symbolic-ref) echo refs/heads/main; exit 0 ;;
   status) echo ' M site/index.html'; exit 0 ;;
+  remote) echo origin; exit 0 ;;
+  rev-list) cat {here}/ahead 2>/dev/null || echo 0; exit 0 ;;
+  commit) echo 1 > {here}/ahead; exit 0 ;;
   push)
     if [ -f {here}/push-fails ]; then
       echo 'fatal: could not read Username for https://example.invalid' >&2
       exit 128
     fi
+    echo 0 > {here}/ahead
     exit 0 ;;
   *) exit 0 ;;
 esac
@@ -44,6 +48,18 @@ esac
 
     fn fail_the_push(&self) {
         fs::write(self.dir.path().join("push-fails"), b"").expect("write");
+    }
+
+    fn allow_the_push(&self) {
+        let _ = fs::remove_file(self.dir.path().join("push-fails"));
+    }
+
+    /// How many times a push was attempted, whatever it answered.
+    fn pushes(&self) -> usize {
+        self.calls()
+            .iter()
+            .filter(|call| call.contains(" push "))
+            .count()
     }
 
     fn calls(&self) -> Vec<String> {
@@ -390,6 +406,91 @@ fn a_failed_push_leaves_the_document_folder_but_for_the_id() {
 }
 
 #[test]
+fn a_retry_after_a_failed_push_pushes_the_held_commit() {
+    let fixture = Fixture::new();
+    run_publish(&fixture.context(false), &request("one")).expect("published");
+
+    // The second publish writes its version and commits it, and the push fails.
+    fixture.fake.fail_the_push();
+    let failed = run_publish(&fixture.context(false), &request("two")).expect("reported");
+    assert!(!failed.pushed);
+    assert_eq!(fixture.log().len(), 1, "nothing claimed to have landed");
+
+    // Alice fixes her credential and presses Publish again. Nothing on the site
+    // has changed since, so there is nothing to write and nothing to commit —
+    // but the commit the failed attempt left is what the site is waiting for,
+    // and skipping the push here would record a link the site never received.
+    fixture.fake.allow_the_push();
+    let before = fixture.fake.pushes();
+    let retried = run_publish(&fixture.context(false), &request("two")).expect("published");
+    assert_eq!(retried.hash, failed.hash);
+    assert!(retried.pushed, "{:?}", retried.steps);
+    assert_eq!(
+        fixture.fake.pushes(),
+        before + 1,
+        "the held commit was sent"
+    );
+    let push = retried
+        .steps
+        .iter()
+        .find(|step| step.name == "push")
+        .expect("a push step");
+    assert_eq!(push.state, "done", "{push:?}");
+    // And only now does an entry say this version reached the site.
+    assert_eq!(fixture.log().len(), 2);
+}
+
+#[test]
+fn check_deploy_is_refused_outside_a_publish() {
+    // The one outbound call in the crate is open only while a publish Alice
+    // pressed is waiting for its own version to appear.
+    let watch = PublishInProgress::default();
+    let hash = "cccccccccccccccccccccccccc";
+    let message = guard_deploy_check(&watch, hash).expect_err("refused");
+    assert!(message.contains("no publish is waiting"), "{message}");
+    watch.started(hash).expect("started");
+    assert!(guard_deploy_check(&watch, hash).is_ok());
+    assert!(
+        guard_deploy_check(&watch, "dddddddddddddddddddddddddd").is_err(),
+        "only the version this publish produced"
+    );
+}
+
+#[test]
+fn a_flow_style_variant_tokens_gains_the_token_inside_its_braces() {
+    let fixture = Fixture::new();
+    let yaml = fixture.document.path().join("document.yaml");
+    fs::write(
+        &yaml,
+        "title: The Lantern Papers\nvariants: [talk, full]\ndefault_variant: talk\nvariant_tokens: {}\n",
+    )
+    .expect("write");
+
+    let talk = run_publish(&fixture.context(false), &request("one")).expect("published");
+    let mut full_request = request("one");
+    full_request.variant = "full".to_string();
+    let full = run_publish(&fixture.context(false), &full_request).expect("published");
+
+    let after = fixture.document_yaml();
+    assert_eq!(
+        after.matches("variant_tokens:").count(),
+        1,
+        "the key was written twice:\n{after}"
+    );
+    assert!(
+        after.contains(&format!(
+            "variant_tokens: {{talk: {}, full: {}}}",
+            talk.token, full.token
+        )),
+        "{after}"
+    );
+    // And the file still reads back as the metadata it was.
+    let metadata = crate::metadata::read_metadata(&yaml).expect("read");
+    assert_eq!(metadata.variant_tokens.get("talk"), Some(&talk.token));
+    assert_eq!(metadata.variant_tokens.get("full"), Some(&full.token));
+}
+
+#[test]
 fn dry_run_leaves_no_trace() {
     let fixture = Fixture::new();
     let before = fixture.document_yaml();
@@ -538,12 +639,48 @@ fn check_deploy_refuses_a_hash_that_is_not_a_name() {
 
 #[test]
 fn an_editing_session_makes_no_request() {
-    // The publish path is the only one that can reach the network, and the
-    // dry run runs all of it but the push and the poll. Running it proves the
-    // rest of the pipeline needs no request at all.
+    // Against a socket that reports every connection made to it, so the claim
+    // is about requests rather than about which functions were called.
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a socket");
+    let port = listener.local_addr().expect("an address").port();
+    let (seen, heard) = mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            if seen.send(()).is_err() {
+                break;
+            }
+            drop(stream);
+        }
+    });
+    let base = format!("https://127.0.0.1:{port}");
+
     let fixture = Fixture::new();
-    run_publish(&fixture.context(true), &request("one")).expect("dry run");
-    assert!(fixture.fake.calls().is_empty());
+    let mut context = fixture.context(false);
+    context.settings.publish.base_url = base.clone();
+    let mut dry = context.clone();
+    dry.dry_run = true;
+
+    // Everything an editing session does that touches the publish machinery.
+    preflight(&context, "talk");
+    run_publish(&context, &request("one")).expect("published");
+    run_publish(&dry, &request("two")).expect("dry run");
+    log::entries_newest_first(&log::log_path(fixture.document.path())).expect("read");
+
+    assert!(
+        matches!(heard.try_recv(), Err(mpsc::TryRecvError::Empty)),
+        "an editing session reached the network"
+    );
+
+    // And the socket is listening: the one call that may leave the machine does.
+    let hash = "cccccccccccccccccccccccccc";
+    let _ = check_deploy_at(&base, &format!("{base}/{hash}/latest.json"), hash);
+    assert!(
+        heard.recv_timeout(Duration::from_secs(20)).is_ok(),
+        "the request-observing socket heard nothing at all"
+    );
 }
 
 #[test]

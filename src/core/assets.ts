@@ -133,17 +133,6 @@ export function pathResolver(prefix = ""): Resolver {
 }
 
 /**
- * The site build's resolver: a relative path under the deck's own folder.
- *
- * The build copies each referenced file to `<prefix><path>` beside the deck,
- * so the deck opens from the published folder and from a disk copy of it
- * alike.
- */
-export function siteResolver(prefix: string): Resolver {
-  return pathResolver(prefix);
-}
-
-/**
  * The app's resolver: the bytes the shell read, as a `data:` URI.
  *
  * A reference the map has no entry for resolves to nothing and is reported,

@@ -12,7 +12,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 
 import { createApp, type AppServices } from "./app";
-import { parseChapter } from "./core/parse";
 import { createDropTarget } from "./drop-target";
 import { documentText } from "./editor";
 import {
@@ -30,7 +29,11 @@ import {
   writeChapter,
 } from "./doctree";
 import { createPublishPanel, mountPublishPanel } from "./publish-panel";
-import { createPublishServices, type DocumentForPublish } from "./publish/services";
+import {
+  createPublishServices,
+  documentForPublish,
+  type DocumentForPublish,
+} from "./publish/services";
 import { createSettingsPanel, mountSettingsPanel } from "./settings-panel";
 import { createSettingsServices } from "./settings";
 import "./style.css";
@@ -102,39 +105,18 @@ app.onDropTarget("text", (payload) => {
 /**
  * The document as the publish build sees it.
  *
- * The parse is the one parse: the chapters are read in a single round trip and
- * handed to `parseChapter`, and the paths are made relative to the document
- * root, because the build names an asset by where it sits in the document and
- * never by where the document sits on this machine.
+ * The rule is `documentForPublish`'s, which is where the refusals are tested;
+ * this only says where the application keeps each thing it asks for.
  */
-async function loadForPublish(): Promise<DocumentForPublish> {
-  const documentRoot = app.documentRoot;
-  if (documentRoot === null) {
-    throw new Error("Open a document folder before publishing");
-  }
-  const chapters = app.chapters;
-  if (chapters.length === 0) {
-    throw new Error("This document holds no chapters to publish");
-  }
-  const batch = await readChapters(chapters.map((chapter) => chapter.path));
-  const byPath = new Map(batch.reads.map((read) => [read.path, read.text]));
-  const metadata = await readDocumentMetadata();
-  const prefix = documentRoot.endsWith("/") ? documentRoot : `${documentRoot}/`;
-  const inputs = [];
-  for (const chapter of chapters) {
-    const text = byPath.get(chapter.path);
-    if (text === undefined) continue;
-    const relative = chapter.path.startsWith(prefix)
-      ? chapter.path.slice(prefix.length)
-      : chapter.path;
-    inputs.push({ path: relative, chapter: parseChapter(text) });
-  }
-  const variant = metadata.default_variant ?? metadata.variants[0] ?? "";
-  return {
-    title: metadata.title ?? chapters[0]?.title ?? "Untitled",
-    variant,
-    tree: { chapters: inputs },
-  };
+function loadForPublish(): Promise<DocumentForPublish> {
+  return documentForPublish(
+    {
+      documentRoot: app.documentRoot,
+      dirty: app.dirty,
+      chapters: app.chapters,
+    },
+    { readChapters, readDocumentMetadata },
+  );
 }
 
 // Publish, `C-c C-l`, and settings, `C-c C-,`: two overlays mounted through

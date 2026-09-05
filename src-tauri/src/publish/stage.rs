@@ -20,8 +20,20 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::document::confine_path;
+use crate::document::{confine_asset, confine_path, ASSET_EXTENSIONS};
 use crate::publish::identity::{is_identifier, listing_of, version_hash};
+
+/// Whether a path inside the version folder is one a publish may write bytes to.
+///
+/// The same list the shell reads an image by, so what the site carries and what
+/// the app will open are one answer rather than two.
+fn is_publishable_asset(path: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .map(|extension| extension.to_string_lossy().to_ascii_lowercase())
+        .map(|extension| ASSET_EXTENSIONS.contains(&extension.as_str()))
+        .unwrap_or(false)
+}
 
 /// A text file the build produced, named relative to the version folder.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,7 +205,17 @@ pub fn stage_version(
         write_file(&target, file.text.as_bytes())?;
     }
     for copy in copies {
-        let source = confine_path(&document_root, &copy.from)?;
+        // The build names what to copy, and the build runs in the web view. So
+        // the extension is held to the ones a published version carries at both
+        // ends: a sidecar, a key or a configuration file beside a picture is
+        // not something a publish may put on a public site.
+        let source = confine_asset(&document_root, &copy.from)?;
+        if !is_publishable_asset(&copy.to) {
+            return Err(format!(
+                "{} is not a file a published version carries",
+                copy.to
+            ));
+        }
         let target = confined_target(&root, &copy.to)?;
         let bytes = fs::read(&source)
             .map_err(|error| format!("cannot read {}: {error}", source.display()))?;
@@ -316,8 +338,11 @@ fn check_names(id: &str, token: &str, hash: &str) -> Result<(), String> {
 }
 
 /// Resolve a built path inside the staging tree, refusing a climb out of it.
+///
+/// A climb is a `..` segment, not the two characters anywhere in the name: a
+/// file the author called `lantern..jpg` is a file, not an escape.
 fn confined_target(root: &Path, relative: &str) -> Result<PathBuf, String> {
-    if relative.starts_with('/') || relative.contains("..") {
+    if relative.starts_with('/') || relative.split('/').any(|segment| segment == "..") {
         return Err(format!("{relative} is not a path inside the version"));
     }
     let target = root.join(relative);
@@ -493,10 +518,10 @@ mod tests {
     fn stage_refuses_an_asset_outside_the_document_folder() {
         let fixture = fixture();
         let outside = tempfile::tempdir().expect("temp dir");
-        fs::write(outside.path().join("secret.txt"), b"secret").expect("write");
+        fs::write(outside.path().join("secret.png"), b"secret").expect("write");
         let from = outside
             .path()
-            .join("secret.txt")
+            .join("secret.png")
             .to_string_lossy()
             .into_owned();
         let message = stage_version(
@@ -505,11 +530,83 @@ mod tests {
             &files("one"),
             &[AssetCopy {
                 from,
-                to: "assets/secret.txt".to_string(),
+                to: "assets/secret.png".to_string(),
             }],
         )
         .expect_err("refused");
         assert!(message.contains("outside the open document"), "{message}");
+    }
+
+    #[test]
+    fn stage_refuses_an_asset_that_is_not_one_a_version_carries() {
+        // The build names what to copy and the build runs in the web view, so a
+        // sidecar beside a picture must not be able to reach a public site.
+        let fixture = fixture();
+        fs::create_dir_all(fixture.document.path().join("01-part/assets")).expect("folders");
+        fs::write(
+            fixture.document.path().join("01-part/assets/deploy.key"),
+            b"a private key",
+        )
+        .expect("write");
+        let message = stage_version(
+            &fixture.staging,
+            fixture.document.path(),
+            &files("one"),
+            &[AssetCopy {
+                from: "01-part/assets/deploy.key".to_string(),
+                to: "assets/01-part/deploy.key".to_string(),
+            }],
+        )
+        .expect_err("refused");
+        assert!(
+            message.contains("not an image this phase carries"),
+            "{message}"
+        );
+
+        // And the target name is held to the same list, so a picture cannot be
+        // renamed into something else on its way into the version.
+        fs::write(
+            fixture.document.path().join("01-part/assets/lantern.png"),
+            b"not really a png",
+        )
+        .expect("write");
+        let renamed = stage_version(
+            &fixture.staging,
+            fixture.document.path(),
+            &files("one"),
+            &[AssetCopy {
+                from: "01-part/assets/lantern.png".to_string(),
+                to: "assets/01-part/lantern.key".to_string(),
+            }],
+        )
+        .expect_err("refused");
+        assert!(
+            renamed.contains("not a file a published version carries"),
+            "{renamed}"
+        );
+    }
+
+    #[test]
+    fn stage_takes_a_file_whose_name_merely_carries_two_dots() {
+        let fixture = fixture();
+        fs::create_dir_all(fixture.document.path().join("01-part/assets")).expect("folders");
+        fs::write(
+            fixture.document.path().join("01-part/assets/lantern..png"),
+            b"not really a png",
+        )
+        .expect("write");
+        let staged = stage_version(
+            &fixture.staging,
+            fixture.document.path(),
+            &files("one"),
+            &[AssetCopy {
+                from: "01-part/assets/lantern..png".to_string(),
+                to: "assets/01-part/lantern..png".to_string(),
+            }],
+        )
+        .expect("staged");
+        assert!(fixture.staging.join("assets/01-part/lantern..png").exists());
+        assert!(is_identifier(&staged.hash));
     }
 
     #[test]
