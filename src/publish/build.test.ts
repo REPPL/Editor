@@ -188,3 +188,39 @@ describe("the asset plan", () => {
     ).toBe("../assets/01-part/lantern.jpg");
   });
 });
+
+/**
+ * The deck at the link is one deck.
+ *
+ * Every chapter is rendered with its own asset resolver, because a reference
+ * is relative to the Part its chapter sits in. That must not cost the deck its
+ * ids: two chapters that open with the same heading would otherwise both claim
+ * the same `#fragment`, and a link Alice sends would land on whichever the
+ * browser found first.
+ */
+describe("slide ids across a whole document", () => {
+  function idsOf(html: string): string[] {
+    return [...html.matchAll(/<section[^>]*\sid="([^"]+)"/g)].map((match) => match[1] ?? "");
+  }
+
+  it("gives no two slides the same id, across chapters", () => {
+    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026" });
+    const ids = idsOf(rendered.deck);
+    expect(ids.length).toBeGreaterThan(1);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps two chapters with the very same headings apart", () => {
+    const one = "# A chapter\n\n## Why this matters\n\nBecause.\n";
+    const two = "# Another chapter\n\n## Why this matters\n\nBecause again.\n";
+    const tree: DocumentSource = {
+      chapters: [
+        { path: "01-parts/01-one.md", chapter: parseChapter(one) },
+        { path: "01-parts/02-two.md", chapter: parseChapter(two) },
+      ],
+    };
+    const ids = idsOf(renderVariant(tree, "talk", { title: "Two chapters" }).deck);
+    expect(ids.filter((id) => id === "why-this-matters")).toHaveLength(1);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});

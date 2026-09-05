@@ -17,6 +17,7 @@ import { INSERT_FORMS, formById, formsVisibleIn } from "./core/inserts";
 import { createEditor, documentText } from "./editor";
 import { bindingById } from "./keys";
 import { closeOverlay } from "./overlay";
+import { parseChapter } from "./core/parse";
 import { PALETTE_PHASE, insertForm, openPalette } from "./palette";
 
 /** A chapter with a heading, a paragraph, and a blank line to insert on. */
@@ -279,5 +280,41 @@ describe("one source for a canonical form", () => {
     }
     // And the palette does reach the one table.
     expect(readFileSync("src/palette.ts", "utf8")).toContain("./core/inserts");
+  });
+});
+
+/**
+ * Inserting at the end of a paragraph the author has just typed.
+ *
+ * The forms carry the blank line *after* them; the blank line before is the
+ * palette's, because a form beginning with a newline could not also be the
+ * canon's own text on an empty line. This is the check that the palette
+ * supplies it — without one, `---` on the line under a paragraph is a setext
+ * heading, which turns the sentence just typed into an `<h2>` and inserts no
+ * rule at all.
+ */
+describe("inserting straight after prose", () => {
+  it("splits the slide rather than making a heading of the paragraph above", () => {
+    place(view.state.doc.line(3).to);
+    const form = formById("slide-split");
+    if (form === undefined) throw new Error("no slide-split form");
+    expect(insertForm(view, form)).toBeNull();
+    const blocks = parseChapter(documentText(view)).blocks;
+    expect(blocks.map((block) => block.kind)).toEqual(["heading", "paragraph", "rule"]);
+    expect(blocks[1]?.text).toBe("Carol reads this line.");
+  });
+
+  it("puts every block form on a paragraph of its own", () => {
+    for (const form of formsVisibleIn(PALETTE_PHASE)) {
+      if (form.shape !== "block") continue;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: SAMPLE },
+      });
+      place(view.state.doc.line(3).to);
+      expect(insertForm(view, form), form.id).toBeNull();
+      const blocks = parseChapter(documentText(view)).blocks;
+      expect(blocks.map((block) => block.kind), form.id).toContain(form.expects.nodeKind);
+      expect(blocks[1]?.text, form.id).toBe("Carol reads this line.");
+    }
   });
 });

@@ -456,56 +456,22 @@ export function createPublishPanel(
   return panel;
 }
 
-/** What a host offers a panel that wants a chord. */
+/**
+ * What a panel needs from the application to be reachable.
+ *
+ * The two extension points the application offers and nothing else: the panel
+ * has no keyboard listener of its own, so `C-c C-l` reaches it through the
+ * binding table's `publish-open` row like every other chord.
+ */
 export interface PanelHost {
-  /**
-   * The editing surface's own registration, where it exists.
-   *
-   * TODO(editing surface): the binding table gains a `publish-open` row and
-   * this hook; until it does, the fallback below listens for the chord itself
-   * so the panel is reachable in the app.
-   */
-  registerPanel?(registration: {
-    id: string;
-    label: string;
-    chord: string;
-    open(): void;
-  }): () => void;
+  registerPanel(name: string, element: HTMLElement): void;
+  registerCommand(bindingId: string, run: () => void): void;
 }
 
-/** Give the panel its chord, through the host's hook or on its own. */
-export function registerPublishPanel(
-  host: PanelHost,
-  panel: PublishPanel,
-): () => void {
-  if (typeof host.registerPanel === "function") {
-    return host.registerPanel({
-      id: PUBLISH_OPEN_ACTION,
-      label: "Publish",
-      chord: PUBLISH_OPEN_CHORD,
-      open: () => void panel.open(),
-    });
-  }
-
-  // The fallback: `C-c C-l`, read as a prefix sequence.
-  let prefixed = false;
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (!event.ctrlKey) {
-      prefixed = false;
-      return;
-    }
-    if (event.key === "c" && !prefixed) {
-      prefixed = true;
-      return;
-    }
-    if (prefixed && event.key === "l") {
-      prefixed = false;
-      event.preventDefault();
-      void panel.open();
-      return;
-    }
-    prefixed = false;
-  };
-  document.addEventListener("keydown", onKeyDown, true);
-  return () => document.removeEventListener("keydown", onKeyDown, true);
+/** Mount the panel into the application and give it its chord. */
+export function mountPublishPanel(host: PanelHost, panel: PublishPanel): void {
+  host.registerPanel("publish", panel.element);
+  host.registerCommand(PUBLISH_OPEN_ACTION, () => {
+    void panel.open();
+  });
 }

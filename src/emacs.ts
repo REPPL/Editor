@@ -72,6 +72,9 @@ export const APP_COMMAND_IDS: readonly string[] = [
   "reload-document",
   // Owned by the deck bundle; the chord is the table's row.
   "present",
+  // Owned by the publish bundle, and by the shell's settings store.
+  "publish-open",
+  "open-settings",
 ];
 
 const handlerByView = new WeakMap<EditorView, EmacsHandler>();

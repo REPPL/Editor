@@ -16,11 +16,15 @@ import {
 } from "./keys";
 import { openOverlay, type Overlay } from "./overlay";
 
-/** What the owner column says about a row, where it says anything. */
+/**
+ * What the owner column says about a row, where it says anything.
+ *
+ * `app` says nothing: a row owned by the application is answered by the
+ * application, which is what every other row's silence means too.
+ */
 const OWNER_NOTES: Readonly<Record<string, string>> = {
   shell: "menu",
   codemirror: "editor",
-  app: "not yet wired",
 };
 
 /** Build the panel's element and the list of rows it can move between. */

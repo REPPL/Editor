@@ -43,8 +43,14 @@ const WHAT_TARGETS_ACCEPT =
   "A Part in the sidebar takes a Markdown chapter; the editing surface takes an image, a video, or a file.";
 
 /** What the surface will take once map #4 lands. */
+/**
+ * What a drop on the surface says when no branch has been filled in.
+ *
+ * The shell fills it in at start-up, so this is what a page carrying the
+ * application without the drop bundle says — a harness, not the app.
+ */
 const TEXT_NOT_YET =
-  "The editing surface does not take a dropped file yet; drop a Markdown chapter on a Part.";
+  "This window does not take a dropped file; drop a Markdown chapter on a Part.";
 
 /**
  * The element under a drop.

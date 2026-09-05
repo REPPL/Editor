@@ -720,7 +720,8 @@ export const BINDINGS: readonly Binding[] = [
     owner: "codemirror",
   },
 
-  // Reserved: the chord is spoken for, the command is another spec's.
+  // The application's own rows: the chord is the table's, the command is
+  // registered by the bundle that owns it.
   {
     id: "present",
     label: "Present the chapter",
@@ -730,8 +731,15 @@ export const BINDINGS: readonly Binding[] = [
   },
   {
     id: "publish-open",
-    label: "Open the published link",
+    label: "Publish this document",
     chords: ["C-c C-l"],
+    group: "document",
+    owner: "app",
+  },
+  {
+    id: "open-settings",
+    label: "Open settings",
+    chords: ["C-c C-,"],
     group: "document",
     owner: "app",
   },

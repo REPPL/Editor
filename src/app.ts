@@ -76,6 +76,10 @@ export interface App {
   readonly detached: boolean;
   /** The open chapter's path, or null when none is open. */
   readonly chapterPath: string | null;
+  /** The open document's root folder, or null when none is open. */
+  readonly documentRoot: string | null;
+  /** Every chapter of the open document, in the order the sidebar draws them. */
+  readonly chapters: readonly Chapter[];
   /** Show a document folder in the sidebar. */
   openFolder(path: string): Promise<void>;
   /** Ask for a folder and show it. */
@@ -369,6 +373,14 @@ export function createApp(root: HTMLElement, services: AppServices): App {
 
     get chapterPath(): string | null {
       return openChapterPath;
+    },
+
+    get documentRoot(): string | null {
+      return tree === null ? null : tree.root.path;
+    },
+
+    get chapters(): readonly Chapter[] {
+      return tree === null ? [] : chaptersOf(tree.root);
     },
 
     announce,

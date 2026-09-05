@@ -16,11 +16,11 @@
  */
 
 import { classify, pathResolver, type Resolution, type Resolver } from "../core/assets";
-import { buildDocumentDeck } from "../core/deck";
+import { buildChapterDecks } from "../core/deck";
 import { renderArticle } from "../core/render/article";
 import { renderSlides } from "../core/render/slides";
 import type { Block, Chapter } from "../core/tree";
-import { walkBlocks, walkInlines } from "../core/tree";
+import { walkChapterBlocks, walkInlines } from "../core/tree";
 
 /** A text file to write into the version folder. */
 export interface BuiltFile {
@@ -227,7 +227,7 @@ export function createAssetResolver(
 /** Every asset reference one chapter makes, in source order. */
 function chapterReferences(chapter: Chapter, variant: string): string[] {
   const references: string[] = [];
-  for (const block of walkBlocks(chapter.blocks)) {
+  for (const block of walkChapterBlocks(chapter)) {
     if (!belongsTo(block, variant)) {
       continue;
     }
@@ -365,13 +365,15 @@ export function renderVariant(
     .join("\n");
 
   // One plan for the whole document, so the deck at the link is the deck the
-  // app rehearsed; the fragment is rendered chapter by chapter because a
-  // resolver is bound to the Part whose folder its references sit in.
-  const fragments = tree.chapters.map((input) =>
-    renderSlides(
-      buildDocumentDeck([input.chapter], { variant }),
-      createAssetResolver(input.path, "slides"),
-    ),
+  // app rehearsed and no two slides claim the same id; the fragment is
+  // rendered chapter by chapter because a resolver is bound to the Part whose
+  // folder its references sit in.
+  const plans = buildChapterDecks(
+    tree.chapters.map((input) => input.chapter),
+    { variant },
+  );
+  const fragments = tree.chapters.map((input, index) =>
+    renderSlides(plans[index] ?? { title: null, columns: [] }, createAssetResolver(input.path, "slides")),
   );
 
   return {

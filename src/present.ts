@@ -1,11 +1,20 @@
 /**
- * The present window: one deck, and nothing else.
+ * The present window: one deck, its speaker notes, and nothing else.
  *
  * A second window rather than a pane inside the editor, because
  * `tauri.conf.json` sets `script-src 'self'` and a `srcdoc` iframe inherits
  * it, so an inline-script deck could not run in the editing window. This page
  * loads from the same bundle, under the same policy, with no relaxation — and
  * it is the window Alice projects.
+ *
+ * The notes are a split view inside this window rather than reveal.js's own
+ * speaker popup. That popup calls `window.open("about:blank")` and writes an
+ * inline-script document into it; an `about:blank` popup inherits its
+ * opener's policy, and this window's is `script-src 'self'`, so the script
+ * never runs and the popup stays blank. Relaxing the policy to make a popup
+ * work would relax it for the deck too, which is the one window that renders
+ * the author's own Markdown, so the notes come here instead: `s` opens them,
+ * `s` closes them, and the deck keeps the rest of the window.
  *
  * The deck is built here, from the text of the buffer the shell is holding.
  * Nothing is written: the deck is a string, the pictures are bytes the shell
@@ -24,6 +33,7 @@ interface RevealEngine {
   initialize(config: Record<string, unknown>): Promise<void> | void;
   sync(): void;
   slide(horizontal: number, vertical?: number): void;
+  on?(type: string, listener: () => void): void;
 }
 
 /** The engine, once the vendored script has run. Absent in a test. */
@@ -32,9 +42,87 @@ function engine(): RevealEngine | null {
   return global.Reveal ?? null;
 }
 
-/** The speaker-notes plugin, once the vendored script has run. */
-function notesPlugin(): unknown {
-  return (globalThis as { RevealNotes?: unknown }).RevealNotes ?? null;
+/**
+ * Every slide of a deck in reading order, stacks excluded.
+ *
+ * A stack is the parent of a column of vertical slides, not a slide, so it
+ * carries no notes and is never what the speaker is looking at.
+ */
+export function slideElements(root: ParentNode): Element[] {
+  return [...root.querySelectorAll(".reveal .slides section")].filter(
+    (section) => !section.classList.contains("stack"),
+  );
+}
+
+/** The notes one slide carries, as markup, or the empty string. */
+export function notesOf(slide: Element | null): string {
+  return slide?.querySelector("aside.notes")?.innerHTML ?? "";
+}
+
+/** The headline one slide carries, for the speaker's "next" line. */
+export function headlineOf(slide: Element | null): string {
+  return slide?.querySelector(".headline")?.textContent?.trim() ?? "";
+}
+
+/** The speaker's notes, in a split view beside the deck. */
+export interface NotesView {
+  readonly element: HTMLElement;
+  readonly isOpen: boolean;
+  /** Open the notes, or close them. */
+  toggle(): void;
+  /** Draw the notes of the slide in force, and what follows it. */
+  draw(root: ParentNode): void;
+}
+
+/**
+ * Build the split view.
+ *
+ * It is a sibling of the deck, not a child: the deck's own stylesheet sizes
+ * every slide to the space it is given, so taking a third of the window for
+ * the notes reflows the slides rather than scaling them.
+ */
+export function createNotesView(host: HTMLElement): NotesView {
+  const element = document.createElement("aside");
+  element.className = "present-notes";
+  element.hidden = true;
+
+  const heading = document.createElement("h1");
+  heading.className = "present-notes-heading";
+  heading.textContent = "Speaker notes";
+
+  const body = document.createElement("div");
+  body.className = "present-notes-body";
+
+  const next = document.createElement("p");
+  next.className = "present-notes-next";
+
+  element.append(heading, body, next);
+  host.append(element);
+
+  const view: NotesView = {
+    element,
+    get isOpen(): boolean {
+      return !element.hidden;
+    },
+    toggle(): void {
+      element.hidden = !element.hidden;
+      host.dataset["notes"] = element.hidden ? "closed" : "open";
+    },
+    draw(root: ParentNode): void {
+      const slides = slideElements(root);
+      const at = slides.findIndex((slide) => slide.classList.contains("present"));
+      const current = (at === -1 ? slides[0] : slides[at]) ?? null;
+      const following = at === -1 ? (slides[1] ?? null) : (slides[at + 1] ?? null);
+      const notes = notesOf(current);
+      body.innerHTML = notes;
+      body.dataset["empty"] = notes === "" ? "yes" : "no";
+      if (notes === "") body.textContent = "No notes on this slide.";
+      const headline = headlineOf(following);
+      next.textContent = headline === "" ? "" : `Next: ${headline}`;
+    },
+  };
+  host.dataset["notes"] = "closed";
+  return view;
 }
 
 /**
@@ -85,11 +173,7 @@ export function mountDeck(root: ParentNode, fragment: string, started: boolean):
     reveal.slide(0, 0);
     return true;
   }
-  const plugin = notesPlugin();
-  void reveal.initialize({
-    ...DECK_CONFIG,
-    ...(plugin === null ? {} : { plugins: [plugin] }),
-  });
+  void reveal.initialize({ ...DECK_CONFIG });
   return true;
 }
 
@@ -120,9 +204,34 @@ function reportEmpty(message: string): void {
  */
 async function start(): Promise<void> {
   let started = false;
+  const stage = document.querySelector<HTMLElement>(".present-stage") ?? document.body;
+  const notes = createNotesView(stage);
+
+  // `s` is the key reveal.js uses for the speaker view, so it is the key that
+  // opens the notes here. It is ignored while the author is typing into
+  // something, and while a modifier is held, so it never eats a real chord.
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "s" || event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, [contenteditable]")) return;
+    event.preventDefault();
+    notes.toggle();
+    notes.draw(document);
+  });
+
+  const reveal = engine();
+  if (reveal?.on) {
+    for (const type of ["ready", "slidechanged"]) {
+      reveal.on(type, () => {
+        notes.draw(document);
+      });
+    }
+  }
+
   const draw = async (): Promise<void> => {
     try {
       started = await show(await pendingDeck(), started);
+      notes.draw(document);
     } catch (error) {
       reportEmpty(String(error));
     }

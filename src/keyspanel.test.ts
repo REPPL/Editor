@@ -187,16 +187,19 @@ describe("the keys panel", () => {
     }
   });
 
-  it("says which rows the shell and the other specs answer", () => {
+  it("says which rows the shell answers, and says nothing of its own", () => {
     const overlay = openKeysPanel();
     const menu = overlay.element.querySelector<HTMLElement>(
       '[data-binding="open-folder-menu"]',
     );
     expect(menu?.textContent).toContain("menu");
-    const present = overlay.element.querySelector<HTMLElement>(
-      '[data-binding="present"]',
-    );
-    expect(present?.textContent).toContain("not yet wired");
+    // A row the application answers reads as its label and its chord, like
+    // every other row the application answers.
+    for (const id of ["present", "publish-open", "open-settings"]) {
+      const row = overlay.element.querySelector<HTMLElement>(`[data-binding="${id}"]`);
+      expect(row?.querySelector(".keys-owner"), id).toBeNull();
+      expect(row?.textContent, id).toBe(bindingById(id)?.label);
+    }
   });
 
   it("closes on Escape and on C-g", () => {

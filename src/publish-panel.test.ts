@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { bindingById } from "./keys";
 import {
   createPublishPanel,
-  registerPublishPanel,
+  mountPublishPanel,
+  PUBLISH_OPEN_ACTION,
   GATED_NOTE,
   PUBLISH_OPEN_CHORD,
   UNLISTED_SENTENCE,
@@ -299,28 +301,40 @@ describe("the panel's keyboard", () => {
     expect(panel.isOpen).toBe(false);
   });
 
-  it("opens through the host's hook where the editing surface offers one", async () => {
+  it("mounts through the application's own extension points", async () => {
     const { panel } = panelWith();
-    const registered: { chord: string; id: string }[] = [];
-    const host = {
-      registerPanel(registration: { id: string; label: string; chord: string; open(): void }) {
-        registered.push({ chord: registration.chord, id: registration.id });
-        registration.open();
-        return () => undefined;
+    const panels: string[] = [];
+    const commands = new Map<string, () => void>();
+    mountPublishPanel(
+      {
+        registerPanel(name, element) {
+          panels.push(name);
+          expect(element).toBe(panel.element);
+        },
+        registerCommand(id, run) {
+          commands.set(id, run);
+        },
       },
-    };
-    registerPublishPanel(host, panel);
-    expect(registered).toEqual([{ chord: PUBLISH_OPEN_CHORD, id: "publish-open" }]);
+      panel,
+    );
+    expect(panels).toEqual(["publish"]);
+    expect([...commands.keys()]).toEqual([PUBLISH_OPEN_ACTION]);
+    commands.get(PUBLISH_OPEN_ACTION)?.();
     await vi.waitFor(() => expect(panel.isOpen).toBe(true));
   });
 
-  it("answers the chord itself while the binding table has no row for it", async () => {
+  it("carries no keyboard listener of its own for its chord", async () => {
     const { panel } = panelWith();
-    const release = registerPublishPanel({}, panel);
+    mountPublishPanel(
+      { registerPanel: () => undefined, registerCommand: () => undefined },
+      panel,
+    );
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true }));
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", ctrlKey: true }));
-    await vi.waitFor(() => expect(panel.isOpen).toBe(true));
-    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(panel.isOpen).toBe(false);
+    // The chord is the binding table's row, not the panel's listener.
+    expect(bindingById(PUBLISH_OPEN_ACTION)?.chords).toEqual([PUBLISH_OPEN_CHORD]);
   });
 });
 

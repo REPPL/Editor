@@ -1,5 +1,10 @@
 /**
  * The entry point inside the Tauri shell.
+ *
+ * Everything the bundles built separately is joined here and nowhere else:
+ * each reaches the application through the three extension points the surface
+ * offers — `registerCommand`, `registerPanel`, `onDropTarget` — so the
+ * application knows nothing about publishing, dropping, or presenting.
  */
 
 import { listen } from "@tauri-apps/api/event";
@@ -7,12 +12,16 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 
 import { createApp, type AppServices } from "./app";
+import { parseChapter } from "./core/parse";
+import { createDropTarget } from "./drop-target";
 import { documentText } from "./editor";
 import {
   CHANGED_EVENT,
   addChapter,
+  dropOnChapter,
   inShell,
   openFolder,
+  pasteReference,
   presentChapter,
   readChapter,
   readChapters,
@@ -20,6 +29,10 @@ import {
   setDirty,
   writeChapter,
 } from "./doctree";
+import { createPublishPanel, mountPublishPanel } from "./publish-panel";
+import { createPublishServices, type DocumentForPublish } from "./publish/services";
+import { createSettingsPanel, mountSettingsPanel } from "./settings-panel";
+import { createSettingsServices } from "./settings";
 import "./style.css";
 
 /** The event the shell emits when the Open Folder menu item fires. */
@@ -70,6 +83,67 @@ app.registerCommand("present", () => {
     app.announce(String(error));
   });
 });
+
+// The drop gesture's own branch of the one drop router. The shell has already
+// classified, converted, stripped and copied the files; this decides only
+// where the reference goes in the text.
+const dropTarget = createDropTarget({
+  view: app.view,
+  chapterPath: () => app.chapterPath,
+  services: { dropOnChapter, pasteReference },
+  announce: (message) => {
+    app.announce(message);
+  },
+});
+app.onDropTarget("text", (payload) => {
+  dropTarget.onText(payload);
+});
+
+/**
+ * The document as the publish build sees it.
+ *
+ * The parse is the one parse: the chapters are read in a single round trip and
+ * handed to `parseChapter`, and the paths are made relative to the document
+ * root, because the build names an asset by where it sits in the document and
+ * never by where the document sits on this machine.
+ */
+async function loadForPublish(): Promise<DocumentForPublish> {
+  const documentRoot = app.documentRoot;
+  if (documentRoot === null) {
+    throw new Error("Open a document folder before publishing");
+  }
+  const chapters = app.chapters;
+  if (chapters.length === 0) {
+    throw new Error("This document holds no chapters to publish");
+  }
+  const batch = await readChapters(chapters.map((chapter) => chapter.path));
+  const byPath = new Map(batch.reads.map((read) => [read.path, read.text]));
+  const metadata = await readDocumentMetadata();
+  const prefix = documentRoot.endsWith("/") ? documentRoot : `${documentRoot}/`;
+  const inputs = [];
+  for (const chapter of chapters) {
+    const text = byPath.get(chapter.path);
+    if (text === undefined) continue;
+    const relative = chapter.path.startsWith(prefix)
+      ? chapter.path.slice(prefix.length)
+      : chapter.path;
+    inputs.push({ path: relative, chapter: parseChapter(text) });
+  }
+  const variant = metadata.default_variant ?? metadata.variants[0] ?? "";
+  return {
+    title: metadata.title ?? chapters[0]?.title ?? "Untitled",
+    variant,
+    tree: { chapters: inputs },
+  };
+}
+
+// Publish, `C-c C-l`, and settings, `C-c C-,`: two overlays mounted through
+// the application's panel host, each reached by the binding table's row.
+const publishPanel = createPublishPanel(createPublishServices(loadForPublish));
+mountPublishPanel(app, publishPanel);
+
+const settingsPanel = createSettingsPanel(createSettingsServices());
+mountSettingsPanel(app, settingsPanel);
 
 if (inShell()) {
   void listen(OPEN_FOLDER_EVENT, () => {

@@ -478,7 +478,7 @@ describe("the drop router", () => {
     surface.remove();
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toContain("does not take a dropped file yet");
+    expect(seen[0]).toContain("does not take a dropped file");
   });
 
   it("routes to the editing surface once the hook is filled", () => {

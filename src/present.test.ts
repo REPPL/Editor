@@ -14,7 +14,14 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { pathResolver } from "./core/assets";
-import { deckFragment, mountDeck } from "./present";
+import {
+  createNotesView,
+  deckFragment,
+  headlineOf,
+  mountDeck,
+  notesOf,
+  slideElements,
+} from "./present";
 
 /** The chapter the manual checks use, so every check looks at one deck. */
 const CHAPTER = "examples/presentation/01-slides/01-technology-impact-assessment.md";
@@ -106,5 +113,86 @@ describe("the present window", () => {
     document.body.innerHTML = "<p>Not a deck.</p>";
     expect(mountDeck(document, "<section></section>", false)).toBe(false);
     expect(document.body.innerHTML).toBe("<p>Not a deck.</p>");
+  });
+});
+
+/**
+ * The speaker's notes.
+ *
+ * reveal.js's own speaker view opens `about:blank` and writes an inline-script
+ * document into it. An `about:blank` popup inherits its opener's policy, and
+ * the present window's is `script-src 'self'`, so that script never runs.
+ * The notes are therefore a split view inside this window, and these are the
+ * checks that it shows the right ones.
+ */
+describe("the speaker's notes", () => {
+  const CHAPTER = [
+    "## One",
+    "",
+    "The first face.",
+    "",
+    "::: {.notes}",
+    "Say the thing about the first slide.",
+    ":::",
+    "",
+    "## Two",
+    "",
+    "The second face.",
+    "",
+  ].join("\n");
+
+  function stage(): HTMLElement {
+    document.body.innerHTML =
+      '<div class="present-stage"><div class="reveal"><div class="slides"></div></div></div>';
+    const host = document.querySelector<HTMLElement>(".present-stage");
+    if (!host) throw new Error("no stage");
+    mountDeck(document, deckFragment(CHAPTER, pathResolver()), false);
+    return host;
+  }
+
+  it("keeps the notes out of the slide itself", () => {
+    stage();
+    const slides = slideElements(document);
+    expect(slides).toHaveLength(2);
+    expect(notesOf(slides[0] ?? null)).toContain("Say the thing");
+    expect(headlineOf(slides[1] ?? null)).toBe("Two");
+  });
+
+  it("shows the notes of the slide in force and names the next one", () => {
+    const host = stage();
+    const view = createNotesView(host);
+    slideElements(document)[0]?.classList.add("present");
+    view.draw(document);
+    const body = view.element.querySelector<HTMLElement>(".present-notes-body");
+    expect(body?.textContent).toContain("Say the thing about the first slide.");
+    expect(view.element.querySelector(".present-notes-next")?.textContent).toBe("Next: Two");
+  });
+
+  it("says so plainly on a slide with no notes", () => {
+    const host = stage();
+    const view = createNotesView(host);
+    const second = slideElements(document)[1];
+    second?.classList.add("present");
+    second?.querySelector("aside.notes")?.remove();
+    view.draw(document);
+    const body = view.element.querySelector<HTMLElement>(".present-notes-body");
+    expect(body?.dataset["empty"]).toBe("yes");
+    expect(body?.textContent).toBe("No notes on this slide.");
+    expect(view.element.querySelector(".present-notes-next")?.textContent).toBe("");
+  });
+
+  it("is closed until it is asked for, and opens beside the deck", () => {
+    const host = stage();
+    const view = createNotesView(host);
+    expect(view.isOpen).toBe(false);
+    expect(host.dataset["notes"]).toBe("closed");
+    view.toggle();
+    expect(view.isOpen).toBe(true);
+    expect(host.dataset["notes"]).toBe("open");
+    // A sibling of the deck, so the slides reflow rather than scale.
+    expect(view.element.parentElement).toBe(host);
+    expect(host.querySelector(".reveal")).not.toBeNull();
+    view.toggle();
+    expect(view.isOpen).toBe(false);
   });
 });
