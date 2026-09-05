@@ -235,7 +235,8 @@ disagree with the chapter, because it is the chapter.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-dc84ec01ebb0 -->
+Fidelity review OWED (receipt rcp-dc84ec01ebb0).
 
 ## Grounds
 

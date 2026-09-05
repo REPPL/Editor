@@ -184,7 +184,8 @@ the file names, and every tool she owns can edit it.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-a19e15cfeda1 -->
+Fidelity review OWED (receipt rcp-a19e15cfeda1).
 
 ## Grounds
 

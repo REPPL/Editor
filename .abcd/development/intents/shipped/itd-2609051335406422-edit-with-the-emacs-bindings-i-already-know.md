@@ -205,7 +205,8 @@ edit quickly, she needs her own keys.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-44a3e570b46e -->
+Fidelity review OWED (receipt rcp-44a3e570b46e).
 
 ## Grounds
 

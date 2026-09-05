@@ -223,7 +223,8 @@ having to remember how a columns div is spelled.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-eeafee535ebc -->
+Fidelity review OWED (receipt rcp-eeafee535ebc).
 
 ## Grounds
 

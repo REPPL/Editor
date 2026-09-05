@@ -168,7 +168,8 @@ plain-tool guarantee affordable to the person paying for it.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-04d6e441c952 -->
+Fidelity review OWED (receipt rcp-04d6e441c952).
 
 ## Grounds
 

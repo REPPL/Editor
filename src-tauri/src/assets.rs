@@ -1684,7 +1684,7 @@ mod tests {
     fn takes_an_svgs_comments_metadata_and_local_paths_out() {
         // The absolute paths below are the illustrative machine paths this test
         // exists to strip out. abcd-lint:allow illustrative refusal path
-        let drawn_on = "/Users/alice/figures";
+        let drawn_on = "/Users/alice/figures"; // abcd-lint:allow illustrative refusal path
         let svg = format!(
             concat!(
                 "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">",

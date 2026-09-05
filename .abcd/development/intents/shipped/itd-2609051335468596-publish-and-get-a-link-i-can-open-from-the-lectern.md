@@ -191,7 +191,8 @@ the thing the room sees, and keeps it closed when she edits again.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-c553924fd8bc -->
+Fidelity review OWED (receipt rcp-c553924fd8bc).
 
 ## Grounds
 

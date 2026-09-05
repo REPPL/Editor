@@ -179,7 +179,8 @@ loses history into something that adds to it.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-93afa043d254 -->
+Fidelity review OWED (receipt rcp-93afa043d254).
 
 ## Grounds
 
