@@ -64,6 +64,14 @@ export interface DocumentMetadata {
   readonly bibliography: string | null;
   readonly citation_style: string | null;
   readonly asset_threshold_bytes: number | null;
+  /**
+   * The column `fill-paragraph` wraps prose at, or null for the default.
+   *
+   * Null rather than 80: the default belongs to the command that fills, so a
+   * document that states nothing stays distinguishable from one that states a
+   * column of its own.
+   */
+  readonly fill_column: number | null;
   /** Whether the document folder carries a `document.yaml` at all. */
   readonly present: boolean;
 }

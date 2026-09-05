@@ -21,11 +21,13 @@
  * replace the first.
  */
 
+import { defaultKeymap, historyKeymap } from "@codemirror/commands";
 import {
   findNext,
   findPrevious,
   gotoLine,
   openSearchPanel,
+  searchKeymap,
 } from "@codemirror/search";
 import type { Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
@@ -80,6 +82,26 @@ export const APP_COMMAND_IDS: readonly string[] = [
   // The pane cycle. This is the route from the text; a pane the editing
   // surface cannot hear reads the same row through `src/focus.ts`.
   "other-window",
+  // The prose vocabulary. Each is a function of the view in `src/prose.ts`;
+  // the application wires it, because a refusal is announced in the modeline
+  // and two of them open a prompt in the overlay host.
+  "fill-paragraph",
+  "transpose-words",
+  "transpose-lines",
+  "capitalize-word",
+  "backward-sentence",
+  "forward-sentence",
+  "backward-paragraph",
+  "forward-paragraph",
+  "delete-indentation",
+  "just-one-space",
+  "delete-horizontal-space",
+  "zap-to-char",
+  "dabbrev-expand",
+  "command-palette",
+  "describe-key",
+  "move-to-window-line",
+  "quit",
 ];
 
 const handlerByView = new WeakMap<EditorView, EmacsHandler>();
@@ -360,6 +382,99 @@ function run(id: string): void {
     return;
   }
   command();
+}
+
+/**
+ * The Emacs handler for a view, making one if the package has not yet.
+ *
+ * The package builds its handler inside a view plugin it does not export, and
+ * `trackHandlers` records the instance the first time it sees a key. A command
+ * run from the palette may be the first thing that happens to a fresh view, so
+ * a handler is made here rather than refusing: the kill ring and the command
+ * table are static, so a second instance shares both.
+ */
+function handlerFor(view: EditorView): EmacsHandler {
+  const tracked = handlerByView.get(view);
+  if (tracked) return tracked;
+  const fresh = new EmacsHandler(view);
+  handlerByView.set(view, fresh);
+  return fresh;
+}
+
+/**
+ * Kill the selection through the package's own `killRegion`.
+ *
+ * `M-z` selects and then calls this, rather than dispatching a delete of its
+ * own, so what it killed is on the one kill ring and `C-y` yanks it back.
+ */
+export function killSelection(view: EditorView): boolean {
+  const command = EmacsHandler.commands["killRegion"];
+  if (!command) return false;
+  EmacsHandler.execCommand(command, handlerFor(view), {}, 1);
+  return true;
+}
+
+/**
+ * Run whatever a package binding names: a command, a name, or a name and args.
+ *
+ * `emacsKeys` carries all three shapes, and `execCommand` understands only the
+ * first, so the name is resolved against the shared command table here.
+ */
+function runPackageBinding(handler: EmacsHandler, binding: unknown): boolean {
+  let command: unknown = binding;
+  let args: unknown = {};
+  if (command !== null && typeof command === "object" && "command" in command) {
+    args = (command as { args?: unknown }).args ?? {};
+    command = (command as { command: unknown }).command;
+  }
+  if (typeof command === "string") {
+    if (command === "null") return false;
+    command = EmacsHandler.commands[command];
+  }
+  if (!command) return false;
+  EmacsHandler.execCommand(command, handler, args, 1);
+  return true;
+}
+
+/**
+ * Run a row of the binding table by id, without a keyboard.
+ *
+ * This is what the command palette chooses with, and it resolves a row in one
+ * of three ways, in the order the surface itself would: Editor's own command,
+ * registered as `editor:<id>`; the package command `emacsKeys` binds to one of
+ * the row's chords; or the `run` of the CodeMirror keymap binding that carries
+ * one of them. A row none of the three answers returns a refusal rather than
+ * doing nothing quietly.
+ */
+export function runBinding(view: EditorView, id: string): string | null {
+  const binding = bindingById(id);
+  if (!binding) return `${id} is not in the binding table`;
+  const handler = handlerFor(view);
+
+  const own = EmacsHandler.commands[`editor:${id}`];
+  if (own) {
+    EmacsHandler.execCommand(own, handler, {}, 1);
+    return null;
+  }
+
+  const chords = binding.chords.map(canonicalChord);
+  for (const spec of Object.keys(emacsKeys)) {
+    const named = spec
+      .split("|")
+      .some((alternative) => chords.includes(canonicalChord(fromKeymapSpec(alternative))));
+    if (!named) continue;
+    if (runPackageBinding(handler, emacsKeys[spec])) return null;
+  }
+
+  for (const keymap of [defaultKeymap, historyKeymap, searchKeymap]) {
+    for (const entry of keymap) {
+      const spec = entry.mac ?? entry.key;
+      if (spec === undefined) continue;
+      if (!chords.includes(canonicalChord(fromKeymapSpec(spec)))) continue;
+      if (entry.run?.(view)) return null;
+    }
+  }
+  return `${binding.label} did nothing here`;
 }
 
 /** Point Editor's own chords at the running application. */

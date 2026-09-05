@@ -48,6 +48,8 @@ pub struct DocumentMetadata {
     pub citation_style: Option<String>,
     /// The size above which a dropped asset is referenced rather than copied.
     pub asset_threshold_bytes: Option<u64>,
+    /// The column `fill-paragraph` wraps prose at. Absent means the default 80.
+    pub fill_column: Option<u32>,
     /// Whether the file exists at all. A folder with chapters and no
     /// `document.yaml` is still a document; saying so is not the same as
     /// claiming an empty title.
@@ -172,6 +174,23 @@ mod tests {
             metadata.variant_tokens.get("talk").map(String::as_str),
             Some("def")
         );
+    }
+
+    #[test]
+    fn reads_the_fill_column_a_document_states() {
+        let metadata =
+            parse_metadata("title: The Lantern Papers\nfill_column: 72\n").expect("parses");
+        assert_eq!(metadata.fill_column, Some(72));
+    }
+
+    #[test]
+    fn leaves_the_fill_column_absent_when_the_document_says_nothing() {
+        // Absent, not zero: the default belongs to the command that fills, so
+        // a document that states nothing must be distinguishable from one that
+        // states a column.
+        let metadata = example("manuscript");
+        assert_eq!(metadata.fill_column, None);
+        assert_eq!(DocumentMetadata::default().fill_column, None);
     }
 
     #[test]

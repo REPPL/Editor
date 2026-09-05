@@ -350,6 +350,39 @@ body {
   background: var(--accent);
 }
 
+/* A line of prose above the rows, for a list that asks a question rather than
+   filtering one. The quit confirmation is the only one so far. */
+.palette-question {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.confirm {
+  width: min(360px, 92vw);
+}
+
+/*
+ * The modeline prompts.
+ *
+ * `M-z` and `C-h k` ask in the modeline and read one key. The prompt is the
+ * modeline message; the overlay exists only so that the key reaches the prompt
+ * rather than the text, and so that `C-g` cancels it under the one contract.
+ * It therefore shows nothing and takes up no room.
+ */
+.overlay.prompt {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+  box-shadow: none;
+}
+
+.prompt-focus:focus {
+  outline: none;
+}
+
 /* Editing surface */
 
 .editor-pane {
@@ -451,6 +484,40 @@ body {
   flex: 1 1 auto;
   color: var(--muted);
   text-align: right;
+}
+
+/*
+ * The modeline at the narrowest window the shell allows, 390 CSS pixels.
+ *
+ * A message is the one cell the author has to read word for word — a refusal,
+ * a prompt, the row `C-h k` names — so it gets a line of its own and the cells
+ * that only report state share the line above it. Every message the prose
+ * commands write is held to a character budget (`MODELINE_BUDGET`) that fits
+ * that line, so it is one line, unclipped, and nothing scrolls sideways.
+ */
+@media (max-width: 520px) {
+  .modeline {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .modeline-chapter {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .modeline-message {
+    flex: 1 0 100%;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 /* Panels: publish and settings. Wider than an overlay, because both are forms

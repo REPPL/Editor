@@ -400,6 +400,54 @@ describe("the binding table", () => {
     }
   });
 
+  it("lists every tier-one prose command with a label and a chord", () => {
+    // The seventeen rows of the prose vocabulary, each with the chord the
+    // research note ranked it under. Written out here rather than derived, so
+    // that a chord changed in the table has to be changed deliberately.
+    const tier: readonly (readonly [string, string])[] = [
+      ["fill-paragraph", "M-q"],
+      ["transpose-words", "M-t"],
+      ["transpose-lines", "C-x C-t"],
+      ["capitalize-word", "M-c"],
+      ["backward-sentence", "M-a"],
+      ["forward-sentence", "M-e"],
+      ["backward-paragraph", "M-S-["],
+      ["forward-paragraph", "M-S-]"],
+      ["delete-indentation", "M-S-6"],
+      ["just-one-space", "M-Space"],
+      ["delete-horizontal-space", "M-\\"],
+      ["zap-to-char", "M-z"],
+      ["dabbrev-expand", "M-/"],
+      ["command-palette", "M-x"],
+      ["describe-key", "C-h k"],
+      ["move-to-window-line", "M-r"],
+      ["quit", "C-x C-c"],
+    ];
+    expect(tier).toHaveLength(17);
+    for (const [id, chord] of tier) {
+      const row = bindingById(id);
+      expect(row, id).toBeDefined();
+      expect(row?.label.length ?? 0, id).toBeGreaterThan(0);
+      expect(row?.chords, id).toContain(chord);
+      expect(row?.owner, id).toBe("editor");
+      expect(scopeOf(row!), id).toBe("editor");
+      // Answered, not merely listed.
+      expect(emacsAnsweredChords().has(canonicalChord(chord)), id).toBe(true);
+    }
+
+    // The eighteenth action the criterion names keeps the row it had: the
+    // Option-chord work is what makes it reachable, and nothing here touches
+    // it.
+    expect(bindingById("mark-word")?.chords).toEqual(["M-S-2"]);
+    expect(bindingById("mark-word")?.owner).toBe("keymap");
+
+    // Both chords that were suppressed for having nothing behind them now
+    // have something, so neither may be in both lists.
+    const suppressed = SUPPRESSED.map((entry) => entry.chord);
+    expect(suppressed).not.toContain("M-x");
+    expect(suppressed).not.toContain("M-/");
+  });
+
   it("answers no chord the table does not list", () => {
     // The conformance sweep, in the other direction. Every chord any of the
     // four keymaps the surface installs answers has to be a row of the table
@@ -1016,6 +1064,7 @@ describe("Editor's own chords", () => {
   let chooseCalls: number;
   let discardAnswer: boolean;
   let discardCalls: number;
+  let quitCalls: number;
   let dirtyReports: boolean[];
   let chapterText: Map<string, string>;
   /** When set, reads park here until the test releases them, in any order. */
@@ -1054,6 +1103,10 @@ describe("Editor's own chords", () => {
     reportDirty: (dirty) => {
       dirtyReports.push(dirty);
     },
+    quit: () => {
+      quitCalls += 1;
+      return Promise.resolve();
+    },
   };
 
   beforeEach(() => {
@@ -1061,6 +1114,7 @@ describe("Editor's own chords", () => {
     chooseCalls = 0;
     discardAnswer = true;
     discardCalls = 0;
+    quitCalls = 0;
     dirtyReports = [];
     chapterText = new Map();
     heldReads = null;
@@ -1137,6 +1191,150 @@ describe("Editor's own chords", () => {
     await Promise.resolve();
     await Promise.resolve();
     // Nothing is written by a reload, whatever else it does.
+    expect(written).toBeNull();
+  });
+
+  it("shows every tier-one prose command in the keys panel", () => {
+    expect(pressSequence(app.view, "C-h b")).toBe(true);
+    const panel = document.querySelector(".keys-panel");
+    expect(panel).not.toBeNull();
+    for (const id of [
+      "fill-paragraph",
+      "transpose-words",
+      "transpose-lines",
+      "capitalize-word",
+      "backward-sentence",
+      "forward-sentence",
+      "backward-paragraph",
+      "forward-paragraph",
+      "delete-indentation",
+      "just-one-space",
+      "delete-horizontal-space",
+      "zap-to-char",
+      "dabbrev-expand",
+      "command-palette",
+      "describe-key",
+      "move-to-window-line",
+      "quit",
+      "mark-word",
+    ]) {
+      const row = panel?.querySelector<HTMLElement>(`[data-binding="${id}"]`);
+      expect(row, id).not.toBeNull();
+      expect(row?.textContent ?? "", id).toContain(bindingById(id)?.label ?? "");
+      const chords = row?.nextElementSibling;
+      expect(chords?.className, id).toBe("keys-chords");
+      for (const chord of bindingById(id)?.chords ?? []) {
+        expect(chords?.textContent ?? "", id).toContain(chord);
+      }
+    }
+  });
+
+  it("opens the command palette on M-x, over the shared list overlay", () => {
+    const before = documentText(app.view);
+    expect(press(app.view, "M-x")).toBe(true);
+    const palette = document.querySelector(".palette");
+    expect(palette).not.toBeNull();
+    expect(palette?.getAttribute("aria-label")).toBe("Run a command");
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "g",
+        code: "KeyG",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.querySelector(".palette")).toBeNull();
+    expect(documentText(app.view)).toBe(before);
+  });
+
+  it("reads a prefix chord into the C-h k prompt rather than into the pane cycle", () => {
+    // The prompt holds the keyboard, and the pane cycle's own reader is
+    // listening on the same document. A `C-x` typed into the prompt belongs
+    // to the prompt: it is the first step of the chord being described, not
+    // the first step of `C-x o`.
+    expect(pressSequence(app.view, "C-h k")).toBe(true);
+    expect(document.querySelector(".prompt")).not.toBeNull();
+    expect(app.modeline.element.textContent).toContain("Describe key:");
+
+    press(app.view, "C-x");
+    expect(document.querySelector(".prompt")).not.toBeNull();
+    expect(app.focus.pane).not.toBe("sidebar");
+    press(app.view, "C-s");
+    expect(document.querySelector(".prompt")).toBeNull();
+    expect(app.modeline.element.textContent).toContain(
+      "C-x C-s is Save the chapter",
+    );
+    expect(written).toBeNull();
+  });
+
+  it("zaps to a character read through the prompt, and yanks it back", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    place(app.view, 0);
+    expect(press(app.view, "M-z")).toBe(true);
+    expect(app.modeline.element.textContent).toContain("Zap to char:");
+    press(app.view, "b");
+    // Up to *and including* the character, as Emacs's own zap does.
+    expect(documentText(app.view)).toBe(SAMPLE.slice(SAMPLE.indexOf("b") + 1));
+    expect(press(app.view, "C-y")).toBe(true);
+    expect(documentText(app.view)).toBe(SAMPLE);
+  });
+
+  it("asks before C-x C-c quits and keeps the edits on C-g", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    app.view.dispatch({ changes: { from: 0, insert: "Edited. " } });
+    expect(app.dirty).toBe(true);
+
+    expect(pressSequence(app.view, "C-x C-c")).toBe(true);
+    const confirm = document.querySelector(".confirm");
+    expect(confirm).not.toBeNull();
+    expect(confirm?.textContent).toContain("Quit without saving");
+    expect(confirm?.textContent).toContain("Keep editing");
+    expect(quitCalls).toBe(0);
+
+    // `C-g` puts her back in the text, with the edits still unsaved. A native
+    // dialog, answering Return and Escape alone, could not do this.
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "g",
+        code: "KeyG",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.querySelector(".confirm")).toBeNull();
+    expect(quitCalls).toBe(0);
+    expect(app.dirty).toBe(true);
+    expect(documentText(app.view)).toBe(`Edited. ${SAMPLE}`);
+    expect(written).toBeNull();
+  });
+
+  it("quits when the question is answered, and without asking when nothing is unsaved", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    expect(app.dirty).toBe(false);
+    expect(pressSequence(app.view, "C-x C-c")).toBe(true);
+    expect(document.querySelector(".confirm")).toBeNull();
+    expect(quitCalls).toBe(1);
+
+    app.view.dispatch({ changes: { from: 0, insert: "Edited. " } });
+    expect(pressSequence(app.view, "C-x C-c")).toBe(true);
+    expect(document.querySelector(".confirm")).not.toBeNull();
+    // The first row is "Quit without saving".
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.querySelector(".confirm")).toBeNull();
+    expect(quitCalls).toBe(2);
+    // Nothing was written on the way out: quitting is not saving.
     expect(written).toBeNull();
   });
 
@@ -1567,7 +1765,7 @@ describe("the key log", () => {
     // same thing about each. Only one reached a command, and the spike's whole
     // verdict is which chords do.
     pressRaw(view, { key: "Dead", code: "KeyU", altKey: true });
-    pressRaw(view, { key: "Dead", code: "KeyE", altKey: true });
+    pressRaw(view, { key: "Dead", code: "KeyI", altKey: true });
     await new Promise((resolve) => setTimeout(resolve, 1));
 
     expect(log.observations[0]).toMatchObject({
@@ -1576,8 +1774,12 @@ describe("the key log", () => {
       claimed: true,
       handled: true,
     });
+    // `M-i` is in neither list, which is what makes it the honest example of
+    // a chord Option claimed and nothing answered.
+    expect(bindingById("dabbrev-expand")?.chords).toEqual(["M-/"]);
+    expect(chordIndexIn("editor").has("M-i")).toBe(false);
     expect(log.observations[1]).toMatchObject({
-      chord: "M-e",
+      chord: "M-i",
       known: false,
       claimed: true,
       handled: false,

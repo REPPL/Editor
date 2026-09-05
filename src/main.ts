@@ -47,6 +47,19 @@ const OPEN_FOLDER_EVENT = "menu://open-folder";
 /** The event the shell emits when it holds a close back. */
 const CLOSE_REQUESTED_EVENT = "window://close-requested";
 
+/**
+ * The one way the window goes.
+ *
+ * The shell holds a close back until the page answers, and `C-x C-c` asks the
+ * same question in the page; both end here, so there is one quit and not two.
+ * Clearing the flag the shell is holding on is what stops it holding the close
+ * back a second time.
+ */
+async function quitWindow(): Promise<void> {
+  await setDirty(false);
+  await getCurrentWindow().destroy();
+}
+
 const services: AppServices = {
   async chooseFolder() {
     const chosen = await open({ directory: true, multiple: false });
@@ -64,6 +77,9 @@ const services: AppServices = {
   reportDirty(dirty) {
     void setDirty(dirty);
   },
+  // Only in the shell: outside it there is no window to close, and the page
+  // says so rather than failing quietly.
+  ...(inShell() ? { quit: quitWindow } : {}),
   async subscribe<T>(event: string, handler: (payload: T) => void) {
     return listen<T>(event, (received) => {
       handler(received.payload);
@@ -160,8 +176,7 @@ if (inShell()) {
   void listen(CLOSE_REQUESTED_EVENT, () => {
     void (async () => {
       if (!(await app.confirmClose())) return;
-      await setDirty(false);
-      await getCurrentWindow().destroy();
+      await quitWindow();
     })();
   });
 

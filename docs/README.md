@@ -22,6 +22,9 @@ Task-oriented. Open one when you have something specific to do.
 
 - [Find and change the keys](how-to-find-and-change-the-keys.md) — the keys
   panel, the key log, and the chords Editor deliberately answers with nothing.
+- [Edit prose with Emacs commands](how-to-edit-prose-with-emacs-commands.md) —
+  reflow a paragraph, move by sentence, complete a word from the document, and
+  run any command by name from `M-x`.
 - [Drop images, videos and files](how-to-drop-images-videos-and-files.md) —
   what Editor does with each kind of dropped file, what it takes out of a
   picture, and what to do when a drop is refused.

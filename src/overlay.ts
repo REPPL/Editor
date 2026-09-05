@@ -27,6 +27,20 @@ export interface OverlayHooks {
   onChoose?(index: number): void;
   /** The overlay closed. `chosen` is false when it was cancelled. */
   onClose?(chosen: boolean): void;
+  /**
+   * Read one key before the overlay's own movement does.
+   *
+   * This is how an overlay that is a prompt rather than a list works: it holds
+   * the keyboard under the one cancel contract, and the key it is waiting for
+   * reaches it here. Consulted after the cancel chords and before movement, so
+   * `C-g` and Escape still close it and nothing needs an escape hatch.
+   *
+   * Return true to keep the prompt open for another step — which is how
+   * `C-h k` reads `C-x C-s` as one sequence — and false to close it, chosen.
+   * The event is claimed either way: holding the keyboard means the editing
+   * surface never sees it.
+   */
+  onKey?(event: KeyboardEvent): boolean;
 }
 
 /** An open overlay. */
@@ -119,6 +133,18 @@ export function openOverlay(hooks: OverlayHooks): Overlay {
   closeOverlay();
 
   const host = hooks.host ?? document.body;
+  /**
+   * Where the overlay listens for keys.
+   *
+   * A list overlay listens on the document, so that the pane cycle's own
+   * reader — which listens there too, and answers `C-x o` and nothing else —
+   * can still take the keyboard out of it. A prompt is not a pane to cycle out
+   * of: it is a modal read of one chord, and `C-g` is how it is left. It
+   * therefore listens one node higher, where the capture phase reaches it
+   * first, so a `C-x` typed into it is the first step of the chord it was
+   * asked to read rather than the first step of `C-x o`.
+   */
+  const keyTarget: EventTarget = hooks.onKey ? window : document;
   const returnFocusTo =
     document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
@@ -154,7 +180,7 @@ export function openOverlay(hooks: OverlayHooks): Overlay {
     close(chosen = false): void {
       if (!open) return;
       open = false;
-      document.removeEventListener("keydown", onKeydown, true);
+      keyTarget.removeEventListener("keydown", onKeydown as EventListener, true);
       hooks.element.remove();
       const wasCurrent = current === overlay;
       if (wasCurrent) current = null;
@@ -179,6 +205,12 @@ export function openOverlay(hooks: OverlayHooks): Overlay {
       event.preventDefault();
       event.stopPropagation();
       overlay.close(false);
+      return;
+    }
+    if (hooks.onKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!hooks.onKey(event)) overlay.close(true);
       return;
     }
     if (chordsOf("next-line").includes(chord)) {
@@ -206,10 +238,127 @@ export function openOverlay(hooks: OverlayHooks): Overlay {
     // means, and the focus is already inside the overlay so it does not.
   }
 
-  document.addEventListener("keydown", onKeydown, true);
+  keyTarget.addEventListener("keydown", onKeydown as EventListener, true);
   current = overlay;
   announceOverlay();
   focusTarget(hooks.element).focus();
   hooks.onMove?.(0);
+  return overlay;
+}
+
+/** A row of a list overlay: what is shown, and what it stands for. */
+export interface ListEntry {
+  readonly id: string;
+  readonly label: string;
+}
+
+/** What a list overlay's owner supplies. */
+export interface ListOverlayHooks<T extends ListEntry> {
+  /** Where the overlay is mounted. */
+  readonly host?: HTMLElement;
+  /** The overlay's own class, beside `overlay`. */
+  readonly className: string;
+  /** What a screen reader calls the whole overlay. */
+  readonly label: string;
+  /** What the modeline calls this pane while it holds the keyboard. */
+  readonly paneLabel: string;
+  /** The dataset key each row carries its id under. */
+  readonly rowKey: string;
+  /** The filter field's placeholder. A list with no field omits it. */
+  readonly placeholder?: string;
+  /** What a screen reader calls the filter field. */
+  readonly fieldLabel?: string;
+  /** A line of prose above the rows, for a list that asks a question. */
+  readonly question?: string;
+  /** The rows a query matches, best first. The query is empty with no field. */
+  entries(query: string): readonly T[];
+  onChoose?(entry: T): void;
+  onClose?(chosen: boolean): void;
+}
+
+/**
+ * A filterable list over the one overlay contract.
+ *
+ * The insert palette, the command palette and the quit confirmation are the
+ * same thing seen three times: rows, a highlight, `Return`, and `C-g`. Written
+ * once so that the three cannot drift, and so that a fourth costs a call
+ * rather than a copy.
+ */
+export function openListOverlay<T extends ListEntry>(
+  hooks: ListOverlayHooks<T>,
+): Overlay {
+  let matches: readonly T[] = hooks.entries("");
+
+  const element = document.createElement("section");
+  element.className = hooks.className;
+  element.setAttribute("role", "dialog");
+  element.setAttribute("aria-label", hooks.label);
+  element.dataset["paneLabel"] = hooks.paneLabel;
+
+  if (hooks.question !== undefined) {
+    const question = document.createElement("p");
+    question.className = "palette-question";
+    question.textContent = hooks.question;
+    element.append(question);
+  }
+
+  let field: HTMLInputElement | null = null;
+  if (hooks.placeholder !== undefined) {
+    field = document.createElement("input");
+    field.type = "text";
+    field.className = "palette-field";
+    field.placeholder = hooks.placeholder;
+    field.setAttribute("aria-label", hooks.fieldLabel ?? hooks.label);
+    field.dataset["overlayFocus"] = "yes";
+    element.append(field);
+  }
+
+  const list = document.createElement("ul");
+  list.className = "palette-list";
+  element.append(list);
+
+  let overlay: Overlay | null = null;
+
+  const highlight = (index: number): void => {
+    const rows = list.querySelectorAll<HTMLElement>(".palette-row");
+    rows.forEach((row, at) => {
+      row.dataset["current"] = at === index ? "yes" : "no";
+    });
+    rows[index]?.scrollIntoView({ block: "nearest" });
+  };
+
+  const draw = (): void => {
+    list.replaceChildren();
+    for (const entry of matches) {
+      const item = document.createElement("li");
+      item.className = "palette-row";
+      item.dataset[hooks.rowKey] = entry.id;
+      item.textContent = entry.label;
+      list.append(item);
+    }
+    highlight(overlay?.index ?? 0);
+  };
+
+  field?.addEventListener("input", () => {
+    matches = hooks.entries(field?.value ?? "");
+    overlay?.move(0);
+    draw();
+  });
+
+  overlay = openOverlay({
+    element,
+    ...(hooks.host ? { host: hooks.host } : {}),
+    rowCount: () => matches.length,
+    onMove: (index) => {
+      highlight(index);
+    },
+    onChoose: (index) => {
+      const entry = matches[index];
+      if (entry) hooks.onChoose?.(entry);
+    },
+    ...(hooks.onClose ? { onClose: hooks.onClose } : {}),
+  });
+
+  draw();
   return overlay;
 }

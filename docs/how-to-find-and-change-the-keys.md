@@ -24,6 +24,31 @@ Some rows carry a note in the margin:
 The panel reads the binding table at the moment it opens, so it can never
 disagree with what the keyboard does.
 
+## Find a command by its name
+
+Press `M-x` and type a few letters of what the command is called.
+
+The palette lists every row of the binding table the page can run, plus every
+construct the insert palette offers, and filters as you type. Choosing a row
+runs it; `C-g` or Escape closes the palette having changed nothing. It is the
+way to reach an action whose chord you cannot recall, and the way to see what
+the surface answers without leaving the text.
+
+The one kind of row it leaves out is a chord the window's menu answers, marked
+`menu` in the keys panel: the page has no command behind it, so offering it
+would be a dead end.
+
+## Ask what one chord does
+
+Press `C-h k`, then the chord you want named.
+
+The modeline names the action that chord reaches, or says it is not bound. A
+prefix chord is read as one sequence: `C-h k` then `C-x` then `C-s` waits for
+the second step and then answers **Save the chapter**.
+
+`C-h k` reads the same table the keys panel renders, so its answer is the
+keyboard's answer.
+
 ## See what a key did
 
 Press `C-x k` to show the key log. It sits above the modeline and records each
@@ -46,8 +71,6 @@ binding had never existed.
 
 | Chord | Taken out of | Why |
 |---|---|---|
-| `M-x` | the Emacs keymap | a command line with no commands behind it |
-| `M-/` | the Emacs keymap | completion with no source configured |
 | `M-;` | the Emacs keymap | comment toggling, which Markdown has no line form for |
 | `s-/` | CodeMirror's keymap | the same comment toggle, from CodeMirror's own keymap |
 | `C-h` | CodeMirror's keymap | in the Emacs keymap `C-h` is the first step of `C-h b`; clearing it there would close the keys panel off |

@@ -31,8 +31,28 @@ import type {
 import { installKeyLog, type KeyLog } from "./keyspike";
 import { describeChord, openKeysPanel } from "./keyspanel";
 import { createModeline, type Modeline } from "./modeline";
-import { closeOverlay } from "./overlay";
+import { closeOverlay, openListOverlay, type ListEntry } from "./overlay";
 import { openPalette } from "./palette";
+import { openCommandPalette } from "./command-palette";
+import {
+  DEFAULT_FILL_COLUMN,
+  backwardParagraph,
+  backwardSentence,
+  capitalizeWord,
+  dabbrevExpand,
+  deleteHorizontalSpace,
+  deleteIndentation,
+  describeKey,
+  fillParagraph,
+  forwardParagraph,
+  forwardSentence,
+  justOneSpace,
+  moveToWindowLine,
+  transposeLines,
+  transposeWords,
+  zapToChar,
+  type ProseOptions,
+} from "./prose";
 import { createSidebar, type Sidebar } from "./sidebar";
 
 /** What the application needs from the world outside the page. */
@@ -53,6 +73,14 @@ export interface AppServices {
   readDocumentMetadata?(): Promise<DocumentMetadata>;
   /** Ask whether unsaved edits may be thrown away; false keeps them. */
   confirmDiscard(question: string): Promise<boolean>;
+  /**
+   * Leave the application.
+   *
+   * `C-x C-c` asks in the page and then calls this; the shell's own held-back
+   * close calls the same function, so there is one quit and not two. Absent
+   * outside the shell, where there is no window to close.
+   */
+  quit?(): Promise<void>;
   /**
    * Tell the shell whether the open chapter has unsaved edits.
    *
@@ -127,6 +155,12 @@ const WELCOME = [
   "",
 ].join("\n");
 
+/** The two answers the quit question takes. */
+const QUIT_CHOICES: readonly ListEntry[] = [
+  { id: "quit", label: "Quit without saving" },
+  { id: "keep", label: "Keep editing" },
+];
+
 /** Every chapter in a tree, in the order the sidebar draws them. */
 function chaptersOf(part: Part): Chapter[] {
   const found = [...part.chapters];
@@ -145,6 +179,13 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   let savedText = WELCOME;
   let detached = false;
   let message = "";
+  /**
+   * The column `M-q` fills at.
+   *
+   * The open document's own, from `document.yaml`, and 80 while the file is
+   * absent, silent, or unreadable.
+   */
+  let fillColumn = DEFAULT_FILL_COLUMN;
   /**
    * Which read the buffer is waiting for.
    *
@@ -314,11 +355,20 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     return chaptersOf(tree.root).find((chapter) => chapter.path === path);
   }
 
-  /** The document's title, from `document.yaml` where there is one. */
+  /**
+   * The document's title, from `document.yaml` where there is one.
+   *
+   * The fill column is read in the same round trip, because it comes from the
+   * same file and a second read would be a second answer to one question. A
+   * file that is absent, silent, or unreadable leaves the default standing.
+   */
   async function documentTitle(fallback: string): Promise<string> {
+    fillColumn = DEFAULT_FILL_COLUMN;
     if (!services.readDocumentMetadata) return fallback;
     try {
       const metadata = await services.readDocumentMetadata();
+      const stated = metadata.fill_column;
+      if (typeof stated === "number" && stated > 0) fillColumn = stated;
       const title = metadata.title;
       return title !== null && title !== "" ? title : fallback;
     } catch (error) {
@@ -327,7 +377,63 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     }
   }
 
+  /** What every prose command is told about the open document. */
+  function proseOptions(): ProseOptions {
+    return { fillColumn };
+  }
+
+  /** Run a prose command and announce its refusal, if it refused. */
+  function prose(run: () => string | null): void {
+    announce(run() ?? "");
+  }
+
   // ------------------------------------------------------------- extensions
+
+  /** Leave, or say why leaving is not possible here. */
+  function leave(): void {
+    if (!services.quit) {
+      announce("Quitting needs the desktop application");
+      return;
+    }
+    void services.quit().catch((error: unknown) => {
+      announce(String(error));
+    });
+  }
+
+  /**
+   * `C-x C-c`.
+   *
+   * With nothing unsaved it quits. With unsaved edits it asks in the overlay
+   * host rather than through a native dialog, so `C-g` and Escape put Alice
+   * back in the text with her edits intact — which the platform's own dialog,
+   * answering Return and Escape alone, cannot do.
+   */
+  function quit(): void {
+    if (!isDirty()) {
+      leave();
+      return;
+    }
+    const keep = (): void => {
+      view.focus();
+      announce("Kept your edits");
+    };
+    openListOverlay<ListEntry>({
+      host: overlayHost,
+      className: "confirm",
+      label: "Quit Editor",
+      paneLabel: "Quit",
+      rowKey: "choice",
+      question: `${openChapterTitle ?? "The chapter"} has unsaved edits.`,
+      entries: () => QUIT_CHOICES,
+      onChoose: (choice) => {
+        if (choice.id === "quit") leave();
+        else keep();
+      },
+      onClose: (chosen) => {
+        if (!chosen) keep();
+      },
+    });
+  }
 
   const commands: EditorCommands = {
     "save-chapter": () => {
@@ -355,6 +461,61 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     // row for itself, in `src/focus.ts`, and both reach this one cycle.
     "other-window": () => {
       focus.cycle();
+    },
+
+    // The prose vocabulary. Each is a function of the view in `src/prose.ts`;
+    // what the application adds is the document's fill column, the modeline
+    // the refusals are announced in, and the host the two prompts mount in.
+    "fill-paragraph": () => {
+      prose(() => fillParagraph(view, proseOptions()));
+    },
+    "transpose-words": () => {
+      prose(() => transposeWords(view));
+    },
+    "transpose-lines": () => {
+      prose(() => transposeLines(view));
+    },
+    "capitalize-word": () => {
+      prose(() => capitalizeWord(view));
+    },
+    "backward-sentence": () => {
+      prose(() => backwardSentence(view, proseOptions()));
+    },
+    "forward-sentence": () => {
+      prose(() => forwardSentence(view, proseOptions()));
+    },
+    "backward-paragraph": () => {
+      prose(() => backwardParagraph(view));
+    },
+    "forward-paragraph": () => {
+      prose(() => forwardParagraph(view));
+    },
+    "delete-indentation": () => {
+      prose(() => deleteIndentation(view));
+    },
+    "just-one-space": () => {
+      prose(() => justOneSpace(view));
+    },
+    "delete-horizontal-space": () => {
+      prose(() => deleteHorizontalSpace(view));
+    },
+    "move-to-window-line": () => {
+      prose(() => moveToWindowLine(view));
+    },
+    "dabbrev-expand": () => {
+      prose(() => dabbrevExpand(view));
+    },
+    "zap-to-char": () => {
+      zapToChar(view, { host: overlayHost, announce });
+    },
+    "describe-key": () => {
+      describeKey({ host: overlayHost, announce });
+    },
+    "command-palette": () => {
+      openCommandPalette(view, { host: overlayHost, announce });
+    },
+    quit: () => {
+      quit();
     },
   };
 
@@ -490,6 +651,9 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       await showTree(next);
       sidebar.setExpansion(expansion);
       sidebar.select(openChapterPath, openNodeId);
+      // The document's own settings are read again, because a reload is what
+      // an edit to `document.yaml` arrives as.
+      await documentTitle(next.root.title);
 
       if (openChapterPath === null) return;
       const still = chapterAt(openChapterPath);

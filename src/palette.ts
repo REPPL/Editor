@@ -17,7 +17,11 @@ import {
   matchForms,
   type InsertForm,
 } from "./core/inserts";
-import { openOverlay, type Overlay } from "./overlay";
+import {
+  openListOverlay,
+  type ListEntry,
+  type Overlay,
+} from "./overlay";
 
 /**
  * The phase whose forms the palette offers.
@@ -111,68 +115,26 @@ export function insertForm(
   return null;
 }
 
-/** Open the palette over the editing surface. */
+/**
+ * Open the palette over the editing surface.
+ *
+ * The list, the highlight and the cancel are `openListOverlay`'s, which the
+ * command palette opens too: one overlay seen twice, so the two cannot drift.
+ * What is this module's is only which forms are offered and what choosing one
+ * writes.
+ */
 export function openPalette(view: EditorView, hooks: PaletteHooks = {}): Overlay {
   const offered = formsVisibleIn(PALETTE_PHASE);
-  let matches: readonly InsertForm[] = offered;
-
-  const element = document.createElement("section");
-  element.className = "palette";
-  element.setAttribute("role", "dialog");
-  element.setAttribute("aria-label", "Insert a construct");
-  // What the modeline calls this pane while it holds the keyboard.
-  element.dataset["paneLabel"] = "Insert";
-
-  const field = document.createElement("input");
-  field.type = "text";
-  field.className = "palette-field";
-  field.placeholder = "Insert…";
-  field.setAttribute("aria-label", "Filter constructs");
-  field.dataset["overlayFocus"] = "yes";
-
-  const list = document.createElement("ul");
-  list.className = "palette-list";
-
-  element.append(field, list);
-
-  let overlay: Overlay | null = null;
-
-  const draw = (): void => {
-    list.replaceChildren();
-    for (const form of matches) {
-      const item = document.createElement("li");
-      item.className = "palette-row";
-      item.dataset["form"] = form.id;
-      item.textContent = form.label;
-      list.append(item);
-    }
-    highlight(overlay?.index ?? 0);
-  };
-
-  const highlight = (index: number): void => {
-    const rows = list.querySelectorAll<HTMLElement>(".palette-row");
-    rows.forEach((row, at) => {
-      row.dataset["current"] = at === index ? "yes" : "no";
-    });
-    rows[index]?.scrollIntoView({ block: "nearest" });
-  };
-
-  field.addEventListener("input", () => {
-    matches = matchForms(field.value, offered);
-    overlay?.move(0);
-    draw();
-  });
-
-  overlay = openOverlay({
-    element,
+  return openListOverlay<InsertForm & ListEntry>({
     ...(hooks.host ? { host: hooks.host } : {}),
-    rowCount: () => matches.length,
-    onMove: (index) => {
-      highlight(index);
-    },
-    onChoose: (index) => {
-      const form = matches[index];
-      if (!form) return;
+    className: "palette",
+    label: "Insert a construct",
+    paneLabel: "Insert",
+    rowKey: "form",
+    placeholder: "Insert…",
+    fieldLabel: "Filter constructs",
+    entries: (query) => matchForms(query, offered),
+    onChoose: (form) => {
       const refusal = insertForm(view, form);
       hooks.announce?.(refusal ?? `Inserted ${form.label}`);
     },
@@ -180,7 +142,4 @@ export function openPalette(view: EditorView, hooks: PaletteHooks = {}): Overlay
       if (!chosen) view.focus();
     },
   });
-
-  draw();
-  return overlay;
 }

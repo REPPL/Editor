@@ -778,6 +778,138 @@ export const BINDINGS: readonly Binding[] = [
     owner: "app",
   },
 
+  // The prose vocabulary: the commands an Emacs writer's hands already know.
+  //
+  // Every chord is written from the physical key, as `mark-word` already is,
+  // because that is what a browser reports once Option and Shift are down.
+  // Emacs's own spelling is in the comment beside each.
+  {
+    id: "fill-paragraph",
+    label: "Fill the paragraph",
+    chords: ["M-q"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    id: "transpose-words",
+    label: "Transpose words",
+    chords: ["M-t"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    id: "transpose-lines",
+    label: "Transpose lines",
+    chords: ["C-x C-t"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    id: "capitalize-word",
+    label: "Capitalise word",
+    chords: ["M-c"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    id: "backward-sentence",
+    label: "Backward sentence",
+    chords: ["M-a"],
+    group: "movement",
+    owner: "editor",
+  },
+  {
+    id: "forward-sentence",
+    label: "Forward sentence",
+    chords: ["M-e"],
+    group: "movement",
+    owner: "editor",
+  },
+  {
+    // `M-{` on a US layout.
+    id: "backward-paragraph",
+    label: "Backward paragraph",
+    chords: ["M-S-["],
+    group: "movement",
+    owner: "editor",
+  },
+  {
+    // `M-}` on a US layout.
+    id: "forward-paragraph",
+    label: "Forward paragraph",
+    chords: ["M-S-]"],
+    group: "movement",
+    owner: "editor",
+  },
+  {
+    // `M-^` on a US layout.
+    id: "delete-indentation",
+    label: "Join to the previous line",
+    chords: ["M-S-6"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    id: "just-one-space",
+    label: "Just one space",
+    chords: ["M-Space"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    id: "delete-horizontal-space",
+    label: "Delete the surrounding space",
+    chords: ["M-\\"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    id: "zap-to-char",
+    label: "Zap to a character",
+    chords: ["M-z"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    // Off the suppression list: completion now has the document's own words
+    // behind it.
+    id: "dabbrev-expand",
+    label: "Expand the word from the document",
+    chords: ["M-/"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    // Off the suppression list: the command line now has every row of this
+    // table and every insert form behind it.
+    id: "command-palette",
+    label: "Run a command",
+    chords: ["M-x"],
+    group: "control",
+    owner: "editor",
+  },
+  {
+    id: "describe-key",
+    label: "Describe the next key",
+    chords: ["C-h k"],
+    group: "control",
+    owner: "editor",
+  },
+  {
+    id: "move-to-window-line",
+    label: "Cursor to the middle of the view",
+    chords: ["M-r"],
+    group: "movement",
+    owner: "editor",
+  },
+  {
+    id: "quit",
+    label: "Quit Editor",
+    chords: ["C-x C-c"],
+    group: "document",
+    owner: "editor",
+  },
+
   // The sidebar's own rows. Every chord here is carried by an editor row as
   // well; which one answers is decided by the pane that holds the keyboard,
   // never by the chord. See `scopeOf`.
@@ -843,16 +975,6 @@ export interface Suppression {
 }
 
 export const SUPPRESSED: readonly Suppression[] = [
-  {
-    chord: "M-x",
-    where: "keymap",
-    why: "a command line with no commands behind it",
-  },
-  {
-    chord: "M-/",
-    where: "keymap",
-    why: "completion with no source configured",
-  },
   {
     chord: "M-;",
     where: "keymap",
