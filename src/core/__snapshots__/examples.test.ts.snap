@@ -1,0 +1,1795 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the built deck on every example chapter > examples/presentation/01-slides/01-technology-impact-assessment.md 1`] = `
+"<section id="technology-impact-assessment" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">Technology <em>Impact</em> Assessment</h1>
+<aside class="notes" data-source="generated">
+<p>Technikfolgenabschätzung</p>
+<p>Alice</p>
+<p>Royal Holloway Business School</p>
+<p>
+<em>14 June 2026</em>
+</p>
+</aside>
+</section>
+<section id="denver-1858" class="slide slide-section" data-kind="section" data-line="11">
+<h2 class="headline">Denver, 1858</h2>
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/denver-1864.svg" alt="A view of West Denver during the flood of 1864." />
+<figcaption>
+<span class="caption">A view of West Denver during the flood of 1864.</span>
+</figcaption>
+</figure>
+</div>
+<footer class="slide-foot">
+<p class="credit">Photograph: Denver Public Library, Western History Collection (history.denverlibrary.org); see also: Colorado Encyclopedia (coloradoencyclopedia.org/article/colorado-gold-rush)</p>
+</footer>
+<aside class="notes" data-source="generated">
+<ul>
+<li>1859: roughly 100,000 set out under <em>Pike's Peak or Bust</em> — most went bust and many turned back</li>
+<li>As always, the durable fortunes: Selling shovels, jeans, and the town itself</li>
+</ul>
+</aside>
+</section>
+<section id="slide" class="slide slide-image" data-kind="image" data-line="22">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/denver.svg" alt="A view of West Denver during the flood of 1864." />
+<figcaption>
+<span class="caption">A view of West Denver during the flood of 1864.</span>
+</figcaption>
+</figure>
+</div>
+<footer class="slide-foot">
+<p class="credit">Photograph: Denver Public Library, Western History Collection (history.denverlibrary.org); see also: Colorado Encyclopedia (coloradoencyclopedia.org/article/colorado-gold-rush)</p>
+</footer>
+</section>
+<section>
+<section id="in-1859-the-question-was" class="slide slide-section" data-kind="section" data-line="28">
+<h2 class="headline">In 1859 the question was:</h2>
+<aside class="notes" data-source="generated">
+<blockquote>
+<p>"Is there gold in the creek?"</p>
+</blockquote>
+</aside>
+</section>
+<section id="perhaps-for-2026" class="slide slide-subsection" data-kind="subsection" data-line="32">
+<h3 class="headline">Perhaps for 2026?</h3>
+<aside class="notes" data-source="generated">
+<blockquote>
+<p>"Who owns the creek, who's allowed to drink, and who gets to decide?"</p>
+</blockquote>
+</aside>
+</section>
+</section>
+<section id="the-2026-rush" class="slide slide-section" data-kind="section" data-line="36">
+<h2 class="headline">The 2026 rush</h2>
+</section>
+<section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="38">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/musk.svg" alt="Musk as first trillionaire" />
+<figcaption>
+<span class="caption">Musk as first trillionaire</span>
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="slide-3" class="slide slide-image" data-kind="image" data-line="42">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/nvidia.svg" alt="Nvidia's market capitalisation, 1999 to 11 June 2026: ~$4.9 trillion, the most valuable company on earth" />
+<figcaption>
+<span class="caption">Nvidia's market capitalisation, 1999 to 11 June 2026: ~$4.9 trillion, the most valuable company on earth</span>
+</figcaption>
+</figure>
+<ul>
+<li>Combined hyperscaler capex for 2026: <strong>~$700 billion</strong>, ~75% of it AI-specific <em>(CNBC; Futurum, 2026)</em>
+</li>
+<li>AI capex ≈ <strong>0.8% of US GDP</strong>, earlier tech booms peaked above <strong>1.5%</strong> <em>(Goldman Sachs, 2025)</em>
+</li>
+<li>The "shovel-seller": <strong>Nvidia, ~$4.9 trillion</strong>, the most valuable company on earth</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: CNBC (6 Feb 2026): cnbc.com/2026/02/06/google-microsoft-meta-amazon-ai-cash.html; Futurum Group: futurumgroup.com; Goldman Sachs: goldmansachs.com/insights; StockAnalysis: stockanalysis.com/stocks/nvda/market-cap</p>
+</footer>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/presentation/01-slides/02-where-im-coming-from.md 1`] = `
+"<section id="where-i-m-coming-from" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">Where I'm coming from</h1>
+</section>
+<section id="technology-impact-assessment" class="slide slide-section" data-kind="section" data-line="3">
+<h2 class="headline">Technology <em>Impact</em> Assessment</h2>
+<aside class="notes" data-source="generated">
+<p>
+<em>(The tradition I'm coming from)</em>
+</p>
+</aside>
+</section>
+<section id="technikfolgenabschatzung" class="slide slide-section" data-kind="section" data-line="7">
+<h2 class="headline">Technikfolgenabschätzung</h2>
+<aside class="notes" data-source="generated">
+<p>Technik / Folgen / Abschätzung</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="11">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/congress.svg" alt="Congressional Research Service report R46327 on the OTA" />
+<figcaption>
+<span class="caption">Congressional Research Service report R46327 on the OTA</span>
+<span class="credit">congress.gov — CRS report R46327</span>
+</figcaption>
+</figure>
+<p>
+<strong>U.S.:</strong> Office of Technology Assessment <em>(1972 – 1995)</em>
+</p>
+</div>
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/tab.svg" alt="TAB's current work: rares earths, HR analytics, plastics in the oceans, horizon scanning" />
+<figcaption>
+<span class="caption">TAB's current work: rares earths, HR analytics, plastics in the oceans, horizon scanning</span>
+<span class="credit">tab-beim-bundestag.de — TAB news, June 2026</span>
+</figcaption>
+</figure>
+<p>
+<strong>Germany:</strong> TAB <em>(since 1990)</em>, latest outputs incl. a report on deepfakes, guidelines for GenAI, etc.</p>
+</div>
+</div>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: CRS R46327 — congress.gov/crs-product/R46327 · TAB — tab-beim-bundestag.de · Grunwald (2014), APuZ — bpb.de</p>
+</footer>
+</section>
+<section id="however" class="slide slide-section" data-kind="section" data-line="30">
+<h2 class="headline">However ...</h2>
+</section>
+<section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="32">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/eu.svg" alt="Gibson Dunn client alert, 27 May 2026: EU AI Act high-risk deadlines postponed" />
+<figcaption>
+<span class="caption">Gibson Dunn client alert, 27 May 2026: EU AI Act high-risk deadlines postponed</span>
+</figcaption>
+</figure>
+<ul>
+<li>In force <strong>August 2024</strong>; high-risk obligations were due <strong>August 2026</strong>
+</li>
+<li>
+<strong>May 2026:</strong> provisionally deferred to <strong>2027/28</strong>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: Gibson Dunn (May 2026): gibsondunn.com; Hogan Lovells: hoganlovells.com; Tech Policy Press: techpolicy.press.</p>
+</footer>
+</section>
+<section id="adding-insult-to-injury" class="slide slide-section" data-kind="section" data-line="43">
+<h2 class="headline">Adding insult to injury?</h2>
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<blockquote>
+<p>The problem is that Treebeard operates at a very different speed than the Hobbits. It takes him a full day simply to say hello to another tree, so getting him and his peers to act fast enough is nearly impossible.
+--Dario Amodei, June 2026</p>
+</blockquote>
+</div>
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/amodei1.svg" alt="Dario Amodei's policy essay, published this month" />
+<figcaption>
+<span class="caption">Dario Amodei's policy essay, published this month</span>
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<footer class="slide-foot">
+<p class="credit">Source: Amodei, "Policy on the AI Exponential" (June 2026): darioamodei.com.</p>
+</footer>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/presentation/01-slides/03-why-im-here.md 1`] = `
+"<section id="why-i-m-here" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">Why I'm here</h1>
+<aside class="notes" data-source="authored">
+<p>Why I'm here: The macro lens</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="7">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/two-perspectives1.svg" alt="Clients vs. users — the baby-mobile cartoon" />
+<figcaption>
+<span class="caption">Clients vs. users — the baby-mobile cartoon</span>
+</figcaption>
+</figure>
+</div>
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/two-perspectives2.svg" alt="Marketing's perspective vs. the customer's perspective" />
+<figcaption>
+<span class="caption">Marketing's perspective vs. the customer's perspective</span>
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<footer class="slide-foot">
+<p class="credit">Cartoon: vk.com/piterskii_punk_wall, via uxplanet.org · marketing version: Tom Wanek, via 716marketing.com/integrated-marketing-communications/customer-journey-mapping-business-growth</p>
+</footer>
+</section>
+<section id="drawing-both-together" class="slide slide-section" data-kind="section" data-line="22">
+<h2 class="headline">Drawing both together</h2>
+<footer class="slide-foot">
+<p class="credit">Sources: CRS R46327: congress.gov/crs-product/R46327; Macromarketing Society: macromarketing.org.</p>
+</footer>
+<aside class="notes" data-source="generated">
+<ul>
+<li>
+<strong>1972</strong>: Congress founds the OTA</li>
+<li>
+<strong>1976</strong>: First Macromarketing Seminar, <em>University of Colorado</em>
+</li>
+</ul>
+<ul>
+<li>and I <em>love</em> the 70s ...</li>
+</ul>
+</aside>
+</section>
+<section id="what-does-it-mean" class="slide slide-section" data-kind="section" data-line="32">
+<h2 class="headline">What does it <em>mean</em>?</h2>
+<aside class="notes" data-source="generated">
+<p>
+<em>(man weiß es not.)</em>
+</p>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="36">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<blockquote>
+<p>I think that most people are underestimating just how radical the upside of AI could be, just as I think most people are underestimating how bad the risks could be.
+--Dario Amodei, "Machines of Loving Grace", October 2024</p>
+</blockquote>
+</div>
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/amodei2.svg" alt="Machines of Loving Grace, October 2024" />
+<figcaption>
+<span class="caption">Machines of Loving Grace, October 2024</span>
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<footer class="slide-foot">
+<p class="credit">Source: Amodei, "Machines of Loving Grace" (Oct 2024): darioamodei.com.</p>
+</footer>
+</section>
+<section id="slide-3" class="slide slide-continuation" data-kind="continuation" data-line="52">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<blockquote>
+<p>We tend to overestimate the effect of a technology in the short run and underestimate the effect in the long run.
+--Roy Amara</p>
+</blockquote>
+</div>
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/amaras-law.svg" alt="Amara's Law — IEEE Computer Society" />
+<figcaption>
+<span class="caption">Amara's Law — IEEE Computer Society</span>
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: IEEE Computer Society: computer.org</p>
+</footer>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/presentation/01-slides/04-four-themes.md 1`] = `
+"<section id="four-themes" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">Four themes</h1>
+</section>
+<section id="inclusion-and-wellbeing" class="slide slide-section" data-kind="section" data-line="3">
+<h2 class="headline">Inclusion and <em>wellbeing</em>
+</h2>
+<aside class="notes" data-source="authored">
+<p>Theme 1; straight to the heart of macromarketing thought.</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="9">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/digital-divide.svg" alt="ITU press release: detailing the globe's digital divides" />
+<figcaption>
+<span class="caption">ITU press release: detailing the globe's digital divides</span>
+<span class="credit">ITU, Facts and Figures 2025</span>
+</figcaption>
+</figure>
+<ul>
+<li>
+<strong>6 billion</strong> people are online, <strong>2.2 billion</strong> offline: Of those offline, 96% live in low- and middle-income countries <em>(ITU 2025)</em>
+</li>
+<li>5G coverage: <strong>84%</strong> of people in high-income countries vs. <strong>4%</strong> in low-income countries <em>(ibid.)</em>
+</li>
+<li>
+<strong>54%</strong> of respondents living in low-income countries expect generative AI to leave them behind <em>(Edelman 2026)</em>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: ITU, Facts and Figures 2025: itu.int; Edelman: edelman.com/trust/2026/trust-barometer.</p>
+</footer>
+</section>
+<section id="does-the-system-serve-the-many-or-the-few" class="slide slide-section" data-kind="section" data-line="21">
+<h2 class="headline">Does the system serve the many or the few?</h2>
+<aside class="notes" data-source="generated">
+<ul>
+<li>and who's measuring?</li>
+</ul>
+</aside>
+</section>
+<section id="energy-water-and-waste" class="slide slide-section" data-kind="section" data-line="25">
+<h2 class="headline">Energy, water, and <em>waste</em>
+</h2>
+</section>
+<section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="27">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/energy-and-ai3.svg" alt="Global map of large data-centre clusters, 2024" />
+<figcaption>
+<span class="caption">Global map of large data-centre clusters, 2024</span>
+<span class="credit">IEA, Energy and AI (2025), Figure 1.13</span>
+</figcaption>
+</figure>
+<ul>
+<li>Engery consumption of data centres estimated to grow from 415 TWh in 2024 to <strong>~945 TWh by 2030</strong>; consuming an estimated ~1.5% of world electricity <em>(IEA 2025)</em>
+</li>
+<li>U.S.: <strong>4.4%</strong> of electricity today, projected to increase to <strong>6.7</strong> – <strong>12%</strong> by 2028 <em>(LBNL 2024)</em>
+</li>
+<li>Water consumption: <strong>17.5 bn gallons</strong> direct use in the U.S. (2023), set to increase x2 - x4 by 2028 <em>(LBNL)</em>; one facility in Georgia alone consumes <strong>~10% of its county's water</strong> supply <em>(Lincoln Institute 2026)</em>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: IEA, Energy and AI — iea.org/reports/energy-and-ai · LBNL — eta.lbl.gov/publications/2024-united-states-data-center · Lincoln Institute — lincolninst.edu · water context: spectrum.ieee.org/ai-water-usage</p>
+</footer>
+</section>
+<section id="slide-3" class="slide slide-image" data-kind="image" data-line="39">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/ewaste-monitor.svg" alt="UN press release: e-waste rising five times faster than documented recycling" />
+<figcaption>
+<span class="caption">UN press release: e-waste rising five times faster than documented recycling</span>
+<span class="credit">Global E-waste Monitor 2024 — ewastemonitor.info</span>
+</figcaption>
+</figure>
+<ul>
+<li>
+<strong>62 million tonnes</strong> of e-waste in 2022, estimated to grow to <strong>82 Mt</strong> by 2030; only <strong>22.3%</strong> are currently formally recycled <em>(GEM 2024)</em>
+</li>
+<li>Waste contains materials worth an estimated <strong>$91 billion</strong> (incl. <strong>~$15 billion of actual gold</strong>), of which $19bn currently recovered <em>(ibid.)</em>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: Global E-waste Monitor 2024 (ITU/UNITAR): ewastemonitor.info.</p>
+</footer>
+</section>
+<section id="do-big-tech-firms-really-have-the-social-licence-to-build-what-they-re-building" class="slide slide-section" data-kind="section" data-line="48">
+<h2 class="headline">Do <em>big tech</em> firms really have the <em>social</em> licence to build what they're building?</h2>
+<aside class="notes" data-source="generated">
+<ul>
+<li>and who's giving them permission?<sup class="footnote-reference">licence</sup>
+</li>
+</ul>
+</aside>
+</section>
+<section id="concentration-and-power" class="slide slide-section" data-kind="section" data-line="54">
+<h2 class="headline">Concentration and <em>power</em>
+</h2>
+<aside class="notes" data-source="authored">
+<p>Theme 3</p>
+</aside>
+</section>
+<section id="slide-4" class="slide slide-continuation" data-kind="continuation" data-line="60">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/rbc2.svg" alt="Cumulative weight of the 10 largest S&amp;P 500 companies, 1990–2025" />
+<figcaption>
+<span class="caption">Cumulative weight of the 10 largest S&amp;P 500 companies, 1990–2025</span>
+<span class="credit">RBC Wealth Management / FactSet, January 2026</span>
+</figcaption>
+</figure>
+<ul>
+<li>The ten largest S&amp;P 500 firms: A record <strong>40+%</strong> of the index, twice their 2015 weight <em>(RBC, 2026)</em>
+</li>
+<li>Three cloud provider (AWS, Azure, Google) hold <strong>~59%</strong> of hyperscale capacity <em>(Synergy Research)</em>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: RBC Wealth Management / FactSet — rbcwealthmanagement.com/en-us/insights/the-great-narrowing-sp-500-concentration · capacity share: Synergy Research, via en.wikipedia.org/wiki/Data_center</p>
+</footer>
+</section>
+<section id="slide-5" class="slide slide-image" data-kind="image" data-line="71">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/fable.svg" alt="Statement by Anthropic, published two days ago" />
+<figcaption>
+<span class="caption">Statement by Anthropic, published two days ago</span>
+</figcaption>
+</figure>
+</div>
+<footer class="slide-foot">
+<p class="credit">Anthropic (June 2026): anthropic.com.</p>
+</footer>
+</section>
+<section id="slide-6" class="slide slide-image" data-kind="image" data-line="77">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/ai-bots.svg" alt="Key findings from the 2026 Bad Bot Report: bots now drive 53% of web traffic — and AI agents are a new category of internet participant" />
+<figcaption>
+<span class="caption">Key findings from the 2026 Bad Bot Report: bots now drive 53% of web traffic — and AI agents are a new category of internet participant</span>
+<span class="credit">Thales / Imperva, 2026 Bad Bot Report</span>
+</figcaption>
+</figure>
+</div>
+<footer class="slide-foot">
+<p class="credit">Source: Thales / Imperva — imperva.com/blog/bad-bot-report-2026-bots-agentic-age</p>
+</footer>
+</section>
+<section id="what-happens-when-this-hits-markets" class="slide slide-section" data-kind="section" data-line="83">
+<h2 class="headline">What happens when this hits <em>markets</em>?</h2>
+<aside class="notes" data-source="authored">
+<p>The question for Theme 3</p>
+</aside>
+</section>
+<section id="agents-as-market-actors" class="slide slide-section" data-kind="section" data-line="89">
+<h2 class="headline">Agents as market actors</h2>
+<footer class="slide-foot">
+<p class="credit">Sources: Thales/Imperva — imperva.com · McKinsey &amp; Gartner via nshift.com · Morgan Stanley via commercetools.com · protocols &amp; checkout: opascope.com</p>
+</footer>
+<aside class="notes" data-source="generated">
+<ul>
+<li>2025: <strong>53%</strong> of web traffic was automated; the human share keeps falling <em>(Thales/Imperva, 2026)</em>
+</li>
+<li>Projections:<sup class="footnote-reference">projections</sup> <strong>$3–5 trillion</strong> of retail by 2030 <em>(McKinsey)</em>; <strong>$15 trillion</strong> of B2B by 2028 <em>(Gartner)</em>; <strong>~half of online shoppers</strong> via agents by 2030 <em>(Morgan Stanley)</em>
+</li>
+</ul>
+<p>
+<em>
+<strong>When markets were built for humans, what is a marketing system when the "consumer" is an algorithm? And the protocols underlying all of this belong to a few firms?</strong>
+</em>
+</p>
+</aside>
+</section>
+<section id="information-and-trust" class="slide slide-section" data-kind="section" data-line="102">
+<h2 class="headline">Information and <em>trust</em>
+</h2>
+<aside class="notes" data-source="authored">
+<p>Theme 2</p>
+</aside>
+</section>
+<section id="slide-7" class="slide slide-continuation" data-kind="continuation" data-line="108">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/graphite.svg" alt="Graphite's crossover chart: AI-generated articles surpassed human-written content in November 2024" />
+<figcaption>
+<span class="caption">Graphite's crossover chart: AI-generated articles surpassed human-written content in November 2024</span>
+</figcaption>
+</figure>
+<ul>
+<li>The majority of new articles published on the web are now estimated to be AI-generated <em>(Graphite 2025)</em>
+</li>
+<li>
+<strong>Related:</strong> In a different study, <strong>up to 45%</strong> of open-ended online-survey responses are estimated to be copied from LLM output <em>(Nature 2026)</em>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Source: Graphite: graphite.io/five-percent/more-articles-are-now-created-by-ai-than-humans; Nature: nature.com/articles/d41586-026-01726-y.</p>
+</footer>
+</section>
+<section id="slide-8" class="slide slide-continuation" data-kind="continuation" data-line="119">
+<div class="face">
+<ul>
+<li>
+<strong>7 in 10</strong> people hesitant to trust those with different values or source of information <em>(Edelman 2026)</em>
+</li>
+</ul>
+<ul>
+<li>Misinformation (<strong>50%</strong>) and generative AI (<strong>37%</strong>) among the top five things that shape trust <em>(ibid.)</em>
+</li>
+<li>Only <strong>32%</strong> of respondents believe the next generation will be better off <em>(ibid.)</em>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Source: 2026 Edelman Trust Barometer: edelman.com/trust/2026/trust-barometer.</p>
+</footer>
+</section>
+<section id="what-happens-to-exchange-when-information-is-infinite-and-trust-a-scarcity" class="slide slide-section" data-kind="section" data-line="129">
+<h2 class="headline">What happens to exchange when information is <em>infinite</em> and trust a <em>scarcity</em>?</h2>
+<aside class="notes" data-source="generated">
+<ul>
+<li>Blockchain anyone?</li>
+</ul>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/presentation/01-slides/05-conclusion-a-few-provocations.md 1`] = `
+"<section id="conclusion-a-few-provocations" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">
+<em>Conclusion</em> — A few provocations</h1>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="3">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/employment.svg" alt="CNBC on the Stanford study: 13% decline in jobs for young U.S. workers in AI-exposed occupations" />
+<figcaption>
+<span class="caption">CNBC on the Stanford study: 13% decline in jobs for young U.S. workers in AI-exposed occupations</span>
+<span class="credit">cnbc.com, 28 August 2025 — reporting Brynjolfsson, Chandar &amp; Chen</span>
+</figcaption>
+</figure>
+<ul>
+<li>Workers aged <strong>22–25</strong> in what is considered to be "AI-exposed" professions: A <strong>13–16% relative employment decline</strong> since 2022;<sup class="footnote-reference">decline</sup> the situation for <strong>experienced</strong> workers, in contrast, was stable or growing <em>(Stanford / ADP payroll data)</em>
+</li>
+<li>
+<strong>47%</strong> of U.S. college students have considered switching majors because of AI <em>(Gallup–Lumina)</em>
+</li>
+</ul>
+</div>
+<footer class="slide-foot">
+<p class="credit">Sources: Brynjolfsson, Chandar &amp; Chen (2025), Stanford Digital Economy Lab · press: cnbc.com (28 Aug 2025) · Gallup–Lumina via thecollegeinvestor.com</p>
+</footer>
+</section>
+<section id="1" class="slide slide-section" data-kind="section" data-line="16">
+<h2 class="headline">#1</h2>
+<aside class="notes" data-source="generated">
+<p>
+<em>Experience</em> and <em>tacit knowledge</em> will soon matter more than degrees right from the start.</p>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="20">
+<div class="face">
+<blockquote>
+<p>Give a small boy a hammer, and he will find that everything he encounters needs pounding.
+--Abraham Kaplan</p>
+</blockquote>
+</div>
+<footer class="slide-foot">
+<p class="credit">Abraham Kaplan, The Conduct of Inquiry (1964)</p>
+</footer>
+</section>
+<section id="2" class="slide slide-section" data-kind="section" data-line="29">
+<h2 class="headline">#2</h2>
+<aside class="notes" data-source="generated">
+<p>The future belongs to the <em>generalist</em> and no longer to the <em>specialist</em>.</p>
+</aside>
+</section>
+<section id="3" class="slide slide-section" data-kind="section" data-line="33">
+<h2 class="headline">#3</h2>
+<aside class="notes" data-source="generated">
+<p>Everything we do is <em>software</em> and will be automated.</p>
+</aside>
+</section>
+<section id="however" class="slide slide-section" data-kind="section" data-line="37">
+<h2 class="headline">However ...</h2>
+</section>
+<section id="slide-3" class="slide slide-continuation" data-kind="continuation" data-line="39">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/privacy.svg" alt="LinkedIN screenshot" />
+<figcaption>
+<span class="caption">LinkedIN screenshot</span>
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="4" class="slide slide-section" data-kind="section" data-line="43">
+<h2 class="headline">#4</h2>
+<aside class="notes" data-source="generated">
+<p>Our desire for <em>convenience</em> is holding us back.</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/presentation/01-slides/06-the-business-futures-mindset.md 1`] = `
+"<section id="the-business-futures-mindset" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">The (Business) Futures <em>mindset</em>
+</h1>
+<aside class="notes" data-source="generated">
+<ul>
+<li>
+<em>Experience</em> and <em>tacit knowledge</em> will soon matter more than degrees</li>
+</ul>
+<ul>
+<li>The future belongs to the <em>generalist</em>
+</li>
+<li>Everything we do is <em>software</em> and will be automated</li>
+<li>Conveninece is holding us back</li>
+</ul>
+</aside>
+</section>
+<section id="stay-in-touch" class="slide slide-section" data-kind="section" data-line="8">
+<h2 class="headline">Stay in touch!</h2>
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/qrcode-linkedin.svg" alt="Scan to connect on LinkedIn." />
+<figcaption>
+<span class="caption">Scan to connect on LinkedIn.</span>
+</figcaption>
+</figure>
+</div>
+<div class="column">
+<p>
+<strong>Shamless self-promotion:</strong>
+</p>
+<p>
+<strong>"Example Document: An(other) extraodinary skill for ordinary people"</strong>
+</p>
+<p>
+<em>(hands-on workshop, Tuesday 10:30-12:00, room 303).</em>
+</p>
+</div>
+</div>
+</div>
+</section>
+<section id="thank-you-and-welcome-to-macromarketing" class="slide slide-section" data-kind="section" data-line="23">
+<h2 class="headline">Thank you — and welcome to Macromarketing!</h2>
+</section>
+<section id="appendix-sources-1-of-2" class="slide slide-section refs" data-kind="section" data-line="25">
+<h2 class="headline">Appendix · Sources (1 of 2)</h2>
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<ul>
+<li>Colorado Encyclopedia — <em>Colorado Gold Rush</em>. coloradoencyclopedia.org/article/colorado-gold-rush</li>
+<li>Denver Public Library, Western History Collection — history.denverlibrary.org</li>
+<li>CNBC (6 Feb 2026) — <em>Tech AI spending may approach $700 billion this year</em>. cnbc.com/2026/02/06/google-microsoft-meta-amazon-ai-cash.html</li>
+<li>Futurum Group (Feb 2026) — <em>AI Capex 2026: The $690B Infrastructure Sprint</em>. futurumgroup.com/insights/ai-capex-2026-the-690b-infrastructure-sprint</li>
+<li>Goldman Sachs (Dec 2025) — <em>Why AI Companies May Invest More than $500 Billion in 2026</em>. goldmansachs.com/insights/articles/why-ai-companies-may-invest-more-than-500-billion-in-2026</li>
+<li>StockAnalysis — <em>NVIDIA market cap</em>. stockanalysis.com/stocks/nvda/market-cap</li>
+<li>CRS (2020) — <em>The Office of Technology Assessment</em>, R46327. congress.gov/crs-product/R46327</li>
+</ul>
+</div>
+<div class="column">
+<ul>
+<li>Grunwald, A. (2014) — <em>Parlamentarische Technikfolgenabschätzung</em>, APuZ. bpb.de/shop/zeitschriften/apuz/177763</li>
+<li>TAB — <em>About us</em>. tab-beim-bundestag.de/english/about-us.php</li>
+<li>Gibson Dunn (May 2026) — <em>EU AI Act Omnibus Agreement</em>. gibsondunn.com/eu-ai-act-omnibus-agreement-postponed-high-risk-deadlines-and-other-key-changes</li>
+<li>Hogan Lovells (May 2026) — <em>EU legislators agree to delay for high-risk AI rules</em>. hoganlovells.com/en/publications/eu-legislators-agree-to-delay-for-highrisk-ai-rules</li>
+<li>Tech Policy Press (Apr 2026) — <em>EU's AI Act delays let high-risk systems dodge oversight</em>. techpolicy.press</li>
+<li>RBC Wealth Management (Jan 2026) — <em>The "Great Narrowing"</em>. rbcwealthmanagement.com/en-us/insights/the-great-narrowing-sp-500-concentration</li>
+<li>Thales / Imperva (Apr 2026) — <em>2026 Bad Bot Report: Bots in the Agentic Age</em>. imperva.com/blog/bad-bot-report-2026-bots-agentic-age</li>
+<li>Baby-mobile cartoon — vk.com/piterskii_punk_wall, via uxplanet.org; marketing version: T. Wanek, via 716marketing.com/integrated-marketing-communications/customer-journey-mapping-business-growth</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+<section id="appendix-sources-2-of-2" class="slide slide-section refs" data-kind="section" data-line="49">
+<h2 class="headline">Appendix · Sources (2 of 2)</h2>
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<ul>
+<li>McKinsey &amp; Gartner agentic-commerce projections, via nshift.com/blog/agentic-commerce-future-of-ecommerce</li>
+<li>Morgan Stanley projection, via commercetools.com/blog/ai-trends-shaping-agentic-commerce</li>
+<li>Agentic-commerce protocols &amp; Instant Checkout: opascope.com/insights/ai-shopping-assistant-guide-2026-agentic-commerce-protocols</li>
+<li>Graphite (2025) — <em>More Articles Are Now Created by AI Than Humans</em>. graphite.io/five-percent/more-articles-are-now-created-by-ai-than-humans</li>
+<li>Edelman (Jan 2026) — <em>2026 Edelman Trust Barometer</em>. edelman.com/trust/2026/trust-barometer</li>
+<li>IEA (Apr 2025) — <em>Energy and AI</em>. iea.org/reports/energy-and-ai</li>
+<li>Shehabi et al. / LBNL (Dec 2024) — <em>2024 US Data Center Energy Usage Report</em>. eta.lbl.gov/publications/2024-united-states-data-center</li>
+<li>IEEE Spectrum (Sep 2025) — <em>The Real Story on AI Water Usage</em>. spectrum.ieee.org/ai-water-usage</li>
+<li>Amodei, D. (Jun 2026) — <em>Policy on the AI Exponential</em>. darioamodei.com</li>
+<li>Amodei, D. (Oct 2024) — <em>Machines of Loving Grace</em>. darioamodei.com</li>
+</ul>
+</div>
+<div class="column">
+<ul>
+<li>Lincoln Institute (Feb 2026) — <em>Data Drain: Land and Water Impacts of the AI Boom</em>. lincolninst.edu/publications/land-lines-magazine/articles/land-water-impacts-data-centers</li>
+<li>Baldé et al. (2024) — <em>Global E-waste Monitor 2024</em>, ITU/UNITAR. ewastemonitor.info/the-global-e-waste-monitor-2024</li>
+<li>Thompson, B. (12 Jun 2026) — <em>An Interview with Satya Nadella</em>. stratechery.com</li>
+<li>ITU (Nov 2025) — <em>Facts and Figures 2025</em>. itu.int/en/mediacentre/Pages/PR-2025-11-17-Facts-and-Figures.aspx</li>
+<li>Stanford HAI (2026) — <em>AI Index Report 2026</em>. aiindex.stanford.edu</li>
+<li>Nature news (2025–26) — peer review: nature.com/articles/d41586-025-04066-5 · surveys: d41586-026-01726-y, d41586-026-00221-8</li>
+<li>Brynjolfsson, Chandar &amp; Chen (2025) — <em>Canaries in the Coal Mine?</em> Stanford Digital Economy Lab (ADP payroll microdata)</li>
+<li>Gallup–Lumina survey, via thecollegeinvestor.com</li>
+<li>Wikipedia — <em>Gartner hype cycle</em>. en.wikipedia.org/wiki/Gartner_hype_cycle</li>
+<li>IEEE Computer Society — <em>What is Amara's Law?</em> computer.org</li>
+</ul>
+</div>
+</div>
+</div>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/manuscript/01-manuscript/01-introduction.md 1`] = `
+"<section id="introduction" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">Introduction</h1>
+<footer class="slide-foot">
+<p class="footnote">
+<span class="label">projects</span>The applications are published on GitHub.</p>
+</footer>
+<aside class="notes" data-source="generated">
+<p>The year 1977 marked a turning point when computers began reaching non-expert users. Three machines shifted computing from hobbyist niche to mainstream, with the Apple II widely regarded as the most refined of the trio. Unusual for its time, the machine was launched with an elaborate marketing campaign positioning it as "an extraordinary device for ordinary people" <span class="citation">[@hey2015computing]</span>. Marketing for the Apple II signalled a shift that would define the decades to come: computing as a <em>consumer</em> product. Over the past decades, successive waves of innovation---the Internet, mobile computing, ubiquitous cloud services, and most recently, AI assistants based on large language models---have progressively expanded both access to and the utility of computing. Adoption rates have accelerated with each wave; ChatGPT for example, perhaps the most prominent of the current generation of AI assistants, grew faster at launch than almost any consumer technology in history <span class="citation">[@milmo2023chatgpt; @epochai2025chatgpt]</span>.</p>
+<p>Today, personal computing permeates every aspect of life. We have become reliant on these technologies for tasks ranging from the mundane, such as coordinating with friends, to those requiring the orchestration of vast computational resources, including real-time language translation or on-demand video creation. For many of us, it is now difficult, if not impossible, to imagine a life without the services enabled by modern computing devices.</p>
+<p>Yet whilst we <em>use</em> these applications constantly, an intriguing question emerges: can non-expert users, lacking formal training, now also <em>develop</em> them? Perhaps the most significant recent development in this regard is <em>example document</em>---a term coined by Andrej Karpathy <span class="citation">[@karpathy2025vibe]</span> to describe a mode of software development in which users without programming backgrounds create working software applications through conversing with an AI assistant: the user articulates an intention and the AI proposes and executes an implementation. Together, they refine the result through iterative dialogue until the software functions as intended. Whether this represents a comparable moment to the emergence of personal computing---an extraordinary skill now accessible to ordinary people---is the question this paper explores.</p>
+<p>At first glance, example document seems genuinely exciting. The journalist Lauren Goode, for instance, spent two days at a software company building working features using the approach <span class="citation">[@goode2025notion]</span>. Yet whilst such examples demonstrate what is possible, they may also fuel inflated expectations among those unfamiliar with the practice. Managers seeking productivity gains, for example, may assume that example document requires nothing more than issuing instructions for the AI to execute.</p>
+<p>To test this assumption, I immersed myself in example document a series of applications. My aim was to address a central question in the current discourse: <em>to what extent can non-experts develop software ready for real-world use?</em> Three objectives guided my exploration:</p>
+<ol>
+<li>To evaluate the current state of example document for different audiences, including non-experts</li>
+<li>To assess whether it is possible to vibe code transparently in ways that support both reproducibility and appropriate attribution of the AI's role</li>
+<li>To articulate an initial framework of principles for non-experts approaching example document</li>
+</ol>
+<p>I find that while example document significantly lowers the barrier to software development, effective use still requires structured iteration and critical evaluation of AI outputs---or, as Eisenhower <a href="https://quoteinvestigator.com/2017/11/18/planning/">reportedly</a> put it, "Plans are worthless, but planning is everything."</p>
+<p>The remainder of this manuscript proceeds as follows. I first review the concept of example document and discuss the current state of the art. I then describe how my practice-based approach evolved over three months, yielding multiple projects now publicly available on GitHub.<sup class="footnote-reference">projects</sup> Drawing on both, I articulate an initial example document framework of principles for non-experts. I conclude with an outline of future research opportunities.</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/manuscript/01-manuscript/02-the-current-state-of-the-art.md 1`] = `
+"<section id="the-current-state-of-the-art" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">The current state-of-the-art</h1>
+<aside class="notes" data-source="generated">
+<p>Vibe coding suggests that non-experts can now develop working software, and the practice has rapidly gained attention. For example, a recent survey identifies over 1,000 sources on the topic <span class="citation">[@ge2025survey]</span>, and <em>Collins Dictionary</em> named it <em>Word of the Year</em> <span class="citation">[@collins2025woty]</span>. Yet popularity alone does not answer whether the practice delivers on its promise. This section examines that question, first reviewing the opportunities and challenges, followed by a summary of current development frameworks.</p>
+</aside>
+</section>
+<section id="opportunities-and-challenges" class="slide slide-section" data-kind="section" data-line="5">
+<h2 class="headline">Opportunities and challenges</h2>
+<aside class="notes" data-source="generated">
+<p>Without human review or comprehension of what the AI coding assistant produces, example document is essentially the opposite of how an expert software developer would use an AI assistant. Instead of a full review of what the assistant produces, example document accepts everything without review. If an error appears, the user hands the error message to the AI assistant for interpretation. Both constitute extreme points on a continuum of AI-assisted software development (Figure <a href="#fig:dev-spectrum">1</a>).</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-image" data-kind="image" data-line="9">
+<div class="face">
+<figure id="fig:dev-spectrum" class="full-bleed">
+<img src="assets/approach-spectrum.svg" alt="The Al-Assisted Development Continuum." />
+<figcaption>
+<span class="caption">The Al-Assisted Development Continuum.</span>
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="slide-2" class="slide slide-image" data-kind="image" data-line="11">
+<div class="face">
+<figure id="fig:dev-taxonomy" class="full-bleed">
+<img src="assets/arxiv-taxonomy.svg" alt="Development Models Taxonomy [adapted from @ge2025survey]." />
+<figcaption>
+<span class="caption">Development Models Taxonomy <span class="citation">[adapted from @ge2025survey]</span>.</span>
+</figcaption>
+</figure>
+</div>
+<aside class="notes" data-source="generated">
+<p>Moreover, example document differs from related developments such as <em>agentic coding</em>, in which autonomous software agents work independently towards a specified goal <span class="citation">[@sapkota2025agentic]</span>. By contrast, example document offers a distinctly human-in-the-loop model of software development, requiring continuous human <em>judgement</em> and <em>direction</em> rather than delegating to autonomous software agents.</p>
+<p>Vibe coding's human-in-the-loop model appeals because it <em>appears</em> to offer three things traditional software development does not: accessibility, speed, and flow. First, it lowers the barrier of creating software; those without programming backgrounds can articulate intent in natural language rather than learning syntax. Second, it promises rapid iteration; ideas can become working prototypes within hours rather than weeks. Third, practitioners report a distinctive experience of <em>collaborative</em> creation with AI, characterised by trust and what one study describes as "flow" <span class="citation">[@pimenova2025vibrations]</span>. Whether these benefits materialise in practice remains uncertain. This tension is captured by <span class="citation">[@fawzy2025grey]</span>, whose analysis:</p>
+<blockquote>
+<p>"reveals a speed-quality trade-off paradox, where vibe coders are motivated by speed and accessibility, often experiencing rapid 'instant success and flow,' yet most perceive the resulting code as fast but flawed" (p. 1).</p>
+</blockquote>
+<p>Beyond the speed-quality tension, software security presents an even more fundamental challenge <span class="citation">[@tihanyi2024secure]</span>. LLM-based coding assistants can both miss genuine vulnerabilities and report false ones <span class="citation">[@basic2024vulnerabilities]</span>. Vulnerabilities have also been shown to compound with subsequent iterations <span class="citation">[@shukla2025degradation]</span>. Indeed, one study puts the percentage of working code generated by AI that can also be considered as secure at around 10% <span class="citation">[@zhao2025safe]</span>.</p>
+<p>Following from these technical concerns, the <em>subjective</em> experience of example document warrants further attention. While the aforementioned qualitative study by <span class="citation">[@pimenova2025vibrations]</span> identifies trust, flow, and collaborative creation as central factors shaping perceptions of example document amongst developers, systematic accounts from non-expert audiences remain scarce. That said, reports begin to emerge suggesting that non-experts can create functional applications using natural language alone <span class="citation">[@techxplore2025enables]</span>, and Lauren Goode's <span class="citation">[@goode2025notion]</span> aforementioned account demonstrates this promise under the condition of expert supervision.</p>
+<p>Given these challenges, what guidance currently exists for those wishing to vibe code?</p>
+</aside>
+</section>
+<section id="guidance-and-approaches" class="slide slide-section" data-kind="section" data-line="25">
+<h2 class="headline">Guidance and approaches</h2>
+<aside class="notes" data-source="generated">
+<p>Existing example document frameworks and best-practice summaries target different audiences (see Table <a href="#tab:approaches">1</a>). Those aimed at experts include <em>go-vibe</em> <span class="citation">[@govibe2025methodology]</span>, the <em>GitHub Spec Kit</em> <span class="citation">[@github2025speckit]</span>, <em>context engineering</em> <span class="citation">[@mugrage2025context]</span>, and the <em>CLEAR</em> framework for structured prompting <span class="citation">[@coderide2025clear]</span>. They have in common that they reflect an evolving recognition that systematic context management differs from the ad-hoc, intuition-led prompting with which example document is typically associated. Security-focused guidance has also emerged: the <em>Cloud Security Alliance</em>'s <em>Secure Example Document Guide</em> <span class="citation">[@csa2025secure]</span> explicitly targets "citizen developers" <span class="citation">[@csa2025secure]</span>, that is, non-technical audiences building applications with AI assistance.</p>
+<table id="tab:approaches">
+<caption>AI-assisted Development Frameworks.</caption>
+<thead>
+<tr>
+<th>Approach</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>go-vibe</td>
+<td>Documentation</td>
+</tr>
+<tr>
+<td>GitHub Spec Kit</td>
+<td>Specifications</td>
+</tr>
+<tr>
+<td>Context Engineering</td>
+<td>Context</td>
+</tr>
+<tr>
+<td>CLEAR Framework</td>
+<td>Prompts</td>
+</tr>
+<tr>
+<td>CSA Secure Example Document</td>
+<td>Security</td>
+</tr>
+</tbody>
+</table>
+<p>Then there are practitioner views, such as specification-driven development <span class="citation">[@vemula2025specdriven]</span>, test-driven development <span class="citation">[e.g., @punnen2025prompts]</span>
+</p>
+<p>Several themes emerge from reviewing these approaches. First, the importance of providing structured context over vague prompting. Second, the need to verify and review, irrespective of whether the process is automated or human-led. Finally, an emerging tension between developer-centric frameworks that assume technical depth and those aimed at "citizen developers" without technical background---with the latter aligning with the common yet vague promise of "democratising access" to a new technology. Within this tension, the distinction between vibe and agentic coding <span class="citation">[@sapkota2025agentic]</span> is instructive. It positions example document as a human-in-the-loop approach suited to "early-stage prototyping and education"---perhaps the clearest framing to which non-technical creators can relate.</p>
+<p>Consequently, different approaches to example document are more or less suitable for different audiences, which are best thought of as sitting on a continuum ranging from <em>expert</em> users (i.e., software developers) to <em>non-technical</em> users (i.e., "citizen developers"). As neither of those labels describes my own practice, I will first articulate the distinction between different audiences for example document, before detailing my own exploration of this practice.</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/manuscript/01-manuscript/03-audiences.md 1`] = `
+"<section id="audiences" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">Audiences</h1>
+<aside class="notes" data-source="generated">
+<p>Two broad groups can be distinguished: those using example document (which I refer to as <em>creators</em>) and those assessing decisions around its adoption (<em>assessors</em>). In my exploration, I focus on creators, which means that frameworks for those having to assess whether (and how) example document should be adopted in an organisation are outside the scope of my investigation; an example of a framework for assessors is ISACA's risk-based assessment framework <span class="citation">[@isaca2025vibecoding]</span> that targets organisational governance rather than individual practice, thus helping assessors categorise use cases by risk level to determine the appropriate level of oversight required.</p>
+</aside>
+</section>
+<section id="experts-non-experts-and-non-technical-users" class="slide slide-section" data-kind="section" data-line="5">
+<h2 class="headline">Experts, non-experts, and non-technical users</h2>
+<aside class="notes" data-source="generated">
+<p>Creators can be further separated into groups based on purpose and scope:</p>
+<ol>
+<li>
+<strong>Expert users</strong> develop software professionally, work within teams on large codebases and often complex deployment pipelines</li>
+<li>
+<strong>Non-expert users</strong> code for personal or ancillary purposes (e.g., for automation and data analysis), and tend to work alone on small scripts</li>
+<li>
+<strong>Non-technical users</strong> have no coding experience and thus rely entirely on natural language</li>
+</ol>
+<p>In practical terms, these three groups represent points on a continuum rather than discrete categories. The distinction between experts and the other two groups is fairly straightforward; the boundary between non-experts and non-technical users is fuzzier.</p>
+<p>Since objective markers such as training or education typically do not apply, a more useful distinction is comfort with conventional developer tools. Non-expert users are typically familiar with version control (e.g., <em>Git</em>), a code editor, or the command line, even if they use these tools in limited ways. Non-technical users would be unfamiliar with such tools and rely entirely on natural language interfaces. In short, while both groups lack formal training, they differ in whether they have accumulated working knowledge through personal projects.</p>
+<p>This distinction in terms of familiarity matters as non-expert and non-technical creators both should possess what I consider essential prerequisites for successful example document: an openness to coding to solve problems combined with an interest in learning new skills. An apt label to express this attitude is <em>enthusiastic dilettante</em>: an openness and dedication to coding, yet without the experience and/or understanding of how to do it at scale.</p>
+</aside>
+</section>
+<section id="enthusiastic-dilettantes" class="slide slide-section" data-kind="section" data-line="19">
+<h2 class="headline">Enthusiastic dilettantes</h2>
+<aside class="notes" data-source="generated">
+<p>Although the modern meaning of the word "dilettante" describes a <em>dabbler</em> showing "a superficial interest," I personally carry the label with pride. This is because of its previous meaning "an admirer or lover of the arts" <span class="citation">[@merriamwebster2025dilettante]</span>. It is that meaning which describes the <em>attitude</em> necessary for making example document a success: an admirer of the art of coding. Moreover, as I will elaborate further below, the label aligns with my framing of AI assistants as <em>professional dilettantes</em>: breathtakingly and often surprisingly capable in breadth, yet prone to errors experienced developers would catch immediately, and on occasions showing behaviours they would find difficult to tolerate.</p>
+<p>This is the framing in which I have pursued my personal example document journey, which I describe in the next section.</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/manuscript/01-manuscript/04-a-practice-led-exploration.md 1`] = `
+"<section id="a-practice-led-exploration" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">A practice-led exploration</h1>
+<aside class="notes" data-source="generated">
+<p>I use coding predominantly to support my teaching and research work. For each new task, I set myself the goal of learning something new---whether it's a practice, concept, or tool. Past projects include workflow optimisations and what Bruce Sterling refers to as <em>data wrangling</em> tasks <span class="citation">[@sterling2005shaping]</span>. Concrete outcomes were, for example, the programmatic use of single-sourcing for teaching materials <span class="citation">[@reppel2019advising]</span> and an analysis of social media data <span class="citation">[@cappellini2019shouting]</span>.</p>
+<p>Given my own positioning as an enthusiastic dilettante, I embraced the <em>vibe</em> of example document. Approaching example document intuitively, I made the conscious decision not to begin with a comprehensive review of the literature. Instead of drawing on emerging best practice, I was guided by my own experiences, such as past failures and the challenges I have thus far been unable to overcome. In other words, my exploration followed a challenge-led approach.</p>
+</aside>
+</section>
+<section id="challenge-led-approach" class="slide slide-section" data-kind="section" data-line="7">
+<h2 class="headline">Challenge-led approach</h2>
+<aside class="notes" data-source="generated">
+<p>Specifically, I set myself the goal of example document three distinct applications to benefit my future work. To these, I subsequently added a fourth application. The first three have in common that they address a challenge I had previously been unable to resolve: as an academic, I am not permitted to upload content of a potentially sensitive nature to cloud-based large language models. This includes interview transcripts (if not explicitly covered by an ethics application and highlighted to participants), and academic publications, such as digital copies of books and journal articles typically not licensed to be uploaded to cloud-based services.</p>
+</aside>
+</section>
+<section id="application-development" class="slide slide-section" data-kind="section" data-line="11">
+<h2 class="headline">Application development</h2>
+<aside class="notes" data-source="generated">
+<p>The four applications were: a local <em>Retrieval-Augmented Generation</em> (RAG) system that lets me ask questions about documents while keeping them local and private; a <em>Persona</em> generator for creating user personas from qualitative data such as interview transcripts; and a <em>qualitative coding tool</em>. All three applications can run entirely with local large language models, though the <em>Persona</em> and <em>qualitative coding tool</em> also support cloud-based models. I then applied the approach that had emerged during development of initial versions of these three applications to a fourth one. The challenge for here was to develop a user-centric application for non-technical audiences, rather than a tool for my personal use.</p>
+<p>The four applications were developed over a period of three months with regular example document sessions during the last two months (see Figure <a href="#fig:velocity-timeline">3</a>). Within this period, I created eight projects across four lineages, with 682K+ lines of code, over 500 documented features, and more than 150 decisions around architecture.</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-image" data-kind="image" data-line="17">
+<div class="face">
+<figure id="fig:velocity-timeline" class="full-bleed">
+<img src="assets/velocity-timeline.svg" alt="Development Timeline of Different Applications. (Height indicates number of commits.)" />
+<figcaption>
+<span class="caption">Development Timeline of Different Applications. (Height indicates number of commits.)</span>
+</figcaption>
+</figure>
+</div>
+<aside class="notes" data-source="generated">
+<p>Documentation emerged organically during development. For example, the first version of the RAG application began as an entirely vibe coded experiment (now archived on GitHub as <em>raggedZero</em>) and was quickly abandoned. The documentation developed for this initial experiment then formed the basis for a second iteration (archived as <em>ragged</em>) where the AI coding assistant was essentially left to their own devices and developed a very large code base of increasing complexity. This iteration was also abandoned, but led to important insights in terms of what should be recorded during development. This was then applied to a third iteration (<em>ragd</em>) that constitutes the first usable version of the application. The <em>Persona</em> and <em>qualitative coding</em> applications were developed in a similar way (building on <em>PersonaZero</em> and <em>eval</em> respectively). The fourth application, <em>itemdeck.app</em>, was developed using the structure and process that emerged during development of the other three applications.</p>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-image" data-kind="image" data-line="21">
+<div class="face">
+<figure id="fig:spec-stack" class="full-bleed">
+<img src="assets/specification-stack.svg" alt="Example Document Spec Stack." />
+<figcaption>
+<span class="caption">Example Document Spec Stack.</span>
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="results" class="slide slide-section" data-kind="section" data-line="23">
+<h2 class="headline">Results</h2>
+<aside class="notes" data-source="generated">
+<p>Results of my exploration inform a framework of principles presented in the next section.</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/manuscript/01-manuscript/05-a-framework-of-principles.md 1`] = `
+"<section id="a-framework-of-principles" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">A framework of principles</h1>
+<aside class="notes" data-source="generated">
+<p>Perhaps the most important lesson learned through this exercise was that while I do not need to understand the actual code, it is essential to keep testing often and thoroughly. Reflecting on my exploration---and analysing what distinguished successful projects from abandoned ones---led me to five principles that form the basis of a future example document framework:</p>
+<ol>
+<li>
+<strong>Planning:</strong> Thorough planning remains (almost) everything</li>
+<li>
+<strong>Documenting:</strong> Document from a user perspective, then from a developer perspective</li>
+<li>
+<strong>Testing:</strong> Use automated and manual testing regularly and consistently</li>
+<li>
+<strong>Pacing:</strong> If in doubt, slow down to avoid being overwhelmed by complexity</li>
+<li>
+<strong>Embrace failure:</strong> Vibe coding enables a 'review &amp; resubmit' mentality, use it</li>
+</ol>
+<table id="tab:framework-compare">
+<caption>Key Principles Across Example Document Frameworks. (VCF = Example Document Framework; CSA = Cloud Security Alliance.) ● = addressed; ○ = not addressed</caption>
+<thead>
+<tr>
+<th>
+</th>
+<th>go-vibe</th>
+<th>GitHub</th>
+<th>Context</th>
+<th>CLEAR</th>
+<th>VCF</th>
+<th>CSA</th>
+<th>This</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<strong>Perspective</strong>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td>AI as pair programmer</td>
+<td>○</td>
+<td>●</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>Non-expert perspective</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+<td>●</td>
+</tr>
+<tr>
+<td>Agentic/vibe distinction</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>
+<strong>Input</strong>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td>Structured specifications</td>
+<td>●</td>
+<td>●</td>
+<td>●</td>
+<td>●</td>
+<td>●</td>
+<td>○</td>
+<td>●</td>
+</tr>
+<tr>
+<td>Prompt structure/libraries</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+<td>●</td>
+<td>●</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>Documentation as context</td>
+<td>●</td>
+<td>○</td>
+<td>●</td>
+<td>●</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+</tr>
+<tr>
+<td>Traditional practice (e.g., ADRs)</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+<td>○</td>
+<td>●</td>
+</tr>
+<tr>
+<td>
+<strong>Process</strong>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td>Planning</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+</tr>
+<tr>
+<td>Documenting</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+</tr>
+<tr>
+<td>Testing/verification</td>
+<td>○</td>
+<td>●</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+<td>●</td>
+<td>●</td>
+</tr>
+<tr>
+<td>Pacing</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+</tr>
+<tr>
+<td>Security guidance</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+<td>○</td>
+</tr>
+<tr>
+<td>
+<strong>Methodology</strong>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td>Review and restart</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+<td>●</td>
+</tr>
+</tbody>
+</table>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/manuscript/01-manuscript/06-conclusion.md 1`] = `
+"<section id="conclusion" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">Conclusion</h1>
+<aside class="notes" data-source="generated">
+<ol>
+<li>Explore further the notion of AI as a "professional dilettante" -- considerable knowledge beyond human capacity, yet without common sense. The perfect match for an <em>enthusiastic dilettante</em> ... <a href="https://youtu.be/VPuoeQmU6C4">what could possibly go wrong</a>??</li>
+<li>
+<p>Suggestions:</p>
+<ol>
+<li>Total documentation: Record entire chat conversation and AI reasoning steps</li>
+<li>Using agent mail to coordinate, e.g. <span class="citation">[@civillearning2025agents]</span>
+</li>
+<li>Experience still king <span class="citation">[@greenman2025paradox]</span>
+</li>
+</ol>
+</li>
+</ol>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/01-vibe-coding.md 1`] = `
+"<section id="vibe-coding" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">
+<em>Vibe</em> Coding</h1>
+<aside class="notes" data-source="authored">
+<p>The year 1977 marked a turning point when computers began reaching non-expert users. The Apple II was positioned as "an extraordinary device for ordinary people." Today we ask: has example document created a similar moment—an extraordinary skill now accessible to ordinary people?</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="7">
+<div class="face">
+<figure class="full-bleed full-bleed">
+<img src="assets/manuscript.svg" />
+</figure>
+</div>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/02-conclusion.md 1`] = `
+"<section id="conclusion" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">Conclusion</h1>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="3">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2026-01-12-15-12-09.svg" />
+</figure>
+</div>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/03-today.md 1`] = `
+"<section id="today" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">Today</h1>
+<aside class="notes" data-source="generated">
+<ol>
+<li>Examples</li>
+<li>What I have learned so far ...</li>
+<li>What the literature says <em>(and I didn't read)</em>
+</li>
+<li>Drawing it all together</li>
+</ol>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/04-examples.md 1`] = `
+"<section id="examples" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">Examples</h1>
+<aside class="notes" data-source="authored">
+<p>Four applications developed over three months: a local RAG system, a Persona generator, a qualitative coding tool, and a user-centric application. 682K+ lines of code, 500+ documented features, 150+ architecture decisions.</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="9">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/velocity-timeline.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Development velocity timeline showing lines of code changed per day. Each row represents a lineage. Lighter bars = foundation projects; darker bars = production projects. Shows activity patterns over time.</p>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="17">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<figure class="full-bleed full-bleed">
+<img src="assets/screenshot-2026-01-12-15-20-19.svg" />
+</figure>
+</div>
+<div class="column">
+<figure class="full-bleed full-bleed">
+<img src="assets/screenshot-2026-01-12-15-20-00.svg" />
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="slide-3" class="slide slide-continuation" data-kind="continuation" data-line="28">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<figure class="full-bleed full-bleed">
+<img src="assets/screenshot-2026-01-12-15-25-16.svg" />
+</figure>
+</div>
+<div class="column">
+<figure class="full-bleed full-bleed">
+<img src="assets/screenshot-2026-01-12-15-20-46.svg" />
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="demo" class="slide slide-section" data-kind="section" data-line="39">
+<h2 class="headline">Demo:</h2>
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2026-01-08-16-57-37.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Lauren Goode spent two days at a software company building working features using example document. Yet such examples may fuel inflated expectations—managers may assume example document requires nothing more than issuing instructions for the AI to execute. Central question: to what extent can non-experts develop software ready for real-world use?</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/05-what-i-have-learned.md 1`] = `
+"<section id="what-i-have-learned" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">What I have learned ...</h1>
+<aside class="notes" data-source="authored">
+<p>While I do not need to understand the actual code, it is essential to keep testing often and thoroughly. The speed-quality trade-off paradox: vibe coders experience rapid "instant success and flow," yet most perceive the resulting code as fast but flawed.</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="9">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/lineage-timeline.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Total Lines Modified</p>
+<p>Cumulative LOC growth over time by lineage. Triangle markers indicate first commits; circles indicate releases; bubble size reflects feature count. Grey lines show other lineages for context.</p>
+<p>For ragged:</p>
+<ul>
+<li>Final codebase size: 134,090 LOC (actual lines in repo)</li>
+<li>Cumulative LOC changed: 569,890 LOC (sum of all additions + deletions over time)</li>
+</ul>
+<p>Why It Inflates</p>
+<ol>
+<li>Deletions count as changes - Removing 10K lines adds 10K to the cumulative total</li>
+<li>Refactoring double-counts - Moving code = deletion + addition = 2× the lines</li>
+<li>Rewrites accumulate - Each iteration adds to the total, even if replacing existing code</li>
+</ol>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-image" data-kind="image" data-line="30">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/codebase-overview.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Codebase size (LOC) and feature counts by repository. Colour indicates lineage. Note correlation between codebase size and documented features in production projects.</p>
+</aside>
+</section>
+<section id="slide-3" class="slide slide-image" data-kind="image" data-line="36">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/feature-density.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Feature documentation density normalised to maximum. Shows features per 1000 LOC. Foundation projects show "No feature docs"; production projects demonstrate consistent documentation practices regardless of codebase size.</p>
+</aside>
+</section>
+<section id="slide-4" class="slide slide-image" data-kind="image" data-line="42">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/file-composition.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Pie charts showing Source/Test/Docs breakdown for each repository. Percentages and file counts displayed. Illustrates varying emphasis on documentation across project maturity levels.</p>
+</aside>
+</section>
+<section id="slide-5" class="slide slide-image" data-kind="image" data-line="48">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/knowledge-inheritance.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Knowledge transfer between project iterations. Shows what percentage of Code, Architecture, Testing, and Documentation was kept, modified, or dropped. Demonstrates learning progression within each lineage.</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/06-what-im-learning-at-the-moment.md 1`] = `
+"<section id="what-i-m-learning-at-the-moment" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">What I'm learning at the moment ...</h1>
+<aside class="notes" data-source="authored">
+<p>A recent survey identifies over 1,000 sources on example document; Collins Dictionary named it Word of the Year.</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="9">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/vibecoding-continuum.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>The AI-Assisted Development Continuum. Without human review, example document is essentially the opposite of how an expert would use an AI assistant. Both extremes—full review and no review—are points on a continuum.</p>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-image" data-kind="image" data-line="17">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/vibecoding-taxonomy.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Development Models Taxonomy. Vibe coding differs from agentic coding. It offers a human-in-the-loop model requiring continuous human judgement and direction rather than delegating to autonomous software agents.</p>
+</aside>
+</section>
+<section id="slide-3" class="slide slide-image" data-kind="image" data-line="23">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/github-ralph.svg" />
+</figure>
+</div>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/07-drawing-it-all-together.md 1`] = `
+"<section id="drawing-it-all-together" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">Drawing it all together ...</h1>
+<aside class="notes" data-source="generated">
+<p>(Documentation is key!)</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="5">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/documentation-metrics.png" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Documentation practices breakdown: Implementation Plans, Prompts, Milestones (top row); Retrospectives, Devlogs, Commit Messages (bottom row). Bars show counts; background shows word counts. Clear progression from foundation to production.</p>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-image" data-kind="image" data-line="13">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/practice-evolution.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Maturity heatmap showing evolution of practices within each lineage. Rows: Testing, Features Docs, ADRs, Process Docs, Quality Tools, Releases. Colours: None (red) → Basic → Good → Excellent (green).</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/08-towards-a-framework.md 1`] = `
+"<section id="towards-a-framework" class="slide slide-divider divider" data-kind="divider" data-line="1">
+<h1 class="headline">Towards a framework ...</h1>
+<aside class="notes" data-source="authored">
+<p>Human-in-the-Loop Model. AI assistants are "professional dilettantes": breathtakingly and often surprisingly capable in breadth, yet prone to errors experienced developers would catch immediately. The perfect match for an "enthusiastic dilettante."</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/09-the-spec-stack.md 1`] = `
+"<section id="the-spec-stack" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">"The Spec Stack"</h1>
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/specification-stack.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Structured specifications emerged organically during development, forming context for the AI assistant. The first RAG version was quickly abandoned. Documentation from that experiment formed the basis for a second iteration—also abandoned but yielding important insights. The third iteration became the first usable version.</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-image" data-kind="image" data-line="9">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/vibecoding.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>Five Principles:</p>
+<ol>
+<li>Planning: Thorough planning remains (almost) everything.</li>
+<li>Documenting: Document from user perspective, then developer perspective.</li>
+<li>Testing: Use automated and manual testing regularly.</li>
+<li>Pacing: If in doubt, slow down to avoid complexity.</li>
+<li>Embrace failure: Vibe coding enables a "review &amp; resubmit" mentality.</li>
+</ol>
+</aside>
+</section>
+<section id="slide-2" class="slide slide-image" data-kind="image" data-line="21">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/integrated-framework.svg" />
+</figure>
+</div>
+<aside class="notes" data-source="authored">
+<p>The integrated framework brings together structured specifications, iterative development, and continuous testing. Several themes emerge: the importance of structured context over vague prompting; the need to verify and review.</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/10-practical-guidance.md 1`] = `
+"<section id="practical-guidance" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">Practical guidance</h1>
+<aside class="notes" data-source="generated">
+<ul>
+<li>Remain curious <em>(and patient!)</em>
+</li>
+<li>Upskilling: Invest in tools &amp; concepts</li>
+<li>Work iteratively: Plan, review, repeat ...</li>
+<li>Accept failure: Practice, practice, practice ...</li>
+</ul>
+</aside>
+</section>
+<section id="remain-curious" class="slide slide-section" data-kind="section" data-line="8">
+<h2 class="headline">Remain curious ...</h2>
+<aside class="notes" data-source="generated">
+<p>(and patient)</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-image" data-kind="image" data-line="12">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2025-12-30-08-48-48.svg" />
+</figure>
+</div>
+</section>
+<section id="slide-2" class="slide slide-image" data-kind="image" data-line="14">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2026-01-11-19-32-29.svg" />
+</figure>
+</div>
+</section>
+<section id="slide-3" class="slide slide-image" data-kind="image" data-line="16">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2025-12-27-08-50-39.svg" />
+</figure>
+</div>
+</section>
+<section id="slide-4" class="slide slide-image" data-kind="image" data-line="18">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2025-12-27-08-51-23.svg" />
+</figure>
+</div>
+</section>
+<section id="slide-5" class="slide slide-image" data-kind="image" data-line="20">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2026-01-04-21-35-20.svg" />
+</figure>
+</div>
+</section>
+<section id="slide-6" class="slide slide-image" data-kind="image" data-line="22">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/screenshot-2026-01-04-21-35-33.svg" />
+</figure>
+</div>
+</section>
+<section id="invest-in" class="slide slide-section" data-kind="section" data-line="24">
+<h2 class="headline">Invest in ...</h2>
+<aside class="notes" data-source="generated">
+<p>(<em>NEW</em> tools, terminology, concepts)</p>
+</aside>
+</section>
+<section id="slide-7" class="slide slide-continuation" data-kind="continuation" data-line="28">
+<div class="face">
+<blockquote>
+<p>"Give a small boy a hammer, and he will find that everything he encounters needs pounding."
+--Abraham Kaplan <em>(1964)</em>
+</p>
+</blockquote>
+</div>
+<aside class="notes" data-source="authored">
+<p>Abraham Kaplan calls "The Law of the Instrument" <span class="citation">[@Kaplan:1964tb, p. 28]</span> ...</p>
+<p>... which suggests that we have a tendency to approach tasks using instruments we are familiar with and, probably more importantly, the related temptation to avoid what cannot be addressed that way <span class="citation">[cf. @Kagan:2003ud]</span>. Kaplan illustrates it with the quote you see behind me on the screen.</p>
+</aside>
+</section>
+<section id="slide-8" class="slide slide-image" data-kind="image" data-line="39">
+<div class="face">
+<figure class="full-bleed">
+<img src="assets/command-line.svg" />
+</figure>
+</div>
+</section>
+<section id="planning-planning-planning" class="slide slide-section" data-kind="section" data-line="41">
+<h2 class="headline">Planning, planning, planning!</h2>
+<aside class="notes" data-source="authored">
+<p>As Eisenhower reportedly put it: "Plans are worthless, but planning is everything." Vibe coding enables a "review &amp; resubmit" mentality—use it.</p>
+</aside>
+</section>
+<section id="practice-practice-practice" class="slide slide-section" data-kind="section" data-line="49">
+<h2 class="headline">Practice, practice, practice!</h2>
+<aside class="notes" data-source="generated">
+<p>(Embrace the <em>vibe</em> of 'example document')</p>
+</aside>
+</section>"
+`;
+
+exports[`the built deck on every example chapter > examples/talk/01-talk/11-thank-you.md 1`] = `
+"<section id="thank-you" class="slide slide-title" data-kind="title" data-line="1">
+<h1 class="headline">Thank You</h1>
+<aside class="notes" data-source="generated">
+<p>(alice@example.org)</p>
+</aside>
+</section>
+<section id="slide" class="slide slide-continuation" data-kind="continuation" data-line="5">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<figure class="full-bleed full-bleed">
+<img src="assets/manuscript.svg" />
+</figure>
+</div>
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/qrcode-manuscript.svg" width="75%" />
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="slide-2" class="slide slide-continuation" data-kind="continuation" data-line="16">
+<div class="face">
+<div class="columns" style="--column-tracks: 50% 50%">
+<div class="column">
+<figure class="full-bleed full-bleed">
+<img src="assets/github-projects.svg" />
+</figure>
+</div>
+<div class="column">
+<figure class="full-bleed">
+<img src="assets/qrcode-projects.svg" width="75%" />
+</figure>
+</div>
+</div>
+</div>
+</section>"
+`;
+
+exports[`the slide plan on every example chapter > examples/presentation/01-slides/01-technology-impact-assessment.md 1`] = `
+"0.0 title #technology-impact-assessment "Technology Impact Assessment" notes:generated=[paragraph,paragraph,paragraph,paragraph]
+1.0 section #denver-1858 "Denver, 1858" face=[image] notes:generated=[list] foot=[credit]
+2.0 image #slide "" face=[image] foot=[credit]
+3.0 section #in-1859-the-question-was "In 1859 the question was:" notes:generated=[quote]
+3.1 subsection #perhaps-for-2026 "Perhaps for 2026?" notes:generated=[quote]
+4.0 section #the-2026-rush "The 2026 rush"
+5.0 continuation #slide-2 "" face=[image]
+6.0 image #slide-3 "" face=[image,list] foot=[credit]"
+`;
+
+exports[`the slide plan on every example chapter > examples/presentation/01-slides/02-where-im-coming-from.md 1`] = `
+"0.0 divider #where-i-m-coming-from .divider "Where I'm coming from"
+1.0 section #technology-impact-assessment "Technology Impact Assessment" notes:generated=[paragraph]
+2.0 section #technikfolgenabschatzung "Technikfolgenabschätzung" notes:generated=[paragraph]
+3.0 continuation #slide "" face=[div] foot=[credit]
+4.0 section #however "However ..."
+5.0 continuation #slide-2 "" face=[image,list] foot=[credit]
+6.0 section #adding-insult-to-injury "Adding insult to injury?" face=[div] foot=[credit]"
+`;
+
+exports[`the slide plan on every example chapter > examples/presentation/01-slides/03-why-im-here.md 1`] = `
+"0.0 divider #why-i-m-here .divider "Why I'm here" notes:authored=[paragraph]
+1.0 continuation #slide "" face=[div] foot=[credit]
+2.0 section #drawing-both-together "Drawing both together" notes:generated=[list,list] foot=[credit]
+3.0 section #what-does-it-mean "What does it mean?" notes:generated=[paragraph]
+4.0 continuation #slide-2 "" face=[div] foot=[credit]
+5.0 continuation #slide-3 "" face=[div] foot=[credit]"
+`;
+
+exports[`the slide plan on every example chapter > examples/presentation/01-slides/04-four-themes.md 1`] = `
+"0.0 divider #four-themes .divider "Four themes"
+1.0 section #inclusion-and-wellbeing "Inclusion and wellbeing" notes:authored=[paragraph]
+2.0 continuation #slide "" face=[image,list] foot=[credit]
+3.0 section #does-the-system-serve-the-many-or-the-few "Does the system serve the many or the few?" notes:generated=[list]
+4.0 section #energy-water-and-waste "Energy, water, and waste"
+5.0 continuation #slide-2 "" face=[image,list] foot=[credit]
+6.0 image #slide-3 "" face=[image,list] foot=[credit]
+7.0 section #do-big-tech-firms-really-have-the-social-licence-to-build-what-they-re-building "Do big tech firms really have the social licence to build what they're building?" notes:generated=[list]
+8.0 section #concentration-and-power "Concentration and power" notes:authored=[paragraph]
+9.0 continuation #slide-4 "" face=[image,list] foot=[credit]
+10.0 image #slide-5 "" face=[image] foot=[credit]
+11.0 image #slide-6 "" face=[image] foot=[credit]
+12.0 section #what-happens-when-this-hits-markets "What happens when this hits markets?" notes:authored=[paragraph]
+13.0 section #agents-as-market-actors "Agents as market actors" notes:generated=[list,paragraph] foot=[credit]
+14.0 section #information-and-trust "Information and trust" notes:authored=[paragraph]
+15.0 continuation #slide-7 "" face=[image,list] foot=[credit]
+16.0 continuation #slide-8 "" face=[list,list] foot=[credit]
+17.0 section #what-happens-to-exchange-when-information-is-infinite-and-trust-a-scarcity "What happens to exchange when information is infinite and trust a scarcity?" notes:generated=[list]"
+`;
+
+exports[`the slide plan on every example chapter > examples/presentation/01-slides/05-conclusion-a-few-provocations.md 1`] = `
+"0.0 divider #conclusion-a-few-provocations .divider "Conclusion — A few provocations"
+1.0 continuation #slide "" face=[image,list] foot=[credit]
+2.0 section #1 "#1" notes:generated=[paragraph]
+3.0 continuation #slide-2 "" face=[quote] foot=[credit]
+4.0 section #2 "#2" notes:generated=[paragraph]
+5.0 section #3 "#3" notes:generated=[paragraph]
+6.0 section #however "However ..."
+7.0 continuation #slide-3 "" face=[image]
+8.0 section #4 "#4" notes:generated=[paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/presentation/01-slides/06-the-business-futures-mindset.md 1`] = `
+"0.0 divider #the-business-futures-mindset .divider "The (Business) Futures mindset" notes:generated=[list,list]
+1.0 section #stay-in-touch "Stay in touch!" face=[div]
+2.0 section #thank-you-and-welcome-to-macromarketing "Thank you — and welcome to Macromarketing!"
+3.0 section #appendix-sources-1-of-2 .refs "Appendix · Sources (1 of 2)" face=[div]
+4.0 section #appendix-sources-2-of-2 .refs "Appendix · Sources (2 of 2)" face=[div]"
+`;
+
+exports[`the slide plan on every example chapter > examples/manuscript/01-manuscript/01-introduction.md 1`] = `"0.0 title #introduction "Introduction" notes:generated=[paragraph,paragraph,paragraph,paragraph,paragraph,list,paragraph,paragraph] foot=[footnote]"`;
+
+exports[`the slide plan on every example chapter > examples/manuscript/01-manuscript/02-the-current-state-of-the-art.md 1`] = `
+"0.0 title #the-current-state-of-the-art "The current state-of-the-art" notes:generated=[paragraph]
+1.0 section #opportunities-and-challenges "Opportunities and challenges" notes:generated=[paragraph]
+2.0 image #slide "" face=[image]
+3.0 image #slide-2 "" face=[image] notes:generated=[paragraph,paragraph,quote,paragraph,paragraph,paragraph]
+4.0 section #guidance-and-approaches "Guidance and approaches" notes:generated=[paragraph,table,paragraph,paragraph,paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/manuscript/01-manuscript/03-audiences.md 1`] = `
+"0.0 title #audiences "Audiences" notes:generated=[paragraph]
+1.0 section #experts-non-experts-and-non-technical-users "Experts, non-experts, and non-technical users" notes:generated=[paragraph,list,paragraph,paragraph,paragraph]
+2.0 section #enthusiastic-dilettantes "Enthusiastic dilettantes" notes:generated=[paragraph,paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/manuscript/01-manuscript/04-a-practice-led-exploration.md 1`] = `
+"0.0 title #a-practice-led-exploration "A practice-led exploration" notes:generated=[paragraph,paragraph]
+1.0 section #challenge-led-approach "Challenge-led approach" notes:generated=[paragraph]
+2.0 section #application-development "Application development" notes:generated=[paragraph,paragraph]
+3.0 image #slide "" face=[image] notes:generated=[paragraph]
+4.0 image #slide-2 "" face=[image]
+5.0 section #results "Results" notes:generated=[paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/manuscript/01-manuscript/05-a-framework-of-principles.md 1`] = `"0.0 title #a-framework-of-principles "A framework of principles" notes:generated=[paragraph,list,table]"`;
+
+exports[`the slide plan on every example chapter > examples/manuscript/01-manuscript/06-conclusion.md 1`] = `"0.0 title #conclusion "Conclusion" notes:generated=[list]"`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/01-vibe-coding.md 1`] = `
+"0.0 title #vibe-coding "Example Document" notes:authored=[paragraph]
+1.0 continuation #slide "" face=[image]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/02-conclusion.md 1`] = `
+"0.0 divider #conclusion .divider "Conclusion"
+1.0 continuation #slide "" face=[image]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/03-today.md 1`] = `"0.0 title #today "Today" notes:generated=[list]"`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/04-examples.md 1`] = `
+"0.0 divider #examples .divider "Examples" notes:authored=[paragraph]
+1.0 continuation #slide "" face=[image] notes:authored=[paragraph]
+2.0 continuation #slide-2 "" face=[div]
+3.0 continuation #slide-3 "" face=[div]
+4.0 section #demo "Demo:" face=[image] notes:authored=[paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/05-what-i-have-learned.md 1`] = `
+"0.0 divider #what-i-have-learned .divider "What I have learned ..." notes:authored=[paragraph]
+1.0 continuation #slide "" face=[image] notes:authored=[paragraph,paragraph,paragraph,list,paragraph,list]
+2.0 image #slide-2 "" face=[image] notes:authored=[paragraph]
+3.0 image #slide-3 "" face=[image] notes:authored=[paragraph]
+4.0 image #slide-4 "" face=[image] notes:authored=[paragraph]
+5.0 image #slide-5 "" face=[image] notes:authored=[paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/06-what-im-learning-at-the-moment.md 1`] = `
+"0.0 divider #what-i-m-learning-at-the-moment .divider "What I'm learning at the moment ..." notes:authored=[paragraph]
+1.0 continuation #slide "" face=[image] notes:authored=[paragraph]
+2.0 image #slide-2 "" face=[image] notes:authored=[paragraph]
+3.0 image #slide-3 "" face=[image]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/07-drawing-it-all-together.md 1`] = `
+"0.0 divider #drawing-it-all-together .divider "Drawing it all together ..." notes:generated=[paragraph]
+1.0 continuation #slide "" face=[image] notes:authored=[paragraph]
+2.0 image #slide-2 "" face=[image] notes:authored=[paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/08-towards-a-framework.md 1`] = `"0.0 divider #towards-a-framework .divider "Towards a framework ..." notes:authored=[paragraph]"`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/09-the-spec-stack.md 1`] = `
+"0.0 title #the-spec-stack "\\"The Spec Stack\\"" face=[image] notes:authored=[paragraph]
+1.0 image #slide "" face=[image] notes:authored=[paragraph,list]
+2.0 image #slide-2 "" face=[image] notes:authored=[paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/10-practical-guidance.md 1`] = `
+"0.0 title #practical-guidance "Practical guidance" notes:generated=[list]
+1.0 section #remain-curious "Remain curious ..." notes:generated=[paragraph]
+2.0 image #slide "" face=[image]
+3.0 image #slide-2 "" face=[image]
+4.0 image #slide-3 "" face=[image]
+5.0 image #slide-4 "" face=[image]
+6.0 image #slide-5 "" face=[image]
+7.0 image #slide-6 "" face=[image]
+8.0 section #invest-in "Invest in ..." notes:generated=[paragraph]
+9.0 continuation #slide-7 "" face=[quote] notes:authored=[paragraph,paragraph]
+10.0 image #slide-8 "" face=[image]
+11.0 section #planning-planning-planning "Planning, planning, planning!" notes:authored=[paragraph]
+12.0 section #practice-practice-practice "Practice, practice, practice!" notes:generated=[paragraph]"
+`;
+
+exports[`the slide plan on every example chapter > examples/talk/01-talk/11-thank-you.md 1`] = `
+"0.0 title #thank-you "Thank You" notes:generated=[paragraph]
+1.0 continuation #slide "" face=[div]
+2.0 continuation #slide-2 "" face=[div]"
+`;
