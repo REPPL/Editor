@@ -1,0 +1,383 @@
+# Intent map
+
+How this canvas is cut into intents. An intent is one user-facing moment
+with its own press release and Given-When-Then acceptance criteria.
+Plumbing with no moment of its own has no intent: it lives in
+[`05-internals.md`](05-internals.md) and is inherited.
+
+Three kinds:
+
+- **standalone** — one moment, one spec, ships on its own;
+- **bundle-member** — one of several moments that only make sense delivered
+  together, sharing one spec;
+- **discipline** — a cross-cutting rule with no moment of its own, which
+  every other spec inherits and every acceptance list repeats.
+
+## The cut at a glance
+
+| # | Intent | Kind | Bundle | Phase |
+|---|---|---|---|---|
+| 1 | Open a folder and see the book | bundle-member | Editing surface | 1 |
+| 2 | Edit with the Emacs bindings I already know | bundle-member | Editing surface | 1 |
+| 3 | Insert a construct I cannot remember | bundle-member | Editing surface | 1 |
+| 4 | Drop an image and have it just work | standalone | — | 1 |
+| 5 | Present a chapter with no slide markup | bundle-member | The deck | 1 |
+| 6 | Shape the deck in the same text | bundle-member | The deck | 1 |
+| 7 | Publish and get a link I can open from the lectern | bundle-member | Publish | 1 |
+| 8 | Find the version Bob read in March | bundle-member | Publish | 1 |
+| 9 | Read the document as a Tufte article | bundle-member | The article | 2 |
+| 10 | Read it the way I like it | bundle-member | The article | 2 |
+| 11 | Cite from a bibliography file | standalone | — | 2 |
+| 12 | Find what is hidden in the text | standalone | — | 2 |
+| 13 | Bring an old single-file manuscript in | standalone | — | 3 |
+| 14 | Write one text for two audiences | standalone | — | 3 |
+| 15 | Add media too big to copy | standalone | — | 4 |
+| 16 | Point a video at several sources, one behind a sign-in | standalone | — | 4 |
+| 17 | Carry the document as one file that reads anywhere | standalone | — | 5 |
+| 18 | Edit on the iPad and bring the text back | standalone | — | 5 |
+| 19 | Give each audience its own link | standalone | — | 6 |
+| 20 | Publish something only named people can open | standalone | — | 6 |
+| 21 | Receive a journal-style PDF with the document | standalone | — | 6 |
+| 22 | Mark up a chapter without touching the text | bundle-member | Annotations | 7 |
+| 23 | Keep my own marks on someone else's page | bundle-member | Annotations | 7 |
+| 24 | Publish someone else's annotations as a layer | standalone | — | 7 |
+| 25 | Rehearse from cards built out of the headings | standalone | — | 7 |
+
+## The intents
+
+### Bundle: Editing surface (phase 1)
+
+One spec. None of the three ships alone: a sidebar with no editor is a file
+browser, an editor with no bindings is not the editor the constraints
+describe, and a canon nobody can type is a canon nobody uses.
+
+**1. Open a folder and see the book** — bundle-member.
+Surfaces: the editor (folder, sidebar).
+Overlaps: intent 13, which creates the folder this one opens — the boundary
+is that 13 owns writing the split, 1 owns reading whatever is already
+there; and intent 14, which puts variant badges in the sidebar — 1 owns the
+tree, 14 owns what the badges mean.
+Plumbing excluded: the on-disk model, the parse tree, folder watching.
+Order: first. Everything else needs a document open.
+
+**2. Edit with the Emacs bindings I already know** — bundle-member.
+Surfaces: the editor (Emacs bindings, the keys panel, the cancel rule).
+Overlaps: intent 18, the same bindings inside the single file with no shell
+to claim keys — the boundary is the host: 2 owns the desktop app and the
+binding table, 18 owns what survives in Safari on an iPad.
+Plumbing excluded: the editing component, key interception in the shell,
+the key table's data shape, atomic writes.
+Order: with 1. Gated by the spike in
+[`06-delivery.md`](06-delivery.md), which produces its binding table.
+
+**3. Insert a construct I cannot remember** — bundle-member.
+Surfaces: the editor (insert palette).
+Overlaps: every intent that defines a construct — 6, 11, 12, 14, 16, 21.
+The boundary: those intents own what a construct means in a rendering; 3
+owns only that the canonical form appears at the cursor. A construct
+arriving in a later phase adds a palette entry, not a new intent.
+Plumbing excluded: the canon itself, which is
+[`05-internals.md`](05-internals.md) section 3.
+Order: with 1 and 2, seeded with the slide constructs.
+
+### Phase 1, standalone
+
+**4. Drop an image and have it just work** — standalone.
+Surfaces: assets (drop), the editor.
+Overlaps: intent 15, the same gesture above the threshold — the boundary is
+the size: 4 owns copy-beside-the-chapter and de-duplication of copied
+files, 15 owns everything the threshold turns on. Also intent 5, where an
+image becomes its own slide — 4 stops at the reference in the text.
+Plumbing excluded: hashing, conversion, the manifest schema.
+Order: phase 1, because image slides need images.
+
+### Bundle: The deck (phase 1)
+
+One spec, because the default mapping and the authored constructs are two
+halves of one rule: what the deck does when the author says nothing, and
+what it does when they say something. The article's obligation to ignore
+the constructs is stated once, here.
+
+**5. Present a chapter with no slide markup** — bundle-member.
+Surfaces: slides (the default mapping).
+Overlaps: intent 9, which renders the same text as prose — the boundary is
+the mapping table in [`05-internals.md`](05-internals.md) section 3: each
+rendering owns its column.
+Plumbing excluded: the deck engine builds, the core's slide renderer.
+Order: phase 1, the first usable slice.
+
+**6. Shape the deck in the same text** — bundle-member.
+Surfaces: slides (authored constructs), the editor (palette entries).
+Overlaps: intent 3 for the palette entries; intent 9 and intent 21, which
+must ignore these constructs entirely.
+Plumbing excluded: the fenced-div forms themselves.
+Order: with 5. A talk needs statement slides and dividers, so the default
+alone is not shippable.
+
+### Bundle: Publish (phase 1)
+
+One spec: an action that produces a link, and the record of the links it
+has produced. Publishing without a version record is a link Alice cannot
+find again.
+
+**7. Publish and get a link I can open from the lectern** — bundle-member.
+Surfaces: publish (stable id, version hash, unlisted).
+Overlaps: intent 19 (per-variant links) and intent 20 (gated) both extend
+this action — the boundary is that 7 owns one document, one variant,
+unlisted, and the guarantee that the presenter shows nothing without an id;
+19 and 20 own the second link and the gate. Also intent 21, which the
+pipeline produces on the same push — 7 stops at "pushed and deployed".
+Plumbing excluded: the pipeline, the site layout, git mechanics.
+Order: phase 1. A talk is presented from a link.
+
+**8. Find the version Bob read in March** — bundle-member.
+Surfaces: publish (versioned hashes, publish log).
+Overlaps: intent 7, which mints the entries.
+Plumbing excluded: the log's file format and the `latest` pointer.
+Order: with 7.
+
+### Bundle: The article (phase 2)
+
+One spec: the page and the reader's control over it. A Tufte page with no
+way to change the measure is half the prototype's reading experience.
+
+**9. Read the document as a Tufte article** — bundle-member.
+Surfaces: the online article (layout, margin notes, navigation, video
+rule).
+Overlaps: intent 11, whose citations become the margin notes — the
+boundary: 11 owns resolving a key to a reference, 9 owns where it sits on
+the page; intent 16, whose source list decides what a video shows.
+Plumbing excluded: the core's article renderer, the responsive CSS.
+Order: phase 2, first. It is the rendering that must be perfect.
+
+**10. Read it the way I like it** — bundle-member.
+Surfaces: the online article (reader controls).
+Overlaps: intent 23, which also stores reader state in the browser — the
+boundary is what is stored: 10 keeps display preferences, 23 keeps marks
+about the text.
+Plumbing excluded: per-browser storage.
+Order: with 9.
+
+### Phase 2, standalone
+
+**11. Cite from a bibliography file** — standalone.
+Surfaces: citations; the editor (completion, unresolved keys); all three
+renderings.
+Overlaps: 9, 5, and 21, which each display a citation differently. The
+boundary: 11 owns the key, the file, the resolution, and the generated
+reference list; each rendering owns its display. 11 also carries the
+"renderings agree" discipline's first hard test.
+Plumbing excluded: the BibTeX reader, the style implementations.
+Order: phase 2, with the article. The acceptance project cannot test it, so
+it needs its own test document.
+
+**12. Find what is hidden in the text** — standalone.
+Surfaces: the online article (once-only quotation, easter eggs).
+Overlaps: intent 9, which renders the page around them; intent 21, which
+prints their static content; intent 14, since an egg's content may itself
+be variant-marked (open).
+Plumbing excluded: the article script's collection tray and reveal.
+Order: phase 2, after 9. It is the one moment that belongs to Bob and Carol
+alone, and it is what makes the prototype's reading experience whole.
+
+### Phase 3
+
+**13. Bring an old single-file manuscript in** — standalone.
+Surfaces: the editor (import by split).
+Overlaps: intent 1 (which then opens the result) and intent 18 (the other
+direction of the same fidelity promise). The boundary: 13 is one-way, from
+a flat file to a folder, and it is the first acceptance test of the
+byte-fidelity discipline.
+Plumbing excluded: the parser and serialiser.
+Order: phase 3, because it is what lets the acceptance project come in
+whole.
+
+**14. Write one text for two audiences** — standalone.
+Surfaces: the editor (variant marking, preview, sidebar badges).
+Overlaps: nearly everything — 9, 5, 19, 21, 17. The boundary is deliberate
+and is the reason this is one intent and one discipline rather than a
+feature of each rendering: **14 owns the moment of marking a block and
+previewing a variant**; the discipline *variant fidelity* owns the
+obligation of every renderer, every export, and every link to honour the
+marks. Intent 19 owns the links themselves.
+Plumbing excluded: the filter in the core, footnote and citation removal
+inside filtered blocks.
+Order: phase 3. The acceptance project has three variants, so nothing real
+can be brought in without it.
+
+### Phase 4
+
+**15. Add media too big to copy** — standalone.
+Surfaces: assets (threshold, referenced assets, conversion,
+de-duplication).
+Overlaps: intent 4 (below the threshold), intent 17 (which degrades to a
+poster), intent 7 (which uploads referenced assets once). The boundary is
+the threshold itself.
+Plumbing excluded: the manifest, hashing, named asset roots.
+Order: phase 4. This is what 2.5 GB of real material breaks.
+
+**16. Point a video at several sources, one behind a sign-in** — standalone.
+Surfaces: assets (video source lists), the online article, slides, the PDF.
+Overlaps: intent 15, which records the local copy — the boundary: 15 owns
+where a file lives, 16 owns the order in which renderings try sources and
+what shows when none is reachable. Intent 20 is a different gate: 20 gates
+Alice's document, 16 consumes someone else's gate.
+Plumbing excluded: nothing of the gated site is Editor's; no credential
+is ever stored.
+Order: phase 4, with 15.
+
+### Phase 5
+
+**17. Carry the document as one file that reads anywhere** — standalone.
+Surfaces: the single HTML file (reader).
+Overlaps: 9 and 5, whose renderings it embeds; 15, whose media it cannot
+embed. The boundary: 17 owns embedding, offline behaviour, and the
+degradation to poster and link.
+Plumbing excluded: the bundler, data URI embedding.
+Order: phase 5.
+
+**18. Edit on the iPad and bring the text back** — standalone.
+Surfaces: the single HTML file (editor, import and export), the editor
+(re-import).
+Overlaps: intent 2 (the same bindings, a different host) and intent 17 (the
+same file, a different job). The boundary is the job: 17 is for Carol, who
+reads; 18 is for Alice, who edits and must get the text home unchanged
+except by her edits. It is the second hard test of byte-fidelity.
+Plumbing excluded: browser file access, the download path, chapter
+matching on re-import.
+Order: phase 5, after 17.
+
+### Phase 6
+
+**19. Give each audience its own link** — standalone.
+Surfaces: publish (per-variant links).
+Overlaps: intent 14 (the marks) and intent 7 (the action). The boundary: 19
+owns only that each variant is its own path under one id and that no page
+reveals another exists.
+Plumbing excluded: the site's path layout.
+Order: phase 6, once variants exist.
+
+**20. Publish something only named people can open** — standalone.
+Surfaces: publish (gated, allow-list).
+Overlaps: intent 7, whose flag it is. The boundary: 7 owns unlisted and the
+empty presenter; 20 owns the access policy, the allow-list Alice edits, and
+the sign-in Bob meets. It carries the rule that unlisted is not private.
+Plumbing excluded: the access policy's configuration.
+Order: phase 6.
+
+**21. Receive a journal-style PDF with the document** — standalone.
+Surfaces: the PDF.
+Overlaps: 11 (references), 12 (static fallbacks), 6 (constructs it must
+ignore), 14 (one PDF per variant), 7 (the push that triggers it). The
+boundary: 21 owns the printed artefact and the pipeline step that makes it;
+every other intent owns its own content.
+Plumbing excluded: the Typst step, the template, the pipeline wiring.
+Order: phase 6.
+
+### Bundle: Annotations (phase 7)
+
+One spec: the same sidecar format, written by Alice in the app and by Bob
+in his browser. Two moments, one file format, and neither is worth
+building without the other.
+
+**22. Mark up a chapter without touching the text** — bundle-member.
+Surfaces: annotations (sidecar, anchors).
+Overlaps: intent 13 and 18, since anchors must survive the edits those
+allow. The boundary: 22 owns the anchor model's behaviour under editing;
+the byte-fidelity discipline owns the text staying identical.
+Plumbing excluded: the anchor resolution ladder, the sidecar schema.
+Order: phase 7.
+
+**23. Keep my own marks on someone else's page** — bundle-member.
+Surfaces: annotations (reader side, export), the online article.
+Overlaps: intent 10 (also browser state) and intent 24 (which receives the
+exported file). The boundary: 23 ends when Bob has a file; 24 begins when
+Alice opens it.
+Plumbing excluded: browser storage, the export format.
+Order: with 22.
+
+### Phase 7, standalone
+
+**24. Publish someone else's annotations as a layer** — standalone.
+Surfaces: annotations (layers), publish.
+Overlaps: intent 23 (the file) and intent 7 (the publish action). The
+boundary: 24 owns review, the layer, and the toggle readers see, and the
+guarantee that Alice's private marks are not published with it.
+Plumbing excluded: layer files beside the version.
+Order: phase 7.
+
+**25. Rehearse from cards built out of the headings** — standalone.
+Surfaces: annotations (rehearsal decks).
+Overlaps: intent 22, which stores the cards, and intent 5, which also turns
+headings into something else — the boundary is the artefact: a deck of
+cards to test recall, not slides to show an audience.
+Plumbing excluded: card generation from headings, session scoring.
+Order: phase 7, last. It is the one moment the acceptance project proves is
+wanted and nothing else in the design depends on.
+
+## Candidate disciplines
+
+Every spec inherits these; each names them in its acceptance criteria
+rather than restating them as features.
+
+| Discipline | Forbids | Binds from |
+|---|---|---|
+| **Round-trip byte-fidelity** | Reflowed lines, invented escapes, realigned tables, dropped comments. Any path that reads and writes the source returns it byte for byte except where the author edited | Phase 1; tested hard by intents 13 and 18 |
+| **No machine in the document** | Absolute paths, hostnames, usernames, or machine-local settings inside a document folder. References are relative or named roots the app resolves | Phase 1 |
+| **One source, always** | A second copy of the text anywhere. Every rendering is a function of the one tree; nothing is authored twice | Phase 1 |
+| **Variant fidelity** | A filtered block, or its footnotes and citations, surviving into another variant's rendering, reference list, PDF, or link; any page revealing that other variants exist | Phase 3 |
+| **Degrade gracefully in a plain tool** | Any extension that a plain Markdown reader cannot read past. Every construct is a fenced div, an attribute, or a comment | Phase 1 |
+| **Legible on three device classes** | Horizontal scrolling or pinch zoom on iPhone, iPad, or desktop widths, in any rendering | Phase 1 |
+| **The renderings agree** | Article, slides, and PDF disagreeing about a citation, a footnote, a reference list, or a variant | Phase 2 |
+| **Nothing is stored about a reader** | The site keeping any reader's marks, preferences, or identity. Reader state lives in the reader's browser and leaves only as a file they export | Phase 2 |
+| **Network only on publish** | Any background request, sync, telemetry, or probe. The app touches the network when Alice presses Publish, and not otherwise | Phase 1 |
+
+## The rule used to cut
+
+An intent ends where an intention is satisfied: one person, one gesture or
+sitting, one artefact that changes state, after which they could stop and
+still have got what they came for. Alice dropping an image is a moment;
+hashing it is not. Bob collecting an easter egg is a moment; the script
+that reveals it is not. When two moments cannot be delivered apart without
+one of them being useless — a sidebar with no editor, a deck with no way to
+shape it — they are members of one bundle sharing one spec. When a rule has
+no moment at all but every moment must obey it — the source comes back
+unchanged, no page reveals another variant — it is a discipline, inherited
+rather than scheduled. Everything left over is plumbing, and plumbing lives
+in the brief.
+
+### Cuts considered and rejected
+
+- **One intent per rendering** (article, slides, PDF, single file).
+  Rejected: every construct would then be specified three or four times,
+  once per renderer, and the ignore rules would have no single home. The
+  mapping table in [`05-internals.md`](05-internals.md) is that home
+  instead, and each rendering intent owns only its column.
+- **One intent per surface section of this brief.** Rejected: the sections
+  do not align with moments. The single HTML file holds two unrelated
+  moments — Carol reading offline and Alice editing on a tablet — while the
+  editor holds three that cannot ship apart.
+- **One intent per delivery phase.** Rejected: a phase is a unit of
+  delivery, not of intention. Phase 1 alone contains seven moments with
+  three different personas.
+- **Variants as a feature of the editing intent**, as the prior proposal
+  has it. Rejected: the rule crosses five other specs, so it splits into
+  one moment (marking and previewing, intent 14), one moment about links
+  (intent 19), and one discipline (variant fidelity) that the rest inherit.
+
+## Where this differs from the prior proposal
+
+Nine drafts exist under `../intents/drafts/`. Taken as one proposal, this
+map keeps their subject matter and redraws four boundaries.
+
+| Prior draft | Treatment here |
+|---|---|
+| Open and edit a chapter folder (bindings, import, palette, variants) | Split four ways: bundle 1-3, plus standalone 13 (import) and 14 (variants). Import and variants are moments of their own and land in a later phase |
+| Drop assets | Split by the threshold: 4 (copied, phase 1) and 15 (referenced, phase 4), with 16 for the video source list |
+| Cite from a bibliography file | Kept whole as 11 |
+| Read a Tufte article | Split: bundle 9-10 (the page and its controls), standalone 12 (the hidden things) |
+| Present slides | Kept, as a two-member bundle so that the default and the authored constructs share one spec |
+| Single HTML file | Split by job: 17 reads, 18 edits |
+| Publish and the stable link | Split by phase: bundle 7-8 in phase 1, then 19 and 20 in phase 6 |
+| Journal PDF | Kept whole as 21 |
+| Annotate and publish layers | Split three ways: bundle 22-23, standalone 24, standalone 25 |

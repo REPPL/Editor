@@ -1,0 +1,29 @@
+# DECISIONS
+
+Append-only, one dated line per decision. Architecture-shaping decisions
+graduate to an ADR under `../development/decisions/adrs/`.
+
+- 2026-09-05 — Adopted the three-tier `.abcd/` layout, an `AGENTS.md` router with `CLAUDE.md` as a symlink, and committed name-guard hooks under `.githooks/`.
+- 2026-09-05 — Canonical identity recorded in `.abcd/development/IDENTITY.md`; README and AGENTS.md openings render from it.
+- 2026-09-05 — Opted in to AI disclosure on commits via `.githooks/prepare-commit-msg`.
+- 2026-09-05 — The record tiers (`.abcd/development/`, `.abcd/work/`) are committed even though the repo is public; only `.abcd/.work.local/` is ignored.
+- 2026-09-05 — First product intent filed as itd-2609051221553568 (draft): HTML-frontend Markdown editor with drag-and-drop assets and a responsive HTML presentation for desktop, tablet, and phone. Hosting shell (Tauri versus browser app) left open pending an ADR.
+- 2026-09-05 — The editor is a desktop app; the presentation output is a static website optimised for desktop screens, iPad, and iPhone. Desktop shell (Tauri is the candidate) still needs an ADR.
+- 2026-09-05 — Product story fixed as: create on the desktop, edit text on a tablet, present anywhere on the web. Tablet editing assumed to go through a local-network server in the desktop app, no cloud; recorded as an open question on itd-2609051221553568.
+- 2026-09-05 — Document model is a book hierarchy: Part = folder, Chapter = Markdown file, Section = H2, Sub-section = H3, ordered by numeric prefix. Supersedes the single-file horizontal-rule model.
+- 2026-09-05 — Three exports from one source: website (videos, interactive elements), PDF (print), web slides (Section per slide, Sub-section per step). All optimised for desktop, iPad, iPhone.
+- 2026-09-05 — Full Emacs key bindings are the editing binding set, on desktop and on the tablet view with a hardware keyboard. The binding table is to be written into the spec.
+- 2026-09-05 — Editor uses no network: the local-network server for tablet editing is dropped. Tablet editing path reopened as a question on itd-2609051221553568.
+- 2026-09-05 — Web exports are packaged two ways at the author's choice: one self-contained HTML file with everything embedded (videos optionally external), or an asset folder, optionally zipped, that uploads unchanged to a public web page.
+- 2026-09-05 — Publishing: Editor pushes to a GitHub repository served by Cloudflare Pages. One public reader page; each document in a folder named by an unguessable hash, loaded when the reader URL carries the key. Unlisted, not private. Supersedes the folder/zip packaging.
+- 2026-09-05 — The single self-contained HTML file is both reader and editor: it imports and exports Markdown only. It is the tablet and anywhere-else editing path; assets are added only in the desktop app.
+- 2026-09-05 — Publishing splits into two channels: public code (reader, slides engine, site shell) in GitHub served by Cloudflare Pages; private content (Markdown and assets) uploaded straight to Cloudflare storage under a hash, never through GitHub.
+- 2026-09-05 — The PDF is rendered by the publish pipeline and stored beside the document; the desktop app does not export PDF.
+- 2026-09-05 — Publishing simplified to one production system: Editor builds, commits under a hash folder, pushes to the production GitHub repository, and returns the hash; Cloudflare Pages deploys a public presenter page plus every document. Supersedes the two-channel design. Repository visibility assumed private, to confirm.
+- 2026-09-05 — Assets reachable from anywhere for editing away from the computer is parked as a future feature.
+- 2026-09-05 — The maintainer's prototype online article (Org-mode export, Tufte layout, reader controls, easter eggs with Konami reveal) is the reference reading experience; recorded in research/notes/2026-09-05-prototype-article.md. The public presenter domain is magnumesque.com.
+- 2026-09-05 — Three exports from one text: Tufte-style online article, Tufte-style PDF, and slides, all using footnotes and native bibliography references from a bibliography file beside the document. Citation syntax assumed Pandoc `[@key]`, to confirm.
+- 2026-09-05 — Prototypes are recorded by form only: never their topic, location, or content. The slide prototype's conventions (rule breaks, column splits, layout and source comments, speaker notes) are the reference for slide authoring; slides are authored in the same text, not only derived from the hierarchy.
+- 2026-09-05 — An existing personal writing project is the acceptance test for Editor, recorded form-only after three independent model reviews. It adds to the design: split-on-import and a fourth heading level, variants as an in-Markdown marker, referenced-not-copied large assets, a `Video:` fallback line, reader-layer annotations with round-trip conventions, and byte-fidelity on round trip.
+- 2026-09-05 — Product grill, round one. Audience: the maintainer first, others later. Article is the rendering to perfect first; slides for a specific talk are the first usable slice. The app is the editor with Emacs bindings ported. Variants are core, selected by link, no switcher. Reader annotations are sidecar files per chapter, private by default, publishable by the author as a public layer. Publishing is per document unlisted or gated.
+- 2026-09-05 — Product grill, round two. Markdown canon is Pandoc-compatible plus fenced divs. On disk: folder of chapters with split on import and four heading levels. Shell: Tauri 2. PDF: not Tufte; a modern journal layout rendered by Typst in the pipeline. Hash: stable document id plus versioned content hashes. Assets: embed small, link large, threshold set by the author. Slides: hybrid, hierarchy by default with authored breaks inside. Recorded in brief/02-constraints.md.
