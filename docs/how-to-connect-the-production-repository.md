@@ -32,9 +32,14 @@ publish-site.json            the base URL and the deployed directory
 
 ## Tell Editor where to push
 
-In the publish panel, set the production repository's path, the remote, the
-branch, and the site's base URL. These are facts about this machine, so they
-are stored in Editor's own configuration file and never in a document folder.
+Open the settings panel with `C-c C-,` and set the production repository's
+path, the remote, the branch, and the site's base URL. These are facts about
+this machine, so they are stored in Editor's own configuration file and never
+in a document folder. The publish panel, at `C-c C-l`, reads them; it does not
+set them.
+
+The remote is a name your repository already declares — `origin`, or whatever
+`git remote` lists — never a URL. The base URL is `https`.
 
 ## Connect the Pages project
 

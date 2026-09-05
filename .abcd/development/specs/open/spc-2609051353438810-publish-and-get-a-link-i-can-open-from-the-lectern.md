@@ -22,14 +22,27 @@ dry-run flag, which the tests exercise.
 
 ## Scope
 
-**In.** `src/publish/build.ts` (a version's built output from the tree); `src/publish/links.ts`
-(the grammar and the link forms); `src/publish-panel.ts`; `src/site/` — `shell.html`,
-`presenter.ts`, `presenter.css`, `headers`, `robots.txt`, `verify-site.mjs`,
-`workflow-publish.yml` — built by `vite.site.config.ts` into `dist-site/`;
-`src-tauri/src/publish/` — `mod.rs` (commands), `identity.rs` (minting, base32), `hash.rs`,
-`metadata.rs`, `stage.rs` (staging, scaffold), `repo.rs` (git), `net.rs` (the poll); five
-commands registered in `src-tauri/src/lib.rs`. Tests: `src/publish.test.ts`,
-`src/publish-panel.test.ts`, `src/site/presenter.test.ts`, and the Rust tests named below.
+**In.** `src/publish/build.ts` (a version's built output from the tree, and the envelopes the
+site serves it in); `src/publish/links.ts` (the grammar and the link forms);
+`src/publish/services.ts` (what the application hands the panel, and what a publish refuses
+before it builds); `src/publish-panel.ts`; `site/` — `index.html` and `404.html` (the presenter
+shell), `presenter/presenter.js`, `presenter/presenter.css`, `presenter/article.css`,
+`presenter/deck.js`, `_headers`, `robots.txt` — hand-written and included into the shell by
+`src-tauri/src/publish/stage.rs`, with `tools/verify-site.mjs` and
+`.github/workflows/publish.yml` beside them; `src-tauri/src/publish/` — `mod.rs` (the commands,
+the run, the identity lines, the deploy poll), `identity.rs` (minting, base32, the listing hash),
+`stage.rs` (staging, install, scaffold), `git.rs` (git), `log.rs` (the sibling spec's entries);
+`src-tauri/src/settings.rs`; six commands registered in `src-tauri/src/lib.rs`. Tests:
+`src/publish/build.test.ts`, `src/publish/services.test.ts`, `src/publish-panel.test.ts`,
+`src/site/presenter.test.ts`, and the Rust tests named below.
+
+There is no `vite.site.config.ts` and no `dist-site/`: the site's files are written by hand
+under `site/` and compiled into the shell binary by `include_str!`, so what a publish lays down
+is what is in the tree and no second build step can disagree with it. There is no `hash.rs`,
+`metadata.rs`, `repo.rs` or `net.rs` either: the hash lives in `identity.rs` beside the names it
+is a grammar with, git lives in `git.rs`, the one outbound call lives in `mod.rs` next to the
+command that may make it, and `src-tauri/src/metadata.rs` is the whole application's one reader
+of `document.yaml` rather than this spec's.
 
 **Out.** The publish log, its rendering and version immutability — map #8, spc-2609051353457083.
 Per-variant links beyond the default variant's token — #19. The gate, the access file and the
@@ -42,9 +55,9 @@ constructs — #5 and #6: this spec consumes `render/slides`, it does not define
 
 | Discipline | Proven here by |
 |---|---|
-| Network only on publish (`itd-2609051336158553`) | every outbound call lives in `publish/net.rs`, reached only from a command Alice's press invoked: `no_network_outside_publish` scans the crate for a call site elsewhere, `an_editing_session_makes_no_request` drives a session against a double that fails on any invocation |
+| Network only on publish (`itd-2609051336158553`) | every outbound call lives in `publish/mod.rs`, reached only from a command Alice's press invoked, and gated on `PublishInProgress`: `no_network_outside_publish` scans the crate for a call site elsewhere, `check_deploy_is_refused_outside_a_publish` holds the gate, and `an_editing_session_makes_no_request` drives a session against a socket that reports every connection made to it |
 | No machine in the document (`itd-2609051336080960`) | the only bytes written into the document folder are `id:` and `variant_tokens:` in `document.yaml`, plus the sibling spec's log entry; the repository path, remote and branch live in the app's settings outside it — `document_yaml_gains_only_the_identity_lines` |
-| One source, always (`itd-2609051336090390`) | presenter, article script and deck engine are written once in `src/site/` and copied to the site root, never into a version folder; `document.yaml` is read in one place |
+| One source, always (`itd-2609051336090390`) | presenter, stylesheets and deck engine are written once under `site/` and `src/vendor/reveal/` and copied to the site root, never into a version folder; `document.yaml` is read in one place |
 | Legible on three device classes (`itd-2609051336128348`) | `built_pages_declare_the_viewport_and_no_fixed_width`, and check M4 at 390, 820 and 1280 CSS px on both engines |
 | Variant fidelity (`itd-2609051336107315`), from phase 3 | no version folder, page or `latest.json` names a variant; the token alone selects one — `latest_json_names_no_variant` |
 
@@ -97,16 +110,19 @@ makes the hash reproducible and the dry run faithful — `build_is_deterministic
 fixture twice and compares bytes. When phase 7 puts the id in the page to key a reader's own
 marks, the id becomes an input to the hash and this narrows to the hash and the stamp.
 
-Renderers, pinned exact: `markdown-it` `14.3.1` with `markdown-it-attrs` `5.0.1` (`{...}` on
-headings, images and spans), `markdown-it-container` `4.0.0` (`::: {...}` fenced divs),
-`markdown-it-footnote` `4.0.0` and `markdown-it-bracketed-spans` `1.0.3`; the deck runs
+Renderers, pinned exact: `markdown-it` `14.3.1` with `markdown-it-attrs` `4.5.0` (`{...}` on
+headings, images and spans), `markdown-it-footnote` `4.0.0` and `markdown-it-bracketed-spans`
+`1.0.3`. `markdown-it-container` is *not* a dependency: it closes the outer div at the first
+bare `:::`, which turns the canon's own columns example into three sibling divs and swallows the
+paragraph after it, so `src/core/markdown.ts` carries a hand-written block rule that counts
+opening and closing fences instead. The deck runs
 `reveal.js` `5.2.1`, self-hosted at the site root rather than from a CDN, which would tell a
 third party who opened an unlisted link. The citation plugin and its BibTeX reader arrive with
 #11.
 
 ### 4. The content hash
 
-Over the staged version folder, in `publish/hash.rs`: for each file `sha256(bytes)` as
+Over the staged version folder, in `publish/identity.rs`: for each file `sha256(bytes)` as
 lower-case hex; one line per file, `<hex> + "  " + <path> + "\n"`, the path relative to the
 version folder with `/` separators; lines sorted ascending by the path's UTF-8 bytes and
 concatenated; `version_hash = base32(sha256(listing)[0..16])`. No mode, no size, no timestamp:
@@ -157,7 +173,7 @@ names nor forbids a sibling: without it Alice lands on the article, not the talk
 ### 7. Git, in Rust
 
 Editor **shells out to the author's `git`** through `std::process::Command` in
-`publish/repo.rs`; it links neither `git2` nor `gix`. The reason is the intent's promise that
+`publish/git.rs`; it links neither `git2` nor `gix`. The reason is the intent's promise that
 Editor holds no credential: the author's push works because their configuration works — the
 keychain credential helper, an `ssh` agent and its config, `includeIf`, `commit.gpgsign`,
 `url.*.insteadOf`, a proxy — and `libgit2` reimplements a subset of that without running the
@@ -253,14 +269,17 @@ with a token.
 | Criterion (itd-2609051335468596) | Proven by |
 |---|---|
 | Never published: mints an id, writes it into the metadata, commits under it, pushes | `first_publish_mints_an_id_and_token`, `document_yaml_gains_only_the_identity_lines`, `publish_commits_under_the_document_id`, `publish_pushes_to_the_configured_remote` (a fake `git` records its arguments) |
-| Reported done: one stable link with a copy action; opening it serves the document | `publish-panel.test.ts` `shows_the_stable_link_with_a_copy_action`; `presenter.test.ts` `a_stable_link_resolves_to_the_latest_version`; check M1 |
+| Reported done: one stable link with a copy action; opening it serves the document | `src/publish-panel.test.ts` `"shows_the_stable_link_with_a_copy_action, the deck first"`; `src/site/presenter.test.ts` `a_stable_link_resolves_to_the_latest_version`; check M1 |
 | Edit one line, publish again: the same stable link serves the new content | `republish_moves_latest_and_leaves_the_old_version`; `presenter.test.ts` `a_stable_link_follows_latest_json` |
 | Root, unpublished id and bare id render the same empty shell | `presenter.test.ts` `the_shell_is_identical_at_the_root_a_wrong_id_and_a_bare_id`; `shell_copies_are_byte_identical` |
 | Crawled from the root, nothing links to, lists or enumerates the document | `presenter.test.ts` `the_shell_carries_no_link_and_no_list`; `verify-site.mjs` `no_root_entry_outside_the_reserved_names`; check M2 |
 | The panel states that unlisted is not private, every publish | `publish-panel.test.ts` `states_that_unlisted_is_not_private`, `states_it_again_on_the_second_open` |
-| Push fails: the reason is reported, the site is unchanged, the folder is byte for byte but for what was recorded | `a_failed_push_leaves_the_deployed_paths_untouched`, `a_failed_push_names_the_step_and_the_reason`, `a_failed_push_leaves_the_document_folder_but_for_the_id`; `publish-panel.test.ts` `names_the_failing_step` |
-| A full editing session with no publish makes no request | `publish-panel.test.ts` `an_editing_session_makes_no_request`; `no_network_outside_publish`; check M3 |
-| Legible at 390, 820 and 1280 CSS px | `publish.test.ts` `built_pages_declare_the_viewport_and_no_fixed_width`; check M4 |
+| Push fails: the reason is reported, the site is unchanged, the folder is byte for byte but for what was recorded | `a_failed_push_leaves_the_deployed_paths_untouched`, `a_failed_push_names_the_step_and_the_reason`, `a_failed_push_leaves_the_document_folder_but_for_the_id`, `a_retry_after_a_failed_push_pushes_the_held_commit` (the next publish sends the commit the failed one left, rather than recording a link the site never received); `src/publish-panel.test.ts` `names_the_failing_step` |
+| A full editing session with no publish makes no request | `an_editing_session_makes_no_request` (against a socket that reports every connection made to it), `check_deploy_is_refused_outside_a_publish`, `no_network_outside_publish`; check M3 |
+| Legible at 390, 820 and 1280 CSS px | `src/publish/build.test.ts` `built_pages_declare_the_viewport_and_no_fixed_width`; check M4 |
+| A reference the build will not resolve stops the publish and is named | `src/publish-panel.test.ts` `"fails the build step on a refusal and names every one, publishing nothing"`; `src/publish/build.test.ts` `"refuses a reference to a file a published version does not carry"` |
+| A publish over a dirty buffer, an unreadable chapter or a nameless variant is refused before anything is built | `src/publish/services.test.ts` `"refuses while the buffer differs from the file"`, `"refuses when a chapter would not read, and names it"`, `"refuses a document that declares no variant"` |
+| No built page carries an inline style, which the site's policy would drop | `src/publish/build.test.ts` `"carries no style attribute on any element of a built page"`; `src/core/render/legibility.test.ts` `"carries no inline style at all on a real chapter's deck"` |
 | Inherits five disciplines | the Scope table, one named test each |
 
 Manual checks, logged under `.abcd/.work.local/logs/`: **M1** open the link on a second machine;
@@ -287,7 +306,7 @@ an editing session; **M4** the three widths on Safari and Chromium.
   five-minute bound M1 must replace. That Editor pushes with the author's own setup is likewise
   a claim 03-evidence.md owes to the first publish.
 - **New dependencies need sign-off** (`AGENTS.md`): `sha2` `0.10.9`, `getrandom` `0.3.4`,
-  `serde_json` `1.0.151`, `time` `0.3.55`, `ureq` `3.4.0`; `markdown-it` `14.3.1` with its four
+  `serde_json` `1.0.151`, `time` `0.3.55`, `ureq` `3.4.0`; `markdown-it` `14.3.1` with its three
   plugins, and `reveal.js` `5.2.1`. Base32 and the RFC 3339 stamp are written here instead.
 - **06-delivery.md excludes the article from phase 1**, while the intent says the link serves
   the document she published and 05-internals.md §9 makes `index.html` the article. The build

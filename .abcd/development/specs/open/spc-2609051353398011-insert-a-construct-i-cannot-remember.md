@@ -31,7 +31,7 @@ than a form. It is the third of the three specs in the Editing surface bundle.
 | `src/palette.ts` | absent | new: the overlay, its filter, and the insertion |
 | `src/keys.ts` | owned by spc-2609051353381023 | one row added: `insert-palette` on `C-c i` |
 | `src/app.ts` | shared | the palette command only |
-| `src/canon.test.ts` | absent | new: every row's form against section 3, its parse, and its plain-tool reading |
+| `src/core/inserts.test.ts` | absent | new: every row's form against section 3, its parse, and its plain-tool reading |
 | `src/palette.test.ts` | absent | new: filtering, insertion, the cursor, and cancel |
 
 ### Out
@@ -200,14 +200,14 @@ exactly and that a save writes it unchanged.
 | Columns on a blank line inserts the exact form, cursor inside the first column's body | `src/palette.test.ts` › "inserts the columns form with the cursor in the first column" |
 | Speaker notes inserts `::: {.notes}` with its fence, cursor on the body line, no other line changed | `src/palette.test.ts` › "inserts speaker notes and changes no other line" |
 | On the line `## Interlude`, Divider makes it `## Interlude {.divider}` and inserts no block | `src/palette.test.ts` › "appends the divider attribute to the heading on the cursor's line" |
-| Every construct inserted once, parsed and serialised without editing, returns byte for byte and parses to the node the mapping table names with its attributes as written | `src/canon.test.ts` › "parses every construct to the node the mapping table names" and `src/palette.test.ts` › "inserts every construct and writes the buffer byte for byte" |
+| Every construct inserted once, parsed and serialised without editing, returns byte for byte and parses to the node the mapping table names with its attributes as written | `src/core/inserts.test.ts` › "parses to the node the mapping table names, with its attributes as written" and `src/palette.test.ts` › "inserts every construct and writes the buffer byte for byte" |
 | Cancel with "col" typed inserts nothing and leaves the chapter byte for byte; Escape the same | `src/palette.test.ts` › "cancels on C-g and on Escape without touching the chapter" |
-| A plain Markdown tool renders every paragraph and reaches the end of the file | `src/canon.test.ts` › "a plain CommonMark reader reaches the end of a chapter using every construct" |
-| Every entry's form matches a form written in section 3; the palette offers nothing outside the canon | `src/canon.test.ts` › "every form is one of the five permitted shapes" and "every offered entry has a form section 3 writes" |
+| A plain Markdown tool renders every paragraph and reaches the end of the file | `src/core/inserts.test.ts` › "renders every paragraph, in order, and reaches the end of the file" |
+| Every entry's form matches a form written in section 3; the palette offers nothing outside the canon | `src/core/inserts.test.ts` › "writes one of the five permitted shapes, or Pandoc's own citation or footnote" and "spells every construct the way the internals chapter spells it" |
 | The palette and its labels stay legible at 390, 820, and 1280, and Return still inserts | manual check M6 |
 | Round-trip byte-fidelity | `src/palette.test.ts` › "inserts every construct and writes the buffer byte for byte" |
-| No machine in the document | `src/canon.test.ts` › "no form carries a path or a machine-local value" |
-| One source, always | `src/canon.test.ts` › "the palette is the only writer of a canonical form" — a source sweep for the literal `:::` outside `canon.ts` |
+| No machine in the document | `src/core/inserts.test.ts` › "carries no path, no name, and no machine-local value" |
+| One source, always | `src/palette.test.ts` › "the palette is the only writer of a canonical form" — a source sweep for the literal `:::` outside `canon.ts` |
 | Degrade gracefully in a plain tool | the plain-CommonMark test above |
 | Legible on three device classes | manual check M6 |
 | Network only on publish | the offline sweep of spc-2609051353137620 |

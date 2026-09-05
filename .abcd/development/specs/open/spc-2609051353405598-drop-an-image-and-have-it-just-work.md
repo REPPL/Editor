@@ -36,7 +36,7 @@ their tests; no renderer, and it stops at the reference in the text.
 | `src/reference.ts` (new) | percent-decoding and the media-address test |
 | `src/drop.ts` (new) | the subscription, the position mapping, the URL branch on drop and paste, the drop cue |
 | `src/doctree.ts`, `src/app.ts`, `src/main.ts` | one service, wired |
-| `src/canon.test.ts`, `src/drop.test.ts`, `docs/assets-drop.md` | the tests and the manual checks |
+| `src/core/inserts.test.ts`, `src/drop-target.test.ts`, `docs/how-to-drop-images-videos-and-files.md` | the tests, the how-to page, and the manual checks recorded under `.abcd/.work.local/logs/acceptance/` |
 
 ### Out, and who owns it
 
@@ -56,12 +56,12 @@ their tests; no renderer, and it stops at the reference in the text.
 
 | Discipline | Proven by |
 |---|---|
-| Round-trip byte-fidelity (`itd-2609051336074533`) | `drop.test.ts` compares the buffer before and after and asserts the only differing bytes lie in the inserted span |
+| Round-trip byte-fidelity (`itd-2609051336074533`) | `src/drop-target.test.ts` compares the buffer before and after and asserts the only differing bytes lie in the inserted span |
 | No machine in the document (`itd-2609051336080960`) | `assets.rs::records_no_absolute_path_in_the_manifest`; conversion writes no EXIF |
-| Degrade gracefully in a plain tool (`itd-2609051336110536`) | `canon.test.ts` asserts each form is an image attribute, a bracketed link, or a fenced div with attributes, and nothing else |
-| Network only on publish (`itd-2609051336158553`) | `drop.test.ts::never reaches the network for a video address`, with a failing `fetch` stub |
+| Degrade gracefully in a plain tool (`itd-2609051336110536`) | `src/core/inserts.test.ts` asserts each form is an image attribute, a bracketed link, or a fenced div with attributes, and nothing else |
+| Network only on publish (`itd-2609051336158553`) | `src/drop-target.test.ts::never reaches the network for a video address`, with a failing `fetch` stub |
 | One source, always (`itd-2609051336090390`) | one forms module writes every construct; the reference is the only record of the asset in the text |
-| Legible on three device classes (`itd-2609051336128348`) | manual check in `docs/assets-drop.md` against the deck preview at 390, 820 and 1280 CSS pixels |
+| Legible on three device classes (`itd-2609051336128348`) | check M9 against the deck preview at 390, 820 and 1280 CSS pixels |
 
 ## Design
 
@@ -205,17 +205,24 @@ view's own `paste` (guaranteed) or `drop` (conditional — see Risks).
 
 | Intent criterion | Proven by |
 |---|---|
-| AC1 240 kB JPEG: copy at `assets/lantern.jpg`, `![](assets/lantern.jpg)`, cursor in the alt text | `assets.rs::copies_a_dropped_image_into_the_assets_folder_beside_the_chapter`; `drop.test.ts::"inserts an image reference at the drop point and leaves the cursor in the alt text"` |
-| AC2 the same bytes twice under any name: one file, two references | `assets.rs::writes_one_copy_for_two_drops_of_the_same_bytes`; `assets.rs::adopts_a_file_already_in_the_folder_with_the_same_bytes` |
-| AC3 a name with a space resolves, and the chapter round-trips | `assets.rs::percent_encodes_a_reference_whose_name_contains_a_space`; `drop.test.ts::"round-trips a reference holding a percent-encoded space"`; manual check 3 in `docs/assets-drop.md` for the preview |
-| AC4 the chapter differs only by the inserted reference | `drop.test.ts::"changes only the bytes of the inserted span"` over a fixture with a 544-character line, a ragged table and `<!-- pagebreak -->` |
-| AC5 a video file below the threshold: a `.video` block with one `local:` entry, nothing invented | `drop.test.ts::"writes a video block with one local source and invents no other"`; `canon.test.ts::"writes the video block in the canon's own form"` |
-| AC6 a video address: a block naming it, nothing downloaded, nothing copied, no request | `drop.test.ts::"writes a video block for a pasted media address"`; `drop.test.ts::"never reaches the network for a video address"` (a `fetch` stub that fails the test if called, and no `drop_on_chapter` call) |
-| AC7 any other file: copied under the same rule, an ordinary link, cursor in the link text | `assets.rs::copies_a_file_that_is_neither_image_nor_video`; `drop.test.ts::"inserts a link and leaves the cursor in the link text"` |
-| AC8 phone-native: the reference points at the conversion, no original left, the record keeps the format | `convert.rs::converts_a_heic_photograph_to_a_web_jpeg`; `assets.rs::leaves_no_phone_native_original_in_the_document_folder`; `assets.rs::records_what_a_conversion_came_from`. The above-threshold half is deferred — see Risks |
-| AC9 no machine named anywhere; offline every drop succeeds and makes no request | `assets.rs::records_no_absolute_path_in_the_manifest` (scans every written file for the fixture root, the home directory name and the user name); `drop.test.ts::"never reaches the network for a video address"`; manual check 5 in `docs/assets-drop.md`, run with networking off |
-| AC10 the preview shows the image within the measure at 390, 820 and 1280 CSS pixels | manual check 6 in `docs/assets-drop.md`, against the deck preview of map #5. Not automatable in jsdom, which has no layout engine — see Risks |
+| AC1 240 kB JPEG: copy at `assets/lantern.jpg`, `![](assets/lantern.jpg)`, cursor in the alt text | `assets.rs::copies_a_dropped_image_into_the_assets_folder_beside_the_chapter`; `src/drop-target.test.ts::"inserts an image reference at the drop point and leaves the cursor in the alt text"` |
+| AC2 the same bytes twice under any name: one file, two references | `assets.rs::writes_one_copy_for_two_drops_of_the_same_bytes`; `assets.rs::a_second_drop_into_another_part_copies_rather_than_climbing_out_of_it` |
+| AC3 a name with a space resolves, and the chapter round-trips | `assets.rs::percent_encodes_a_reference_whose_name_contains_a_space`; `src/drop-target.test.ts::"round-trips a reference holding a percent-encoded space"`; check M7 for the preview |
+| AC4 the chapter differs only by the inserted reference | `src/drop-target.test.ts::"changes only the bytes of the inserted span"` over a fixture with a 544-character line, a ragged table and `<!-- pagebreak -->` |
+| AC5 a video file below the threshold: a `.video` block with one `local:` entry, nothing invented | `src/drop-target.test.ts::"writes the video block in the canon's own form, with one source"` |
+| AC6 a video address: a block naming it, nothing downloaded, nothing copied, no request | `src/drop-target.test.ts::"writes a video block for a pasted media address"`; `src/drop-target.test.ts::"never reaches the network for a video address"` (a `fetch` stub that fails the test if called, and no `drop_on_chapter` call) |
+| AC7 any other file: copied under the same rule, an ordinary link, cursor in the link text | `assets.rs::copies_a_file_that_is_neither_image_nor_video`; `src/drop-target.test.ts::"inserts a link and leaves the cursor in the link text"` |
+| AC8 phone-native: the reference points at the conversion, no original left, the record keeps the format | `assets.rs::converts_a_heic_photograph_to_a_web_jpeg`, which asserts all three: the reference points at the conversion, no original is left, and the manifest records the format it came from. The above-threshold half is deferred — see Risks |
+| AC9 no machine named anywhere; offline every drop succeeds and makes no request | `assets.rs::records_no_absolute_path_in_the_manifest` (scans every written file for the fixture root, the home directory name and the user name); `src/drop-target.test.ts::"never reaches the network for a video address"`; check M8, run with networking off |
+| AC10 the preview shows the image within the measure at 390, 820 and 1280 CSS pixels | check M9, against the deck preview of map #5. Not automatable in jsdom, which has no layout engine — see Risks |
+| A copy carries none of the author's machine, whatever the format | `assets.rs::finds_the_metadata_a_copy_must_not_carry`, `takes_the_metadata_out_without_touching_the_image`, `takes_a_gifs_comment_and_application_blocks_out`, `takes_an_svgs_comments_metadata_and_local_paths_out`, `refuses_an_avif_carrying_metadata_it_cannot_take_out`, `a_jpeg_this_reader_loses_its_place_in_is_treated_as_carrying_metadata` |
+| A conversion asks for a bounded amount of memory | `convert.rs::caps_what_a_conversion_reads_and_what_it_writes` |
+| A `document.yaml` that will not parse stops the drop rather than being guessed at | `assets.rs::an_unparsable_document_yaml_stops_the_drop_rather_than_guessing` |
 | Inherits, six disciplines | the table under **Scope**; each row names its test |
+
+Manual checks, logged under `.abcd/.work.local/logs/acceptance/`: **M7** drop a file whose name
+carries a space and read the reference back in the preview; **M8** run a session of drops with
+networking off; **M9** open the deck preview of a dropped image at 390, 820 and 1280 CSS px.
 
 ## Tasks
 
@@ -241,7 +248,7 @@ abbreviated to `cargo <verb>`.
    wired in `src/main.ts`. Verify: `npx vitest run src/drop.test.ts`.
 8. The URL branch on `paste` and on the web view's `drop`, with the `fetch`
    stub test, measuring whether a non-file drag arrives. Verify: as task 7.
-9. `docs/assets-drop.md` — the how-to and the six manual checks; the two
+9. `docs/how-to-drop-images-videos-and-files.md` — the how-to; the manual checks are recorded under `.abcd/.work.local/logs/acceptance/`; the two
    decisions this spec makes (refusal rather than a placeholder, ImageIO
    rather than a HEIC crate) in `.abcd/work/DECISIONS.md`; the
    conversion-fallback question struck from `03-evidence.md`. Verify:

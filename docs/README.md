@@ -22,6 +22,9 @@ Task-oriented. Open one when you have something specific to do.
 
 - [Find and change the keys](how-to-find-and-change-the-keys.md) — the keys
   panel, the key log, and the chords Editor deliberately answers with nothing.
+- [Drop images, videos and files](how-to-drop-images-videos-and-files.md) —
+  what Editor does with each kind of dropped file, what it takes out of a
+  picture, and what to do when a drop is refused.
 - [Connect the production repository](how-to-connect-the-production-repository.md)
   — set up the git repository and the static host that publishing pushes to.
 

@@ -82,9 +82,9 @@ are simply absent. It is what a reader reads.
 **The deck** is the document as a talk. Headings become the slide mapping; a
 horizontal rule splits the slide in force; a `.divider` heading is a slide whose
 face is its headline alone; the prose that would crowd a slide becomes its
-speaker notes. The deck holds the whole document, and it is built by the same
-core whether you press `C-c C-p` to project it or publish it to a link — so the
-deck at the link is the deck you rehearsed.
+speaker notes. The published deck holds the whole document; `C-c C-p` projects
+the chapter you are in. Both are built by the same core, from the same parse and
+for the same variant — so the deck at the link is the deck you rehearsed.
 
 **The printed page** is the document as a PDF for a journal: page breaks are
 honoured, citations become numbered references, and every reference is resolved

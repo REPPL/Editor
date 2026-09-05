@@ -194,7 +194,7 @@ with the phase's acceptance run.
 | `<!-- pagebreak -->` alone on a line makes no slide break, no blank slide and no visible output | `src/core/shaping.test.ts`, "ignores a page-break comment" |
 | Inserting a `.notes` div changes only the inserted div and its blank lines: nothing reflowed, re-escaped or realigned | `src/core/degrade.test.ts`, "leaves every byte outside the inserted div alone" |
 | Inherits: seven disciplines | the table under Scope |
-| The article ignores these constructs (bundle obligation, stated here) | `src/core/canon.test.ts`, "gives every phase-1 construct a placement in both renderings"; `src/core/render/article.test.ts`, "puts columns in the flow, omits notes, keeps a divider an ordinary heading" |
+| The article ignores these constructs (bundle obligation, stated here) | `src/core/canon.test.ts`, "gives every construct a placement in all three renderings"; `src/core/render/article.test.ts`, "puts columns in the flow, omits notes, keeps a divider an ordinary heading" |
 | The constructs on real documents | `src/core/examples.test.ts`, whose snapshots cover the rules, dividers, columns, notes and credits of `examples/talk` and `examples/presentation` |
 
 ## Tasks

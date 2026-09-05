@@ -1,0 +1,9 @@
+{
+  "outcome": "accept",
+  "blocked": false,
+  "manifest_path": "package.json",
+  "json_pointer": "/version",
+  "version_property_clause": "package.json#/properties/version",
+  "marketplace_source_resolution_base": "repo_root",
+  "marketplace_source_to_root": "./"
+}

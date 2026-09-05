@@ -25,8 +25,9 @@ the deploy poll runs under the dry-run flag the tests exercise.
 **In.** `src-tauri/src/publish/log.rs` (the entry shape, the append, the atomic write, the
 reader) and the `read_publish_log` command registered in `src-tauri/src/lib.rs`; the
 never-rewrite rule and the `latest.json` write in `src-tauri/src/publish/stage.rs`;
-`src/publish-log-panel.ts` and its `publish-log` binding; the timestamp helper. Tests:
-`src/publish-log-panel.test.ts` and the Rust tests named in the mapping.
+the versions list inside `src/publish-panel.ts`, reached by the same `publish-open`
+binding; the timestamp helper. Tests: `src/publish-panel.test.ts` and the Rust tests named
+in the mapping.
 
 **Out.** The publish action, the id and token minting, the content hash, the site layout, the
 presenter shell, the git sequence and the publish panel — all spc-2609051353438810, map #7. Who
@@ -144,8 +145,10 @@ the choice rather than the current state of the gate.
 returns `PublishEntry[]` newest first; an absent file returns an empty list, an unparsable one
 returns the parse error. It touches no network and no other file.
 
-`src/publish-log-panel.ts` is an overlay opened by the binding-table action `publish-log`
-(`C-c C-l`) and from the publish panel once a publish has finished. It takes the keyboard while
+The versions list is a section of `src/publish-panel.ts`, drawn every time the panel opens
+under the binding-table action `publish-open` (`C-c C-l`) and redrawn when a publish finishes.
+It is not a second overlay: a log nobody can reach without a second chord is a log nobody
+reads, and the panel is already where a publish is started and its links are handed over. The panel takes the keyboard while
 open and `C-g` or Escape closes it, under the one cancel rule the reading views share. Each row
 shows the date and time, the hash, the variants, the flag, and whether the entry created a
 version or pointed at one already there; each row carries **Open** and **Copy** for the version
@@ -159,13 +162,13 @@ deployed.
 
 | Criterion (itd-2609051335479329) | Proven by |
 |---|---|
-| Two publishes of different content: the log lists two entries, newest first, each with its timestamp, hash, variants, flag and links, with open and copy | `src/publish-log-panel.test.ts` `lists_two_entries_newest_first`, `each_row_shows_the_stamp_hash_variants_flag_and_links`, `each_row_offers_open_and_copy`; `read_publish_log_returns_newest_first` |
+| Two publishes of different content: the log lists two entries, newest first, each with its timestamp, hash, variants, flag and links, with open and copy | `src/publish-panel.test.ts` `lists_two_entries_newest_first`, `each_row_shows_the_stamp_hash_variants_flag_and_links`, `each_row_offers_open_and_copy`; `read_publish_log_returns_newest_first` |
 | The earlier entry's version link, opened after the later publish, serves that earlier publish's built output content for content | `existing_version_folder_is_never_written`, `a_second_publish_touches_only_latest_json_and_the_new_version`; check M5 |
 | Both publishes done: the stable link serves the later version and the earlier version link still serves the earlier one | `republish_moves_latest_and_leaves_the_old_version`; `src/site/presenter.test.ts` `a_stable_link_follows_latest_json`; check M5 |
 | Unchanged content republished: the log gains an entry naming the hash the previous entry named, and no second version path is created | `an_unchanged_republish_creates_no_version_path`, `an_unchanged_republish_still_appends_an_entry`, `an_unchanged_republish_skips_the_commit` |
 | A version hash never published renders the same empty shell as no id at all | `src/site/presenter.test.ts` `an_unpublished_hash_renders_the_shell`; `shell_copies_are_byte_identical` |
 | The log read in a plain text editor: every entry readable as it stands, none naming her machine | `log_is_pretty_printed_and_reparses`, `log_entry_names_no_machine`; check M6 |
-| A saved version link legible at 820, 390 and 1280 CSS px | `publish.test.ts` `built_pages_declare_the_viewport_and_no_fixed_width`; check M5 |
+| A saved version link legible at 820, 390 and 1280 CSS px | `src/publish/build.test.ts` `built_pages_declare_the_viewport_and_no_fixed_width`; check M5 |
 | Inherits five disciplines | the Scope table, one named test each |
 
 Manual checks, logged under `.abcd/.work.local/logs/`: **M5** publish, save the version link,
@@ -180,7 +183,7 @@ every entry.
 3. `stage.rs`: the existing-version comparison, the refusal on a disagreeing listing, and the rule that only `latest.json` is rewritten beneath a token. — `cargo test --manifest-path src-tauri/Cargo.toml stage`
 4. The unchanged-republish path end to end, under the dry-run flag and then with a fake `git`. — `cargo test --manifest-path src-tauri/Cargo.toml republish`
 5. `read_publish_log`, registered in `lib.rs`. — `cargo test --manifest-path src-tauri/Cargo.toml read_publish_log`
-6. `src/publish-log-panel.ts` and the `publish-log` binding. — `npx vitest run src/publish-log-panel.test.ts`
+6. The versions list inside `src/publish-panel.ts`, under the `publish-open` binding. — `npx vitest run src/publish-panel.test.ts`
 7. The whole run. — `npm run lint && npm test && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml`
 
 ## Risks and Open Questions

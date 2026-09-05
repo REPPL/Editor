@@ -10,9 +10,14 @@ or is Pandoc's own citation or footnote, which are not extensions at all. A
 tool that knows nothing about Editor reads a chapter and shows every word of
 it.
 
-This page is generated from the two tables the code itself reads:
+The two tables below are generated from the two tables the code itself reads:
 `src/core/inserts.ts` for the forms and `src/core/canon.ts` for the
-placements. It cannot disagree with the program.
+placements. They cannot disagree with the program.
+`tools/generate-canon-reference.mjs` writes them, between the
+`<!-- generated: … -->` markers; everything else on this page is written by
+hand. Run `npm run docs:canon` to rewrite them, and `npm run lint:docs` —
+which `npm run lint` also runs — to fail when this page has fallen behind the
+code.
 
 ## Insert them from the palette
 
@@ -23,13 +28,16 @@ they arrive in.
 
 ## The forms
 
+<!-- generated: forms -->
+
 ### Slide split
 
 ```markdown
 ---
 ```
 
-Goes in a block of its own. Offered from phase 1. Found in the palette by: rule, break, split, slide, horizontal.
+Written as a block of its own. Offered from phase 1. Found in the palette by:
+rule, break, split, slide, horizontal.
 
 ### Divider heading
 
@@ -37,7 +45,8 @@ Goes in a block of its own. Offered from phase 1. Found in the palette by: rule,
 ## Interlude {.divider}
 ```
 
-Goes in appended to the heading on the cursor's line. Offered from phase 1. Found in the palette by: divider, section, break, interlude.
+Appended to the heading on the cursor's line. Offered from phase 1. Found in
+the palette by: divider, section, break, interlude.
 
 ### Columns
 
@@ -52,7 +61,8 @@ Goes in appended to the heading on the cursor's line. Offered from phase 1. Foun
 :::
 ```
 
-Goes in a block of its own. Offered from phase 1. Found in the palette by: columns, column, side, two, beside.
+Written as a block of its own. Offered from phase 1. Found in the palette by:
+columns, column, side, two, beside.
 
 ### Speaker notes
 
@@ -62,7 +72,8 @@ Goes in a block of its own. Offered from phase 1. Found in the palette by: colum
 :::
 ```
 
-Goes in a block of its own. Offered from phase 1. Found in the palette by: notes, speaker, presenter, script.
+Written as a block of its own. Offered from phase 1. Found in the palette by:
+notes, speaker, presenter, script.
 
 ### Source credit
 
@@ -72,7 +83,8 @@ Goes in a block of its own. Offered from phase 1. Found in the palette by: notes
 :::
 ```
 
-Goes in a block of its own. Offered from phase 1. Found in the palette by: credit, source, photograph, attribution.
+Written as a block of its own. Offered from phase 1. Found in the palette by:
+credit, source, photograph, attribution.
 
 ### Page break
 
@@ -80,7 +92,8 @@ Goes in a block of its own. Offered from phase 1. Found in the palette by: credi
 <!-- pagebreak -->
 ```
 
-Goes in a block of its own. Offered from phase 1. Found in the palette by: page, break, pdf, print.
+Written as a block of its own. Offered from phase 1. Found in the palette by:
+page, break, pdf, print.
 
 ### Callout
 
@@ -90,7 +103,8 @@ Goes in a block of its own. Offered from phase 1. Found in the palette by: page,
 :::
 ```
 
-Goes in a block of its own. Offered from phase 2. Found in the palette by: callout, warning, note, box, aside.
+Written as a block of its own. Offered from phase 2. Found in the palette by:
+callout, warning, note, box, aside.
 
 ### Margin aside
 
@@ -98,7 +112,8 @@ Goes in a block of its own. Offered from phase 2. Found in the palette by: callo
 []{.margin}
 ```
 
-Goes in inline, where the cursor is. Offered from phase 2. Found in the palette by: margin, aside, remark, sidenote.
+Written inline, where the cursor is. Offered from phase 2. Found in the
+palette by: margin, aside, remark, sidenote.
 
 ### Variant block (name it yourself)
 
@@ -108,7 +123,8 @@ Goes in inline, where the cursor is. Offered from phase 2. Found in the palette 
 :::
 ```
 
-Goes in a block of its own. Offered from phase 2. Found in the palette by: variant, audience, talk, full, block.
+Written as a block of its own. Offered from phase 2. Found in the palette by:
+variant, audience, talk, full, block.
 
 ### Variant span (name it yourself)
 
@@ -116,7 +132,8 @@ Goes in a block of its own. Offered from phase 2. Found in the palette by: varia
 []{.variant variant=""}
 ```
 
-Goes in inline, where the cursor is. Offered from phase 2. Found in the palette by: variant, audience, inline, span.
+Written inline, where the cursor is. Offered from phase 2. Found in the
+palette by: variant, audience, inline, span.
 
 ### Video block
 
@@ -126,7 +143,8 @@ Goes in inline, where the cursor is. Offered from phase 2. Found in the palette 
 :::
 ```
 
-Goes in a block of its own. Offered from phase 4. Found in the palette by: video, film, player, media, local.
+Written as a block of its own. Offered from phase 4. Found in the palette by:
+video, film, player, media, local.
 
 ### Citation
 
@@ -134,7 +152,8 @@ Goes in a block of its own. Offered from phase 4. Found in the palette by: video
 [@]
 ```
 
-Goes in inline, where the cursor is. Offered from phase 2. Found in the palette by: citation, cite, reference, bibliography, key.
+Written inline, where the cursor is. Offered from phase 2. Found in the
+palette by: citation, cite, reference, bibliography, key.
 
 ### Footnote
 
@@ -142,7 +161,8 @@ Goes in inline, where the cursor is. Offered from phase 2. Found in the palette 
 ^[]
 ```
 
-Goes in inline, where the cursor is. Offered from phase 1. Found in the palette by: footnote, note, inline.
+Written inline, where the cursor is. Offered from phase 1. Found in the
+palette by: footnote, note, inline.
 
 ### Easter egg marker (name it yourself)
 
@@ -150,7 +170,8 @@ Goes in inline, where the cursor is. Offered from phase 1. Found in the palette 
 [✦]{.egg egg=""}
 ```
 
-Goes in inline, where the cursor is. Offered from phase 3. Found in the palette by: egg, easter, marker, hidden.
+Written inline, where the cursor is. Offered from phase 3. Found in the
+palette by: egg, easter, marker, hidden.
 
 ### Easter egg block (name it yourself)
 
@@ -160,7 +181,8 @@ Goes in inline, where the cursor is. Offered from phase 3. Found in the palette 
 :::
 ```
 
-Goes in a block of its own. Offered from phase 3. Found in the palette by: egg, easter, block, hidden, reveal.
+Written as a block of its own. Offered from phase 3. Found in the palette by:
+egg, easter, block, hidden, reveal.
 
 ### Opening quotation
 
@@ -170,13 +192,18 @@ Goes in a block of its own. Offered from phase 3. Found in the palette by: egg, 
 :::
 ```
 
-Goes in a block of its own. Offered from phase 3. Found in the palette by: opening, quotation, epigraph, once.
+Written as a block of its own. Offered from phase 3. Found in the palette by:
+opening, quotation, epigraph, once.
+
+<!-- /generated -->
 
 ## What each rendering does with each construct
 
 The article, the deck, and the printed page each read their own column of this
 table. A renderer that decided for itself would be a second copy of the rule,
 and two copies drift.
+
+<!-- generated: canon table -->
 
 | Construct | Article | Slides | PDF | From phase |
 |---|---|---|---|---|
@@ -199,6 +226,8 @@ and two copies drift.
 | Reference list | generated, at the end | none; the deck carries credit lines only | generated, numbered | 2 |
 | Image attributes | width and classes honoured; `.full-bleed` runs the full measure | honoured on an in-flow image; an image slide is full-bleed already | width and classes honoured | 1 |
 | Raw HTML | escaped, shown as written | escaped, shown as written | escaped, shown as written | 1 |
+
+<!-- /generated -->
 
 ## Two rules the parse applies
 

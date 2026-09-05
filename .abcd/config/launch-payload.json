@@ -1,0 +1,27 @@
+{
+  "includes": [
+    "src",
+    "src-tauri/src",
+    "src-tauri/capabilities",
+    "src-tauri/icons",
+    "src-tauri/Cargo.toml",
+    "src-tauri/Cargo.lock",
+    "src-tauri/build.rs",
+    "src-tauri/tauri.conf.json",
+    "site",
+    "tools",
+    "docs",
+    "examples",
+    "index.html",
+    "present.html",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "eslint.config.js",
+    "README.md",
+    "LICENSE",
+    ".gitignore"
+  ]
+}

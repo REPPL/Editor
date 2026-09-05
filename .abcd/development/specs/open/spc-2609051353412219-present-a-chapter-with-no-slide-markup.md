@@ -235,11 +235,12 @@ types, `@types/markdown-it` 14.2.0, `@types/markdown-it-attrs` 4.1.3,
 | Two image paragraphs, each a full-bleed slide in source order, alt the caption and title the credit | `src/core/deck.test.ts`, "gives every image after the first block a slide of its own"; `src/core/render/slides.test.ts`, "renders an image slide with its caption and its credit" |
 | A first-block image shares the headline slide; a later one does not | `src/core/deck.test.ts`, "keeps the first image on the heading's own slide" |
 | Sub-sub-sections make no slide; heading and text fold into the Sub-section's notes in source order | `src/core/deck.test.ts`, "folds a Sub-sub-section into its Sub-section's notes" |
-| Present, move through, close: the chapter's bytes unchanged, no deck file anywhere | `src/present.test.ts`, "leaves the chapter's bytes untouched"; `src-tauri/src/document.rs`, `refuses_an_asset_outside_the_document` |
+| Present, move through, close: the chapter's bytes unchanged, no deck file anywhere | `src-tauri/src/present.rs`, `presenting_leaves_the_chapters_bytes_untouched` — through `hold_chapter`, which is what the `present_chapter` command runs, and `PendingDeck`; `src/present.test.ts`, "writes no deck file anywhere in the document folder"; `src-tauri/src/present.rs`, `refuses_an_asset_outside_the_document` |
 | No horizontal scrolling or pinch zoom at 390, 820, 1280 CSS px | manual: `npm run tauri dev`, Present `examples/presentation/01-slides/01-technology-impact-assessment.md`, resize the present window to each width and confirm `document.scrollingElement.scrollWidth` equals `innerWidth` on every slide |
 | Swipe, on-screen controls and arrow keys all move, none offered without working | manual, at 390 CSS px, on the same chapter, supported by `src/core/render/slides.test.ts`, "turns on touch and the on-screen controls" |
 | A Section of one paragraph yields exactly one slide, nothing empty beneath or after | `src/core/deck.test.ts`, "yields one slide for a Section with one paragraph" |
 | Present twice in a session shows the new text and leaves no second copy | `src/present.test.ts`, "rebuilds the deck from the buffer on a second Present" |
+| The deck rehearsed is the deck published: Present builds the document's default variant | `src-tauri/src/present.rs`, `presenting_carries_the_documents_default_variant`; `src/present.test.ts`, "builds the variant a publish would build" |
 | Inherits: the six disciplines | the table under Scope |
 | The mapping on real documents | `src/core/examples.test.ts`: slide-plan and built-deck snapshots for every chapter of `examples/manuscript`, `examples/talk`, `examples/presentation` |
 

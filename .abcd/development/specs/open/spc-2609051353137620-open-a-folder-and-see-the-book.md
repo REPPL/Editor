@@ -204,7 +204,7 @@ widths the discipline names, 390 and 820 get the drawer and 1280 the column.
 | Criterion (Given/When/Then) | Proven by |
 |---|---|
 | Two Parts, prefix order, chapters labelled by their level-one heading | `src/document.test.ts` › "lists Parts and Chapters in prefix order and labels a Chapter with its level-one heading"; `src-tauri` › `walks_a_folder_of_chapters` (exists) |
-| `##`, `###`, `####` appear nested and in source order | `src/outline.test.ts` › "nests Sections, Sub-sections, and Sub-sub-sections in source order" |
+| `##`, `###`, `####` appear nested and in source order | `src/core/outline.test.ts` › "nests Sections, Sub-sections, and Sub-sub-sections in source order" |
 | Clicking a Sub-sub-section opens the chapter scrolled to it, cursor on the heading | `src/document.test.ts` › "opens a chapter at the heading a sidebar node names" |
 | A Finder rename moves the chapter without reopening, and touches no other file | `src/document.test.ts` › "redraws the tree when the shell reports a change"; `src-tauri` › `emits_a_change_when_a_chapter_is_renamed`; manual check M1 |
 | A single-chapter document opens with no empty Part row and no error | `src/document.test.ts` › "shows a one-Part, one-chapter document with no empty rows" |
@@ -216,7 +216,7 @@ widths the discipline names, 390 and 820 get the drawer and 1280 the column.
 | Round-trip byte-fidelity | `src-tauri` › `copies_dropped_bytes_verbatim`, `round_trips_crlf_bytes_untouched` (exists) |
 | No machine in the document | `src-tauri` › `writes_nothing_when_a_folder_holds_no_chapters`; manual check M1 |
 | One source, always | `src/document.test.ts` › "redraws the tree when the shell reports a change" |
-| Degrade gracefully in a plain tool | `src/outline.test.ts` › "ignores a heading inside a fenced code block" |
+| Degrade gracefully in a plain tool | `src/core/outline.test.ts` › "ignores a heading inside a fenced code block" |
 | Legible on three device classes | manual check M2 |
 | Network only on publish | `src/document.test.ts` › "attempts no network request while a document is open" |
 
