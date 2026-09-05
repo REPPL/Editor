@@ -23,3 +23,13 @@ Emacs chords with Meta on the Option key are unproven on a real macOS WebView: t
   lowest-precedence guard then claims the event so the character never
   types but no command runs. The jsdom tests simulated Option chords with
   `key: "f"`, which is not what WebKit sends.
+
+## Cause found, 2026-09-05 late evening
+
+The orchestrator's diagnosis above was wrong: the Emacs package derives its
+key name from the physical key already. The real cause was the bundler:
+the package marks its keymap installation pure, so the dev pre-bundle and
+the release bundle both dropped it and the app's Emacs layer answered
+nothing. Fixed in commit e9b510f by ignoring the annotations and reporting
+an empty keymap at start-up. Awaiting the maintainer's confirmation on a
+real keyboard before this issue is resolved.

@@ -37,3 +37,6 @@ coverage/
 .abcd/.work.local/
 /memory/
 # END ABCD
+
+# macOS Finder metadata
+.DS_Store
