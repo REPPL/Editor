@@ -40,6 +40,28 @@ function fenceAt(src: string, start: number, max: number): Fence | null {
   return { length, params: src.slice(pos, max).trim() };
 }
 
+/** A code fence on one line: its character, how long, and what follows it. */
+interface CodeFence {
+  readonly marker: number;
+  readonly length: number;
+  readonly params: string;
+}
+
+/** ` and ~ — the two characters a fenced code block may be written with. */
+const BACKTICK = 0x60;
+const TILDE = 0x7e;
+
+/** Read a run of three or more backticks or tildes at `start`. */
+function codeFenceAt(src: string, start: number, max: number): CodeFence | null {
+  const marker = src.charCodeAt(start);
+  if (marker !== BACKTICK && marker !== TILDE) return null;
+  let pos = start;
+  while (pos < max && src.charCodeAt(pos) === marker) pos += 1;
+  const length = pos - start;
+  if (length < 3) return null;
+  return { marker, length, params: src.slice(pos, max).trim() };
+}
+
 /**
  * Pandoc's fenced divs, nested by counting fences.
  *
@@ -62,12 +84,33 @@ const pandocDivs: PluginSimple = (md) => {
     if (opening === null || opening.params.length === 0) return false;
     if (silent) return true;
 
+    // Colons inside a code fence are text, not fences. A chapter that shows
+    // the reader how to write a fenced div — and the canon's own chapter does
+    // — would otherwise close the div it is written inside, and everything
+    // after it would land in the wrong place.
     let depth = 1;
     let closeLine = endLine;
+    let openCodeFence: CodeFence | null = null;
     for (let line = startLine + 1; line < endLine; line += 1) {
       if ((state.sCount[line] ?? 0) - state.blkIndent >= 4) continue;
       const lineStart = (state.bMarks[line] ?? 0) + (state.tShift[line] ?? 0);
       const lineMax = state.eMarks[line] ?? 0;
+      const code = codeFenceAt(state.src, lineStart, lineMax);
+      if (openCodeFence !== null) {
+        if (
+          code !== null &&
+          code.marker === openCodeFence.marker &&
+          code.length >= openCodeFence.length &&
+          code.params.length === 0
+        ) {
+          openCodeFence = null;
+        }
+        continue;
+      }
+      if (code !== null) {
+        openCodeFence = code;
+        continue;
+      }
       const fence = fenceAt(state.src, lineStart, lineMax);
       if (fence === null) continue;
       if (fence.params.length === 0) {
@@ -107,16 +150,35 @@ const pandocDivs: PluginSimple = (md) => {
 /** A citation key: Pandoc's shape, which must end on a letter or a digit. */
 const CITATION_KEY = /@([A-Za-z\d_][\w:.#$%&+?<>~/-]*[A-Za-z\d_]|[A-Za-z\d_])/g;
 
-/** Every key in a bracketed citation, in source order. */
-function citationKeys(text: string): string[] {
+/** The same key, anchored: "is there one exactly here?". */
+const STICKY_CITATION_KEY = new RegExp(CITATION_KEY.source, "y");
+
+/** Every key in a bracketed citation, in source order, with where it ended. */
+interface CitationKeys {
+  readonly keys: string[];
+  /** The index just past the last key, in the text that was searched. */
+  readonly end: number;
+}
+
+/**
+ * Read the keys of a bracketed citation.
+ *
+ * The end is the match's own index, never a search for the key's text: a
+ * citation may name the same key twice, or name a key whose text also appears
+ * in the locator, and `lastIndexOf` would then cut the locator in the wrong
+ * place. The match knows where it was.
+ */
+function citationKeys(text: string): CitationKeys {
   const keys: string[] = [];
+  let end = 0;
   CITATION_KEY.lastIndex = 0;
   let match: RegExpExecArray | null = CITATION_KEY.exec(text);
   while (match !== null) {
     if (match[1] !== undefined) keys.push(match[1]);
+    end = match.index + match[0].length;
     match = CITATION_KEY.exec(text);
   }
-  return keys;
+  return { keys, end };
 }
 
 /**
@@ -134,16 +196,20 @@ const citations: PluginSimple = (md) => {
       const close = state.src.indexOf("]", state.pos + 1);
       if (close === -1 || close > state.posMax) return false;
       const inner = state.src.slice(state.pos + 1, close);
-      if (inner.includes("[") || inner.startsWith("^")) return false;
+      // A backtick inside the brackets means a code span, and `[`@` is code`]`
+      // is not a citation: what is inside a code span is text the author asked
+      // to be shown exactly as written.
+      if (inner.includes("[") || inner.startsWith("^") || inner.includes("`")) {
+        return false;
+      }
       const next = state.src.charCodeAt(close + 1);
       if (next === 0x28 || next === 0x5b || next === 0x7b) return false;
-      const keys = citationKeys(inner);
+      const { keys, end } = citationKeys(inner);
       if (keys.length === 0) return false;
       if (!silent) {
         const token = state.push("citation", "", 0);
         token.content = state.src.slice(state.pos, close + 1);
-        const lastKey = keys[keys.length - 1] ?? "";
-        const after = inner.slice(inner.lastIndexOf(lastKey) + lastKey.length);
+        const after = inner.slice(end);
         token.meta = { keys, locator: after.replace(/^\s*,\s*/, "").trim() };
       }
       state.pos = close + 1;
@@ -152,9 +218,12 @@ const citations: PluginSimple = (md) => {
     if (code !== 0x40 /* @ */) return false;
     const before = state.pos > 0 ? state.src.charCodeAt(state.pos - 1) : 0x20;
     if (/[\w@]/.test(String.fromCharCode(before))) return false;
-    CITATION_KEY.lastIndex = state.pos;
-    const match = CITATION_KEY.exec(state.src);
-    if (match === null || match.index !== state.pos) return false;
+    // Sticky, not global: the rule asks whether a key starts *here*, and a
+    // global search would run to the end of the paragraph on every `@` that
+    // is not one — an email address in a long paragraph, say.
+    STICKY_CITATION_KEY.lastIndex = state.pos;
+    const match = STICKY_CITATION_KEY.exec(state.src);
+    if (match === null) return false;
     if (!silent) {
       const token = state.push("citation", "", 0);
       token.content = match[0];

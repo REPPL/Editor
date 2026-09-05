@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 
 import { outlineOf, walkOutline } from "./outline";
 import { parseChapter } from "./parse";
-import { byteSlice, walkBlocks, type Block, type Chapter } from "./tree";
+import { sliceBytes, walkBlocks, type Block, type Chapter } from "./tree";
 
 /** The example documents, each a folder of Parts holding chapters. */
 const EXAMPLES = ["manuscript", "talk", "presentation"];
@@ -110,20 +110,33 @@ describe("every chapter of the examples", () => {
 
     it(`spans ${path} back onto its own bytes`, () => {
       const bytes = new TextEncoder().encode(source).length;
-      let previous = -1;
-      for (const block of walkBlocks(chapter.blocks)) {
-        expect(block.span.start, `${path}:${block.line}`).toBeGreaterThanOrEqual(0);
-        expect(block.span.end, `${path}:${block.line}`).toBeLessThanOrEqual(bytes);
-        expect(block.span.start, `${path}:${block.line}`).toBeLessThanOrEqual(block.span.end);
-        // The text a span names starts where the block's first line starts.
-        const sliced = byteSlice(source, block.span);
-        const firstLine = source.split(/\r?\n/)[block.line - 1] ?? "";
-        expect(sliced.split("\n")[0], `${path}:${block.line}`).toBe(firstLine);
-        if (block.children.length === 0) {
-          expect(block.span.start, `${path}:${block.line}`).toBeGreaterThan(previous);
-          previous = block.span.start;
+      const slice = sliceBytes(source);
+      const lines = source.split(/\r\n?|\n/);
+
+      /**
+       * One run of siblings: every span slices back to the block's own lines,
+       * whole, and no two siblings overlap.
+       */
+      const check = (blocks: readonly Block[]): void => {
+        let previousEnd = 0;
+        for (const block of blocks) {
+          const where = `${path}:${block.line}`;
+          expect(block.span.start, where).toBeGreaterThanOrEqual(0);
+          expect(block.span.end, where).toBeLessThanOrEqual(bytes);
+          expect(block.span.start, where).toBeLessThanOrEqual(block.span.end);
+          // The whole slice, not only its first line: a span that named the
+          // right line and the wrong length would pass a first-line check.
+          expect(slice(block.span), where).toBe(
+            lines.slice(block.line - 1, block.endLine).join("\n"),
+          );
+          // Siblings are in source order and do not overlap.
+          expect(block.span.start, where).toBeGreaterThanOrEqual(previousEnd);
+          previousEnd = block.span.end;
+          check(block.children);
+          for (const item of block.items ?? []) check(item.blocks);
         }
-      }
+      };
+      check(chapter.blocks);
     });
   }
 });

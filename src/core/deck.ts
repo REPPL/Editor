@@ -470,6 +470,28 @@ export function buildDocumentDeck(
   return { title: first === undefined ? null : titleOf(first), columns };
 }
 
+/**
+ * One plan per chapter, with slide ids unique across the whole document.
+ *
+ * The published deck is rendered chapter by chapter, because an asset
+ * resolver is bound to the Part whose folder its references sit in. The ids
+ * still have to be unique across the deck: two chapters that both open with
+ * "Why this matters" would otherwise both claim `#why-this-matters`, and the
+ * link Alice sends would land on whichever the browser found first. So the
+ * plans are built in one pass over a shared pool, exactly as
+ * [`buildDocumentDeck`] does, and only the columns are kept apart.
+ */
+export function buildChapterDecks(
+  chapters: readonly Chapter[],
+  options: DeckOptions = {},
+): DeckPlan[] {
+  const taken = new Set<string>();
+  return chapters.map((chapter) => ({
+    title: titleOf(chapter),
+    columns: columnsOf(chapter, options, taken),
+  }));
+}
+
 /** Every slide of a plan, in the order a reader moves through them. */
 export function* walkSlides(plan: DeckPlan): Generator<Slide, void, undefined> {
   for (const column of plan.columns) yield* column.slides;

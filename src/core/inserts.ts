@@ -13,11 +13,14 @@
  * rule is an entry of its own, and the easter egg is written in two places, so
  * the canon spells both.
  *
- * `visibleFrom` is the phase in which the palette offers the row. A row above
- * the current phase carries its form and its tests from the day it is written,
- * so a later phase changes one number rather than adding a form.
+ * Each row names its row in `canon.ts`, and takes its phase from there: the
+ * placement table decides when a construct is seeded, and a form that carried
+ * its own number would be a second copy of that decision. A row above the
+ * current phase carries its form and its tests from the day it is written, so
+ * a later phase changes nothing here at all.
  */
 
+import { rowById } from "./canon";
 import type { BlockKind, InlineKind } from "./tree";
 
 /** How a form reaches the buffer. */
@@ -51,7 +54,14 @@ export interface InsertForm {
   readonly canonical: string;
   readonly shape: InsertShape;
   readonly expects: InsertExpectation;
-  readonly visibleFrom: 1 | 2 | 3 | 4;
+  /**
+   * The phase in which the palette offers the row.
+   *
+   * Read from the canon's own row for the construct, never written here: the
+   * placement table is the one place a construct's phase is decided, and two
+   * copies of a number drift.
+   */
+  readonly visibleFrom: number;
 }
 
 /** The cursor marker used in this file, and stripped from every form. */
@@ -67,7 +77,8 @@ interface Draft {
   readonly canonical?: string;
   readonly shape: InsertShape;
   readonly expects: InsertExpectation;
-  readonly visibleFrom: 1 | 2 | 3 | 4;
+  /** The id of the construct's row in `canon.ts`, which decides its phase. */
+  readonly canon: string;
 }
 
 /**
@@ -83,10 +94,16 @@ const DRAFTS: readonly Draft[] = [
     id: "slide-split",
     label: "Slide split",
     keywords: ["rule", "break", "split", "slide", "horizontal"],
-    form: "---\n",
+    // The blank line below matters as much as the rule itself: `---` with
+    // prose on the very next line is still a rule, but the rule is what a
+    // *slide split* is, and a split with the next slide's first sentence
+    // glued to it reads as one block. The blank line above is the palette's
+    // to supply, not the form's — a form beginning with a newline could not
+    // also be "exactly as the canon writes it" on an empty line.
+    form: "---\n\n",
     shape: "block",
     expects: { kind: "block", nodeKind: "rule", classes: [], pairs: {} },
-    visibleFrom: 1,
+    canon: "rule",
   },
   {
     id: "divider",
@@ -101,7 +118,7 @@ const DRAFTS: readonly Draft[] = [
       classes: ["divider"],
       pairs: {},
     },
-    visibleFrom: 1,
+    canon: "divider",
   },
   {
     id: "columns",
@@ -130,7 +147,7 @@ const DRAFTS: readonly Draft[] = [
         },
       ],
     },
-    visibleFrom: 1,
+    canon: "columns",
   },
   {
     id: "speaker-notes",
@@ -139,7 +156,7 @@ const DRAFTS: readonly Draft[] = [
     form: "::: {.notes}\n▮\n:::\n",
     shape: "block",
     expects: { kind: "block", nodeKind: "div", classes: ["notes"], pairs: {} },
-    visibleFrom: 1,
+    canon: "notes",
   },
   {
     id: "credit",
@@ -148,16 +165,20 @@ const DRAFTS: readonly Draft[] = [
     form: "::: {.credit}\n▮\n:::\n",
     shape: "block",
     expects: { kind: "block", nodeKind: "div", classes: ["credit"], pairs: {} },
-    visibleFrom: 1,
+    canon: "credit",
   },
   {
     id: "page-break",
     label: "Page break",
     keywords: ["page", "break", "pdf", "print"],
-    form: "<!-- pagebreak -->▮",
+    // The blank line makes it a block comment. Without it markdown-it reads
+    // the comment as inline HTML inside whatever paragraph follows — or, with
+    // a single newline, swallows that paragraph into the comment's own HTML
+    // block. The canon's `<!-- pagebreak -->` is a block of its own.
+    form: "<!-- pagebreak -->\n\n▮",
     shape: "block",
     expects: { kind: "block", nodeKind: "comment", classes: [], pairs: {} },
-    visibleFrom: 1,
+    canon: "pagebreak",
   },
   {
     id: "callout",
@@ -171,7 +192,7 @@ const DRAFTS: readonly Draft[] = [
       classes: ["callout"],
       pairs: { kind: "warning" },
     },
-    visibleFrom: 2,
+    canon: "callout",
   },
   {
     id: "margin-aside",
@@ -180,7 +201,7 @@ const DRAFTS: readonly Draft[] = [
     form: "[▮]{.margin}",
     shape: "inline",
     expects: { kind: "inline", nodeKind: "span", classes: ["margin"], pairs: {} },
-    visibleFrom: 2,
+    canon: "margin",
   },
   {
     id: "variant-block",
@@ -194,7 +215,7 @@ const DRAFTS: readonly Draft[] = [
       classes: ["variant"],
       pairs: { variant: "" },
     },
-    visibleFrom: 3,
+    canon: "variant",
   },
   {
     id: "variant-span",
@@ -208,7 +229,7 @@ const DRAFTS: readonly Draft[] = [
       classes: ["variant"],
       pairs: { variant: "" },
     },
-    visibleFrom: 3,
+    canon: "variant",
   },
   {
     id: "video",
@@ -217,7 +238,7 @@ const DRAFTS: readonly Draft[] = [
     form: "::: {.video}\n- local: ▮\n:::\n",
     shape: "block",
     expects: { kind: "block", nodeKind: "div", classes: ["video"], pairs: {} },
-    visibleFrom: 4,
+    canon: "video",
   },
   {
     id: "citation",
@@ -226,7 +247,7 @@ const DRAFTS: readonly Draft[] = [
     form: "[@▮]",
     shape: "inline",
     expects: { kind: "inline", nodeKind: "citation", classes: [], pairs: {} },
-    visibleFrom: 2,
+    canon: "citation",
   },
   {
     id: "footnote",
@@ -240,7 +261,7 @@ const DRAFTS: readonly Draft[] = [
       classes: [],
       pairs: {},
     },
-    visibleFrom: 2,
+    canon: "footnote",
   },
   {
     id: "egg-marker",
@@ -254,7 +275,7 @@ const DRAFTS: readonly Draft[] = [
       classes: ["egg"],
       pairs: { egg: "" },
     },
-    visibleFrom: 2,
+    canon: "egg",
   },
   {
     id: "egg-block",
@@ -268,7 +289,7 @@ const DRAFTS: readonly Draft[] = [
       classes: ["egg"],
       pairs: { label: "✦" },
     },
-    visibleFrom: 2,
+    canon: "egg",
   },
   {
     id: "opening",
@@ -282,7 +303,7 @@ const DRAFTS: readonly Draft[] = [
       classes: ["opening"],
       pairs: { once: "per-browser" },
     },
-    visibleFrom: 2,
+    canon: "opening",
   },
 ];
 
@@ -300,8 +321,22 @@ function finish(draft: Draft): InsertForm {
     canonical: draft.canonical ?? text,
     shape: draft.shape,
     expects: draft.expects,
-    visibleFrom: draft.visibleFrom,
+    visibleFrom: phaseOf(draft.canon),
   };
+}
+
+/**
+ * The phase the canon seeds a construct in.
+ *
+ * A draft naming a row the table does not carry is a programming error, and
+ * one that would quietly hide the form for ever; it is loud instead.
+ */
+function phaseOf(canonId: string): number {
+  const row = rowById(canonId);
+  if (row === undefined) {
+    throw new Error(`inserts: no canon row named ${canonId}`);
+  }
+  return row.phase;
 }
 
 /** Every form, in the order the palette lists them. */

@@ -18,6 +18,8 @@ import type { Token } from "markdown-it";
 
 import { markdown } from "./markdown";
 import {
+  INLINE_NOTE_PREFIX,
+  UNRESOLVED_VARIANT,
   emptyAttributes,
   parseAttributes,
   type Attributes,
@@ -33,12 +35,20 @@ import {
   type TableCell,
   type TableContent,
   type Video,
+  type VideoRole,
   type VideoSource,
 } from "./tree";
 
 
-/** The roles a `.video` source line may name, in the order they are tried. */
-const VIDEO_ROLES = ["local", "site", "gated", "remote"];
+/**
+ * The roles a `.video` source line may name, in the order they are tried.
+ *
+ * The order is the brief's — site, then gated, then local, then the plain
+ * public address — and the list is typed as [`VideoRole`], so a role added to
+ * the tree's own type and not to this list is a compile error rather than a
+ * silently unread source line.
+ */
+const VIDEO_ROLES: readonly VideoRole[] = ["site", "gated", "local", "remote"];
 
 /** Where each line begins and ends, in UTF-8 bytes. */
 interface LineTable {
@@ -65,7 +75,14 @@ function bytesBetween(source: string, from: number, to: number): number {
   return bytes;
 }
 
-/** Measure every line of the source once. */
+/**
+ * Measure every line of the source once.
+ *
+ * A line ends at `\r\n`, at a lone `\r`, or at `\n`, because markdown-it
+ * breaks on all three. Counting only `\n` would put every span after a stray
+ * carriage return one line out, and a span that names the wrong line is worse
+ * than no span at all.
+ */
 function lineTable(source: string): LineTable {
   const lines: string[] = [];
   const starts: number[] = [];
@@ -74,18 +91,24 @@ function lineTable(source: string): LineTable {
   let index = 0;
   for (;;) {
     let cursor = index;
-    while (cursor < source.length && source[cursor] !== "\n") cursor += 1;
-    let contentEnd = cursor;
-    if (contentEnd > index && source[contentEnd - 1] === "\r") contentEnd -= 1;
-    lines.push(source.slice(index, contentEnd));
+    while (
+      cursor < source.length &&
+      source[cursor] !== "\n" &&
+      source[cursor] !== "\r"
+    ) {
+      cursor += 1;
+    }
+    lines.push(source.slice(index, cursor));
     starts.push(offset);
-    offset += bytesBetween(source, index, contentEnd);
+    offset += bytesBetween(source, index, cursor);
     ends.push(offset);
-    // The carriage return, then the newline: both are the file's, not a line's.
-    offset += bytesBetween(source, contentEnd, cursor);
     if (cursor >= source.length) break;
-    offset += 1;
-    index = cursor + 1;
+    // The break itself is the file's, not a line's, and every form of it is
+    // ASCII: one byte per character.
+    let after = cursor + 1;
+    if (source[cursor] === "\r" && source[after] === "\n") after += 1;
+    offset += after - cursor;
+    index = after;
   }
   return { lines, starts, ends };
 }
@@ -173,10 +196,21 @@ function divAttributes(token: Token): Attributes {
   return { id: null, classes: info.split(/\s+/).filter(Boolean), pairs: {} };
 }
 
-/** The variant names an attribute set declares, empty for every variant. */
+/**
+ * The variant names an attribute set declares.
+ *
+ * Three cases, and they are not the same thing. No `.variant` class at all is
+ * "every variant", and reads as the empty list. `.variant variant="talk"` is
+ * that one variant. `.variant variant=""` — the form the palette inserts, with
+ * the name still to be typed — is marked but unresolved: it belongs to no
+ * variant yet, and rendering it into every variant would publish text the
+ * author had not finished addressing. That case reads as [`UNRESOLVED_VARIANT`],
+ * a name no author can write, so it matches nothing.
+ */
 function variantsOf(attributes: Attributes): string[] {
   if (!attributes.classes.includes("variant")) return [];
-  return (attributes.pairs["variant"] ?? "").split(/\s+/).filter(Boolean);
+  const named = (attributes.pairs["variant"] ?? "").split(/\s+/).filter(Boolean);
+  return named.length === 0 ? [UNRESOLVED_VARIANT] : named;
 }
 
 /** The plain text of a list of inline nodes. */
@@ -280,14 +314,19 @@ function inlinesFrom(
           });
           break;
         }
-        const entry = context.env.footnotes?.list?.[meta?.id ?? -1];
+        const id = meta?.id ?? -1;
+        const entry = context.env.footnotes?.list?.[id];
         const children = inlinesFrom(entry?.tokens ?? [], context);
+        // An inline note has no label the author wrote, so markdown-it's index
+        // is all there is. It is given a label space of its own, because `1`
+        // is also a perfectly ordinary label for an author's own `[^1]`, and
+        // two different notes must never answer to one name.
         push({
           kind: "footnote-inline",
           text: textOf(children),
           attributes: emptyAttributes(),
           children,
-          label: String(meta?.id ?? ""),
+          label: `${INLINE_NOTE_PREFIX}${String(id)}`,
         });
         break;
       }
@@ -369,7 +408,7 @@ function videoFrom(attributes: Attributes, source: string): Video {
     sources.push({
       role,
       reference: (match[2] ?? "").trim(),
-      known: VIDEO_ROLES.includes(role),
+      known: (VIDEO_ROLES as readonly string[]).includes(role),
     });
   }
   return {
@@ -564,17 +603,29 @@ function blocksFrom(
         const children = blocksFrom(tokens, index + 1, close, context, variants);
         const meta = token.meta as { label?: string } | null;
         const label = meta?.label ?? "";
+        // A definition with nothing in it is still a definition: the label is
+        // spoken for, and a reference to it is resolved rather than dangling.
+        // Its span is the definition line the token names.
         const first = children[0];
         const last = children[children.length - 1];
-        if (first !== undefined && last !== undefined) {
-          context.footnotes[label] = {
-            label,
-            span: { start: first.span.start, end: last.span.end },
-            line: first.line,
-            blocks: children,
-            inline: false,
-          };
-        }
+        const [openLine, closeLine] = mapOf(token, [0, 0]);
+        const empty = rangeOfLines(context.table, openLine, closeLine);
+        context.footnotes[label] =
+          first === undefined || last === undefined
+            ? {
+                label,
+                span: empty.span,
+                line: empty.line,
+                blocks: [],
+                inline: false,
+              }
+            : {
+                label,
+                span: { start: first.span.start, end: last.span.end },
+                line: first.line,
+                blocks: children,
+                inline: false,
+              };
         index = close + 1;
         break;
       }
@@ -635,27 +686,51 @@ function onlyImage(inlines: readonly Inline[]): Inline | null {
   return meaningful.length === 1 && first?.kind === "image" ? first : null;
 }
 
+/** Two attribute sets, the later one winning where they name the same thing. */
+function mergeAttributes(first: Attributes, second: Attributes): Attributes {
+  return {
+    id: second.id ?? first.id,
+    classes: [...new Set([...first.classes, ...second.classes])],
+    pairs: { ...first.pairs, ...second.pairs },
+  };
+}
+
 /**
  * The two joins the canon asks for, applied to a finished run of blocks.
  *
- * A heading immediately followed by another heading of the same level, with no
- * blank line between, is one heading: "a title that runs to two lines is one
- * heading". A paragraph beginning `: ` immediately after a table is that
- * table's caption, which is how the canon writes one.
+ * A **chapter title** that runs to two lines is one heading: a level-one
+ * heading immediately followed by another level-one heading, with no blank
+ * line between, folds into one. Only level one. The brief writes the rule for
+ * a title, and `## One` above `## Two` is two Sections, not one Section named
+ * "One Two" — folding those would silently lose a slide.
+ *
+ * A paragraph beginning `: ` immediately after a table is that table's
+ * caption, which is how the canon writes one. **One** caption: a second `: `
+ * paragraph after the same table is a paragraph, because a table has one
+ * caption and the second would otherwise quietly replace the first.
+ *
+ * Both folds keep the attributes of both parts, the second line's winning
+ * where the two name the same class or key, so `## Interlude\n## continued
+ * {.divider}` is a divider.
  */
 function fold(blocks: readonly Block[]): Block[] {
   const folded: Block[] = [];
+  /** Which tables already carry a caption, by their place in `folded`. */
+  const captioned = new Set<number>();
   for (const block of blocks) {
-    const previous = folded[folded.length - 1];
+    const at = folded.length - 1;
+    const previous = folded[at];
     if (
       previous !== undefined &&
       previous.kind === "heading" &&
       block.kind === "heading" &&
-      previous.level === block.level &&
+      previous.level === 1 &&
+      block.level === 1 &&
       block.line === previous.endLine + 1
     ) {
-      folded[folded.length - 1] = {
+      folded[at] = {
         ...previous,
+        attributes: mergeAttributes(previous.attributes, block.attributes),
         text: `${previous.text} ${block.text}`.trim(),
         inlines: [
           ...previous.inlines,
@@ -670,12 +745,14 @@ function fold(blocks: readonly Block[]): Block[] {
     if (
       previous !== undefined &&
       previous.kind === "table" &&
+      !captioned.has(at) &&
       block.kind === "paragraph" &&
       /^:\s/.test(block.text)
     ) {
-      folded[folded.length - 1] = {
+      captioned.add(at);
+      folded[at] = {
         ...previous,
-        attributes: block.attributes,
+        attributes: mergeAttributes(previous.attributes, block.attributes),
         caption: block.text.replace(/^:\s*/, "").trim(),
         span: { start: previous.span.start, end: block.span.end },
         endLine: block.endLine,
@@ -687,9 +764,31 @@ function fold(blocks: readonly Block[]): Block[] {
   return folded;
 }
 
-/** The chapter's YAML front matter, when it opens with one. */
+/** A YAML mapping key, which is what a metadata block's first line must be. */
+const YAML_KEY = /^(?:%|[^\s#][^:]*:(?:\s|$))/;
+
+/**
+ * The chapter's YAML front matter, when it opens with one — Pandoc's rule.
+ *
+ * Pandoc reads a metadata block as `---` on the first line, a YAML object, and
+ * `---` or `...` on a line of its own; **the opening `---` may not be followed
+ * by a blank line**. That last clause is the one that matters here, because a
+ * chapter may open with a slide split, which is also `---`, and the canon
+ * writes a split with a blank line after it. Without the rule, a chapter that
+ * opens with a split and splits again later loses everything between the two:
+ * the first slide is read as metadata and disappears.
+ *
+ * One tightening beyond Pandoc: the first line inside must look like a YAML
+ * mapping key or a directive. Pandoc would read `---\n# Title\n---`
+ * as metadata and then fail on it as YAML; a chapter is worth more than a
+ * failure, so it is read as the Markdown it plainly is.
+ */
 function frontMatterOf(table: LineTable): FrontMatter | null {
   if ((table.lines[0] ?? "").trim() !== "---") return null;
+  const opening = (table.lines[1] ?? "").trim();
+  if (opening === "") return null;
+  if (opening === "---" || opening === "...") return null;
+  if (!YAML_KEY.test(opening)) return null;
   for (let line = 1; line < table.lines.length; line += 1) {
     const text = (table.lines[line] ?? "").trim();
     if (text === "---" || text === "...") {

@@ -11,15 +11,43 @@ import { readFileSync } from "node:fs";
 import MarkdownIt from "markdown-it";
 import { describe, expect, it } from "vitest";
 
+import { CANON_ROWS } from "./canon";
 import { formById, formsVisibleIn, matchForms, INSERT_FORMS, type InsertForm } from "./inserts";
 import { parseChapter } from "./parse";
 import { walkBlocks, walkInlines, type Block, type Inline } from "./tree";
 
 const INTERNALS = ".abcd/development/brief/05-internals.md";
 
+/**
+ * A sentinel the author would have typed into a form's cursor slot.
+ *
+ * A form with a body is inserted with the cursor in it, so what a plain tool
+ * must show is not only the prose around the construct but the text inside
+ * it. Each sentinel is unique to its row, so a form that swallowed its own
+ * content — or another row's — is caught.
+ */
+function sentinelFor(form: InsertForm): string {
+  return `Sentinel-${form.id}`;
+}
+
+/** One form as an author leaves it: the sentinel typed into the cursor slot. */
+function withSentinel(form: InsertForm): string {
+  const sentinel = sentinelFor(form);
+  const body =
+    form.cursor >= form.text.length
+      ? form.text + sentinel
+      : form.text.slice(0, form.cursor) + sentinel + form.text.slice(form.cursor);
+  return body.replace(/^\n+/, "").replace(/\n+$/, "");
+}
+
 /** A chapter holding one of every form, with prose between them. */
-function chapterOfEveryForm(): { source: string; prose: string[] } {
+function chapterOfEveryForm(): {
+  source: string;
+  prose: string[];
+  sentinels: string[];
+} {
   const prose: string[] = [];
+  const sentinels: string[] = [];
   const parts: string[] = ["# A chapter of every construct", ""];
   INSERT_FORMS.forEach((form, index) => {
     const line = `Prose ${index} before ${form.id}.`;
@@ -28,15 +56,17 @@ function chapterOfEveryForm(): { source: string; prose: string[] } {
     if (form.shape === "heading-attribute") {
       parts.push(`## Interlude${form.text}`, "");
     } else if (form.shape === "inline") {
-      parts.push(`A sentence with ${form.text} in it.`, "");
+      sentinels.push(sentinelFor(form));
+      parts.push(`A sentence with ${withSentinel(form)} in it.`, "");
     } else {
-      parts.push(form.text.trimEnd(), "");
+      sentinels.push(sentinelFor(form));
+      parts.push(withSentinel(form), "");
     }
   });
   const last = "The last paragraph of the chapter.";
   prose.push(last);
   parts.push(last, "");
-  return { source: parts.join("\n"), prose };
+  return { source: parts.join("\n"), prose, sentinels };
 }
 
 /**
@@ -85,7 +115,7 @@ describe("the table", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("offers six forms in phase 1 and every form by phase 4", () => {
+  it("offers the phase-1 constructs in phase 1 and every form by phase 4", () => {
     expect(formsVisibleIn(1).map((form) => form.id)).toEqual([
       "slide-split",
       "divider",
@@ -93,8 +123,29 @@ describe("the table", () => {
       "speaker-notes",
       "credit",
       "page-break",
+      "footnote",
     ]);
     expect(formsVisibleIn(4)).toHaveLength(16);
+  });
+
+  it("takes every phase from the canon and keeps none of its own", () => {
+    // One source for a construct's phase: the placement table. A form whose
+    // number had been written here as well would drift from it, which is what
+    // this holds against.
+    for (const form of INSERT_FORMS) {
+      const row = CANON_ROWS.find(
+        (candidate) => candidate.phase === form.visibleFrom && candidate.id !== "",
+      );
+      expect(row, form.id).toBeDefined();
+    }
+    const byId = new Map(CANON_ROWS.map((row) => [row.id, row.phase]));
+    expect(formById("variant-block")?.visibleFrom).toBe(byId.get("variant"));
+    expect(formById("variant-span")?.visibleFrom).toBe(byId.get("variant"));
+    expect(formById("opening")?.visibleFrom).toBe(byId.get("opening"));
+    expect(formById("egg-marker")?.visibleFrom).toBe(byId.get("egg"));
+    expect(formById("egg-block")?.visibleFrom).toBe(byId.get("egg"));
+    expect(formById("footnote")?.visibleFrom).toBe(byId.get("footnote"));
+    expect(formById("slide-split")?.visibleFrom).toBe(byId.get("rule"));
   });
 
   it("carries no cursor marker into the buffer", () => {
@@ -130,7 +181,10 @@ describe("every form is the canon's form", () => {
       /^---\n?$/, // a horizontal rule, which is not an extension at all
     ];
     for (const form of INSERT_FORMS) {
-      const text = form.text.trimEnd();
+      // The blank lines a form carries so that it parses where it lands are
+      // not part of its shape; other whitespace is (the divider's own form is
+      // a space and an attribute list).
+      const text = form.text.replace(/^\n+/, "").replace(/\n+$/, "");
       expect(
         permitted.some((shape) => shape.test(text)),
         `${form.id}: ${JSON.stringify(text)}`,
@@ -198,6 +252,49 @@ describe("every form is the canon's form", () => {
   });
 });
 
+describe("a form with prose directly after it", () => {
+  /** The form on a line of its own, with the next sentence right behind it. */
+  function beforeProse(form: InsertForm): string {
+    return `A paragraph.\n\n${form.text}The next sentence.\n`;
+  }
+
+  it("splits the slide and leaves the next sentence its own paragraph", () => {
+    // The one case the earlier test could not see: it put a blank line after
+    // every form itself, so a form that needed one and did not carry one
+    // passed anyway.
+    const form = formById("slide-split");
+    if (form === undefined) throw new Error("no slide-split form");
+    const blocks = parseChapter(beforeProse(form)).blocks;
+    expect(blocks.map((block) => block.kind)).toEqual(["paragraph", "rule", "paragraph"]);
+    expect(blocks[2]?.text).toBe("The next sentence.");
+  });
+
+  it("writes a page break as a block, not as part of the paragraph after it", () => {
+    const form = formById("page-break");
+    if (form === undefined) throw new Error("no page-break form");
+    const blocks = parseChapter(beforeProse(form)).blocks;
+    expect(blocks.map((block) => block.kind)).toEqual(["paragraph", "comment", "paragraph"]);
+    expect(blocks[2]?.text).toBe("The next sentence.");
+  });
+
+  it("leaves every block form its own construct, and the prose its own", () => {
+    for (const form of INSERT_FORMS) {
+      if (form.shape !== "block") continue;
+      const blocks = parseChapter(beforeProse(form)).blocks;
+      const kinds = blocks.map((block) => block.kind);
+      expect(kinds[0], form.id).toBe("paragraph");
+      expect(kinds, form.id).toContain(form.expects.nodeKind);
+      expect(blocks[blocks.length - 1]?.text, form.id).toBe("The next sentence.");
+    }
+  });
+
+  it("carries no leading newline, so a form on a blank line is the canon's own", () => {
+    for (const form of INSERT_FORMS) {
+      expect(form.text.startsWith("\n"), form.id).toBe(false);
+    }
+  });
+});
+
 describe("a plain tool", () => {
   it("renders every paragraph, in order, and reaches the end of the file", () => {
     const { source, prose } = chapterOfEveryForm();
@@ -211,6 +308,19 @@ describe("a plain tool", () => {
       cursor = found;
     }
     expect(html).toContain("The last paragraph of the chapter.");
+  });
+
+  it("shows what the author typed inside every construct", () => {
+    // Prose between the constructs is not the promise. The promise is that
+    // the words the author put *in* a construct are still readable in a tool
+    // that knows nothing about the canon — which a check on the surrounding
+    // paragraphs alone would never notice going missing.
+    const { source, sentinels } = chapterOfEveryForm();
+    const html = new MarkdownIt("commonmark").render(source);
+    expect(sentinels.length).toBeGreaterThan(0);
+    for (const sentinel of sentinels) {
+      expect(html, sentinel).toContain(sentinel);
+    }
   });
 
   it("is read by Editor's own parse as the constructs it claims", () => {

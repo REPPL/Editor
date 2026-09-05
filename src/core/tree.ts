@@ -102,7 +102,21 @@ export interface ImageReference {
 }
 
 /** The roles a `.video` block's sources may name, in fallback order. */
-export type VideoRole = "local" | "site" | "gated" | "remote";
+export type VideoRole = "site" | "gated" | "local" | "remote";
+
+/**
+ * The variant a `.variant` div or span with an empty `variant=` belongs to.
+ *
+ * The palette inserts `variant=""` for the author to name; until they do, the
+ * block is marked but unresolved. It belongs to this name, which no author can
+ * write, so it matches no variant and is rendered into none — rather than
+ * reading as the empty list, which means "every variant" and would publish
+ * text nobody had finished addressing.
+ */
+export const UNRESOLVED_VARIANT = "\u0000unresolved";
+
+/** The label space inline footnotes live in, apart from the author's own. */
+export const INLINE_NOTE_PREFIX = "\u0000inline:";
 
 /** One line of a `.video` block's source list. */
 export interface VideoSource {
@@ -259,18 +273,60 @@ export function byteLength(text: string): number {
   return encoder.encode(text).length;
 }
 
-/** The source a span names, decoded back to a string. */
+/**
+ * The source a span names, decoded back to a string.
+ *
+ * Convenience, for one span. It encodes the whole source every time it is
+ * called, so a caller taking many spans out of one chapter uses
+ * [`sliceBytes`], which encodes once.
+ */
 export function byteSlice(source: string, span: Span): string {
   return decoder.decode(encoder.encode(source).slice(span.start, span.end));
 }
 
-/** Every block in source order, descending into a div's children. */
+/**
+ * A slicer bound to one source, which encodes it once.
+ *
+ * Taking every block's span out of a ten-thousand-line chapter with
+ * [`byteSlice`] costs an encode per block — thirteen times the cost of the
+ * parse itself. This encodes the chapter once and slices the same bytes.
+ */
+export function sliceBytes(source: string): (span: Span) => string {
+  const bytes = encoder.encode(source);
+  return (span) => decoder.decode(bytes.slice(span.start, span.end));
+}
+
+/**
+ * Every block in source order, descending into everything that holds blocks.
+ *
+ * A div's children, a list's items, and a footnote's body all hold blocks, and
+ * a walk that stopped at children would miss them. That matters most for the
+ * variant filter: a `.variant` div inside a list item would otherwise never be
+ * seen, and text meant for one audience would go out to every audience.
+ */
 export function* walkBlocks(
   blocks: readonly Block[],
 ): Generator<Block, void, undefined> {
   for (const block of blocks) {
     yield block;
     yield* walkBlocks(block.children);
+    for (const item of block.items ?? []) yield* walkBlocks(item.blocks);
+  }
+}
+
+/**
+ * Every block of a chapter, its footnote definitions included.
+ *
+ * The footnotes are not in the block list — they are a map of their own — so a
+ * consumer that must see everything a chapter holds walks this rather than
+ * `chapter.blocks`.
+ */
+export function* walkChapterBlocks(
+  chapter: Chapter,
+): Generator<Block, void, undefined> {
+  yield* walkBlocks(chapter.blocks);
+  for (const definition of Object.values(chapter.footnotes)) {
+    yield* walkBlocks(definition.blocks);
   }
 }
 

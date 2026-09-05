@@ -14,7 +14,7 @@
  * would publish it.
  */
 
-import { walkBlocks, walkInlines, type Chapter } from "./tree";
+import { walkChapterBlocks, walkInlines, type Chapter } from "./tree";
 
 /** What shape a reference is, which is what decides whether it may resolve. */
 export type ReferenceKind =
@@ -177,7 +177,7 @@ export function referencesOf(chapter: Chapter): string[] {
     seen.add(text);
     found.push(text);
   };
-  for (const block of walkBlocks(chapter.blocks)) {
+  for (const block of walkChapterBlocks(chapter)) {
     add(block.image?.src);
     add(block.video?.poster);
     for (const inline of walkInlines(block.inlines)) {

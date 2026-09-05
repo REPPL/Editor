@@ -799,8 +799,7 @@ pub fn ingest(
         _ => None,
     };
 
-    let (payload, extension, stripped) = prepare(&source, class, &name)?;
-    let converted_from = converted_from.or(stripped);
+    let (payload, extension) = prepare(&source, class)?;
 
     let assets = context.chapter_folder.join(ASSETS_FOLDER);
     fs::create_dir_all(&assets).map_err(|e| format!("cannot make the assets folder: {e}"))?;
@@ -866,46 +865,30 @@ enum Payload {
 
 /// Decide what bytes to write, and under what extension.
 ///
-/// A phone-native image is converted. An image carrying EXIF is re-encoded,
-/// because a phone photograph's EXIF holds GPS coordinates and the camera
-/// owner's name. Everything else is a byte copy, so a chapter's own PNGs and
-/// a spreadsheet arrive unchanged.
-fn prepare(
-    source: &Path,
-    class: Class,
-    name: &str,
-) -> Result<(Payload, Option<&'static str>, Option<String>), String> {
+/// A phone-native image is converted, because no other machine reads the
+/// format and a re-encode is the only way out of it. A copy is never
+/// re-encoded: an image carrying EXIF loses the boxes around the picture and
+/// keeps the picture, so a JPEG the author dropped arrives with the same
+/// compressed scan it left with. Everything else is a byte copy, so a
+/// chapter's own PNGs and a spreadsheet arrive unchanged.
+fn prepare(source: &Path, class: Class) -> Result<(Payload, Option<&'static str>), String> {
     if let Class::PhoneNative(format) = class {
         let bytes = fs::read(source).map_err(|e| format!("cannot read the file: {e}"))?;
         let jpeg = convert::to_web_jpeg(&bytes)
             .map_err(|error| format!("the {format} image could not be converted: {error}"))?;
-        return Ok((Payload::Bytes(without_metadata(&jpeg)), Some("jpg"), None));
+        return Ok((Payload::Bytes(without_metadata(&jpeg)), Some("jpg")));
     }
     if class == Class::Image {
         let bytes = fs::read(source).map_err(|e| format!("cannot read the file: {e}"))?;
         if carries_metadata(&bytes) {
-            // A JPEG is re-encoded, which is the recorded decision; every
-            // other format keeps its own bytes and loses only the boxes,
-            // because turning a lossless image lossy to strip a text chunk
-            // would cost the author more than it saves them.
-            if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
-                let jpeg = convert::to_web_jpeg(&bytes).map_err(|error| {
-                    format!("the image carries metadata and could not be re-encoded: {error}")
-                })?;
-                let from = Path::new(name)
-                    .extension()
-                    .map(|e| e.to_string_lossy().to_ascii_lowercase())
-                    .unwrap_or_else(|| "image".to_string());
-                return Ok((
-                    Payload::Bytes(without_metadata(&jpeg)),
-                    Some("jpg"),
-                    Some(from),
-                ));
-            }
-            return Ok((Payload::Bytes(without_metadata(&bytes)), None, None));
+            // Every format, JPEG included, keeps its own bytes and loses only
+            // the boxes. Turning a picture the author already has back through
+            // an encoder to strip a text segment would cost them image quality
+            // for nothing the segment strip does not already do.
+            return Ok((Payload::Bytes(without_metadata(&bytes)), None));
         }
     }
-    Ok((Payload::Copy, None, None))
+    Ok((Payload::Copy, None))
 }
 
 /// The name the copy takes, adopting an identical file already there.
@@ -1216,6 +1199,16 @@ mod tests {
         bytes.extend_from_slice(payload);
         bytes.extend_from_slice(&[0xFF, 0xD9]);
         bytes
+    }
+
+    /// Append one JPEG marker segment: `FF`, the marker, a two-byte length
+    /// that counts itself, and the payload.
+    fn push_segment(bytes: &mut Vec<u8>, marker: u8, payload: &[u8]) {
+        bytes.push(0xFF);
+        bytes.push(marker);
+        let length = u16::try_from(payload.len() + 2).expect("a short segment");
+        bytes.extend_from_slice(&length.to_be_bytes());
+        bytes.extend_from_slice(payload);
     }
 
     /// A JPEG with only a JFIF header, which is not the author's metadata.
@@ -1554,10 +1547,95 @@ mod tests {
         assert!(!manifest.contains("/private/"), "no volume path");
     }
 
+    /// A copied JPEG loses its metadata segments and nothing else: the
+    /// compressed scan arrives byte for byte, because a copy is never handed
+    /// back to an encoder. Only a format conversion may re-encode.
+    #[test]
+    fn copies_a_jpeg_without_re_encoding_it() {
+        let (_temp, root, chapter) = document(None);
+        let desk = desktop();
+        let source = desk.path().join("lantern.jpg");
+
+        // Entropy-coded data no encoder would ever reproduce: if anything
+        // re-encodes this file, these bytes cannot survive.
+        let scan: Vec<u8> = (0u8..=255).chain(0u8..=200).collect();
+        let jfif: &[u8] = b"JFIF\0\x01\x02\0\0\x01\0\x01\0\0";
+        let sos: &[u8] = b"\0\x01\0\0\x3F\0";
+
+        // What the strip should leave: the JFIF header, which says nothing
+        // about the author, then the scan and the end of image.
+        let mut expected = vec![0xFF, 0xD8];
+        push_segment(&mut expected, 0xE0, jfif);
+        push_segment(&mut expected, 0xDA, sos);
+        expected.extend_from_slice(&scan);
+        expected.extend_from_slice(&[0xFF, 0xD9]);
+
+        // The same file with an APP1, an APP13 and a comment segment in it.
+        let mut dropped = vec![0xFF, 0xD8];
+        push_segment(&mut dropped, 0xE0, jfif);
+        push_segment(&mut dropped, 0xE1, b"Exif\0\0GPS 51.4 N, 0.5 W");
+        push_segment(&mut dropped, 0xED, b"Photoshop 3.0\0IPTC: Alice");
+        push_segment(&mut dropped, 0xFE, b"made on Alice's machine");
+        push_segment(&mut dropped, 0xDA, sos);
+        dropped.extend_from_slice(&scan);
+        dropped.extend_from_slice(&[0xFF, 0xD9]);
+        assert!(carries_metadata(&dropped), "the fixture carries metadata");
+        fs::write(&source, &dropped).expect("source");
+
+        let report = run_drop(
+            &root,
+            &chapter.to_string_lossy(),
+            std::slice::from_ref(&source),
+        )
+        .expect("drop");
+        assert!(report.refused.is_empty(), "{:?}", report.refused);
+
+        let outcome = &report.accepted[0];
+        assert_eq!(outcome.reference, "assets/lantern.jpg");
+        assert_eq!(
+            outcome.converted_from, None,
+            "stripping a copy is not a conversion"
+        );
+
+        let written = fs::read(root.join("01-beginnings/assets/lantern.jpg")).expect("the copy");
+        assert_eq!(
+            written, expected,
+            "the file the author dropped, less exactly the metadata segments"
+        );
+
+        // Said again the other way round, so a failure names what went wrong.
+        let mut tail = scan.clone();
+        tail.extend_from_slice(&[0xFF, 0xD9]);
+        assert!(
+            written.ends_with(&tail),
+            "the compressed scan survived unchanged, so nothing re-encoded it"
+        );
+        assert!(!carries_metadata(&written));
+        assert!(
+            !written.windows(4).any(|window| window == b"Exif"),
+            "the APP1 segment is gone"
+        );
+        assert!(
+            !written.windows(9).any(|window| window == b"Photoshop"),
+            "the APP13 segment is gone"
+        );
+        assert!(
+            !written.windows(7).any(|window| window == b"made on"),
+            "the comment segment is gone"
+        );
+        assert!(
+            written.windows(4).any(|window| window == b"JFIF"),
+            "the JFIF header, which is not about the author, stays"
+        );
+
+        let manifest = read_manifest(&root.join(MANIFEST_FILE)).expect("manifest");
+        assert_eq!(manifest.assets[0].converted_from, None);
+    }
+
     #[test]
     fn strips_metadata_from_a_copied_image() {
-        // The strip goes through ImageIO, so the assertion that the copy has
-        // no EXIF only holds where ImageIO is.
+        // The fixture is a real JPEG made by ImageIO, so the test only runs
+        // where ImageIO is.
         if !convert::available() {
             return;
         }
@@ -1594,8 +1672,19 @@ mod tests {
             !written.windows(3).any(|window| window == b"GPS"),
             "the coordinates did not travel"
         );
+        // ImageIO writes an EXIF block of its own, so the copy is not `plain`
+        // itself; it is `plain` with the boxes taken off. That it is exactly
+        // that, and not something an encoder made, is the point.
+        assert_eq!(
+            written,
+            without_metadata(&plain),
+            "the JPEG ImageIO wrote, less its metadata segments and nothing else"
+        );
         let manifest = read_manifest(&root.join(MANIFEST_FILE)).expect("manifest");
-        assert_eq!(manifest.assets[0].converted_from.as_deref(), Some("jpg"));
+        assert_eq!(
+            manifest.assets[0].converted_from, None,
+            "stripping a copy is not a conversion"
+        );
     }
 
     #[test]

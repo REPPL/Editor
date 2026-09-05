@@ -10,7 +10,14 @@
 import { describe, expect, it } from "vitest";
 
 import { parseChapter } from "./parse";
-import { byteSlice, walkInlines, type Block, type Inline } from "./tree";
+import {
+  INLINE_NOTE_PREFIX,
+  UNRESOLVED_VARIANT,
+  byteSlice,
+  walkInlines,
+  type Block,
+  type Inline,
+} from "./tree";
 
 /** The first block of a parsed source. */
 function firstBlock(source: string): Block {
@@ -385,5 +392,146 @@ describe("video", () => {
       reference: "rtmp://example.org/live",
       known: false,
     });
+  });
+});
+
+/**
+ * The wave-one review's findings, each with the case that proves it.
+ *
+ * Every one of these was a real misreading of a real chapter, so each keeps
+ * the smallest chapter that shows it.
+ */
+describe("what the review found", () => {
+  it("does not read a chapter opening with a slide split as front matter", () => {
+    const source = "---\n\n# The first slide\n\nA paragraph.\n\n---\n\n## The second\n";
+    const chapter = parseChapter(source);
+    expect(chapter.frontMatter).toBeNull();
+    expect(chapter.blocks.map((block) => block.kind)).toEqual([
+      "rule",
+      "heading",
+      "paragraph",
+      "rule",
+      "heading",
+    ]);
+    expect(chapter.blocks.some((block) => block.text === "The first slide")).toBe(true);
+  });
+
+  it("still reads a real YAML metadata block, closed either way", () => {
+    for (const close of ["---", "..."]) {
+      const chapter = parseChapter(`---\ntitle: A talk\nauthor: Alice\n${close}\n\n# One\n`);
+      expect(chapter.frontMatter?.text).toBe("title: A talk\nauthor: Alice");
+      expect(chapter.blocks[0]?.kind).toBe("heading");
+    }
+  });
+
+  it("does not read a rule above a heading as front matter", () => {
+    // Pandoc would call this metadata and then fail on it as YAML. A chapter
+    // is worth more than a failure.
+    expect(parseChapter("---\n# A title\n---\n").frontMatter).toBeNull();
+  });
+
+  it("folds a two-line title, and only at level one", () => {
+    const one = parseChapter("# The Lantern\n# Papers\n\nText.\n");
+    expect(one.blocks[0]?.text).toBe("The Lantern Papers");
+    expect(one.blocks.filter((block) => block.kind === "heading")).toHaveLength(1);
+
+    // Two Sections are two Sections: folding them would lose a slide.
+    const two = parseChapter("## One\n## Two\n\nText.\n");
+    expect(
+      two.blocks.filter((block) => block.kind === "heading").map((block) => block.text),
+    ).toEqual(["One", "Two"]);
+  });
+
+  it("keeps the attributes of both lines of a folded title", () => {
+    const chapter = parseChapter("# Interlude\n# continued {.divider}\n");
+    expect(chapter.blocks[0]?.text).toBe("Interlude continued");
+    expect(chapter.blocks[0]?.attributes.classes).toEqual(["divider"]);
+  });
+
+  it("folds one caption onto a table and no more", () => {
+    const chapter = parseChapter(
+      "| a | b |\n|---|---|\n| 1 | 2 |\n\n: The first caption\n\n: Not a second one\n",
+    );
+    const table = chapter.blocks[0];
+    expect(table?.kind).toBe("table");
+    expect(table?.caption).toBe("The first caption");
+    // The second `: ` paragraph stays a paragraph.
+    expect(chapter.blocks[1]?.kind).toBe("paragraph");
+    expect(chapter.blocks[1]?.text).toBe(": Not a second one");
+  });
+
+  it("does not carry a caption from one table onto a later paragraph", () => {
+    const chapter = parseChapter(
+      "| a |\n|---|\n| 1 |\n\n: One\n\nA paragraph.\n\n: Not a caption\n",
+    );
+    expect(chapter.blocks.map((block) => block.kind)).toEqual([
+      "table",
+      "paragraph",
+      "paragraph",
+    ]);
+    expect(chapter.blocks[0]?.caption).toBe("One");
+  });
+
+  it("counts a line that ends on a lone carriage return", () => {
+    // markdown-it breaks on a lone `\r` as readily as on `\n`; a line table
+    // that did not would put every span after it one line out.
+    const source = "# One\r\rA paragraph.\r";
+    const chapter = parseChapter(source);
+    const paragraph = chapter.blocks[1];
+    expect(paragraph?.line).toBe(3);
+    expect(byteSlice(source, paragraph?.span ?? { start: 0, end: 0 })).toBe("A paragraph.");
+  });
+
+  it("reads CRLF the same way it reads LF", () => {
+    const crlf = parseChapter("# One\r\n\r\nA paragraph.\r\n");
+    const lf = parseChapter("# One\n\nA paragraph.\n");
+    expect(crlf.blocks.map((block) => [block.kind, block.line])).toEqual(
+      lf.blocks.map((block) => [block.kind, block.line]),
+    );
+  });
+
+  it("marks an unnamed variant as unresolved rather than as every variant", () => {
+    const named = firstBlock('::: {.variant variant="talk"}\nText.\n:::\n');
+    expect(named.variants).toEqual(["talk"]);
+
+    const unnamed = firstBlock('::: {.variant variant=""}\nText.\n:::\n');
+    expect(unnamed.variants).toEqual([UNRESOLVED_VARIANT]);
+    // Not the empty list, which is what "every variant" reads as.
+    expect(unnamed.variants).not.toEqual([]);
+
+    const plain = firstBlock("A paragraph.\n");
+    expect(plain.variants).toEqual([]);
+  });
+
+  it("keeps an inline note's label apart from an author's own", () => {
+    const inlines = allInlines(
+      "A claim.^[An inline note.]\n\nAnd [^1] too.\n\n[^1]: A named note.\n",
+    );
+    const inline = inlines.find((node) => node.kind === "footnote-inline");
+    const named = inlines.find((node) => node.kind === "footnote-reference");
+    expect(inline?.label?.startsWith(INLINE_NOTE_PREFIX)).toBe(true);
+    expect(named?.label).toBe("1");
+    expect(inline?.label).not.toBe(named?.label);
+  });
+
+  it("keeps a footnote definition with nothing in it", () => {
+    const chapter = parseChapter("A claim.[^empty]\n\n[^empty]:\n");
+    expect(Object.keys(chapter.footnotes)).toContain("empty");
+    expect(chapter.footnotes["empty"]?.blocks).toEqual([]);
+  });
+
+  it("tries a video's sources in the brief's own order", () => {
+    const block = firstBlock(
+      [
+        "::: {.video}",
+        "- local: a.mp4",
+        "- site: b.mp4",
+        "- gated: c.mp4",
+        "- remote: https://example.org/d.mp4",
+        ":::",
+        "",
+      ].join("\n"),
+    );
+    expect(block.video?.sources.every((source) => source.known)).toBe(true);
   });
 });

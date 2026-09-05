@@ -355,12 +355,22 @@ pub fn confine_path(root: &Path, requested: &str) -> Result<PathBuf, String> {
 }
 
 /// Resolve a chapter path: [`confine_path`], and it must name a Markdown file.
+///
+/// The extension is checked twice, on the requested name and again on the path
+/// it resolves to, because the two need not agree: a symlink called
+/// `01-alice.md` can point at `notes.txt`, and it is the resolved path that
+/// gets opened. Checking only what was asked for would let the extension the
+/// caller was refused on differ from the extension of the file actually read.
 pub fn confine_chapter(root: &Path, requested: &str) -> Result<PathBuf, String> {
     let name = display_name(Path::new(requested));
     if !is_chapter(&name) {
         return Err(format!("{name} is not a Markdown chapter"));
     }
-    confine_path(root, requested)
+    let resolved = confine_path(root, requested)?;
+    if !is_chapter(&display_name(&resolved)) {
+        return Err(format!("{name} is not a Markdown chapter"));
+    }
+    Ok(resolved)
 }
 
 /// Resolve a Part path: [`confine_path`], and it must be a folder that exists.
@@ -384,15 +394,27 @@ pub fn confine_part(root: &Path, requested: &str) -> Result<PathBuf, String> {
 ///
 /// Size is the reader's business, not the path's: this says which file may be
 /// named, and the command that opens it says how much of it may be read.
+///
+/// As with [`confine_chapter`], the extension is checked on the resolved path
+/// as well as on the requested name: a link called `lantern.jpg` that resolves
+/// to `id_rsa` is refused on what it resolves to.
 pub fn confine_asset(root: &Path, requested: &str) -> Result<PathBuf, String> {
     let name = display_name(Path::new(requested));
-    let permitted = extension_of(&name)
-        .map(|extension| ASSET_EXTENSIONS.contains(&extension.as_str()))
-        .unwrap_or(false);
-    if !permitted {
+    if !is_asset(&name) {
         return Err(format!("{name} is not an image this phase carries"));
     }
-    confine_path(root, requested)
+    let resolved = confine_path(root, requested)?;
+    if !is_asset(&display_name(&resolved)) {
+        return Err(format!("{name} is not an image this phase carries"));
+    }
+    Ok(resolved)
+}
+
+/// Whether a file name carries an extension in [`ASSET_EXTENSIONS`].
+fn is_asset(name: &str) -> bool {
+    extension_of(name)
+        .map(|extension| ASSET_EXTENSIONS.contains(&extension.as_str()))
+        .unwrap_or(false)
 }
 
 /// Walk a document folder into a `DocumentTree`.
@@ -843,6 +865,46 @@ mod tests {
         assert!(
             result.is_err(),
             "a link out of the document is not a chapter"
+        );
+    }
+
+    /// The requested name and the file it resolves to need not carry the same
+    /// extension. Confinement alone does not close that: a link inside the
+    /// document, called `.md`, can point at a file inside the document that is
+    /// not a chapter at all. The extension is what says which reader opens it,
+    /// so it is checked on the path that is actually opened.
+    #[test]
+    #[cfg(unix)]
+    fn refuses_a_chapter_whose_resolved_path_is_not_markdown() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join("secrets.txt"), "shh").expect("the real file");
+        std::os::unix::fs::symlink(base.join("secrets.txt"), base.join("01-alice.md"))
+            .expect("symlink");
+
+        let message = confine_chapter(&base, "01-alice.md")
+            .expect_err("a link that resolves to a .txt is not a chapter");
+        assert!(message.contains("is not a Markdown chapter"), "{message}");
+
+        // The same gap on the asset side: a link named for an image that
+        // resolves to something else is refused on what it resolves to.
+        fs::create_dir(base.join("assets")).expect("assets");
+        std::os::unix::fs::symlink(base.join("secrets.txt"), base.join("assets/lantern.jpg"))
+            .expect("symlink");
+        let message = confine_asset(&base, "assets/lantern.jpg")
+            .expect_err("a link that resolves to a .txt is not an image");
+        assert!(
+            message.contains("is not an image this phase carries"),
+            "{message}"
+        );
+
+        // A link that resolves to a chapter inside the document still opens,
+        // so the second check has not closed the door on symlinked chapters.
+        fs::write(base.join("real.md"), "# Real\n").expect("chapter");
+        std::os::unix::fs::symlink(base.join("real.md"), base.join("02-bob.md")).expect("symlink");
+        assert_eq!(
+            confine_chapter(&base, "02-bob.md").expect("a link to a chapter is a chapter"),
+            base.join("real.md")
         );
     }
 

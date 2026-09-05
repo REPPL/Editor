@@ -84,7 +84,7 @@ pub fn parse_metadata(text: &str) -> Result<DocumentMetadata, String> {
             ..DocumentMetadata::default()
         });
     }
-    let mut metadata: DocumentMetadata = serde_yml::from_str(text)
+    let mut metadata: DocumentMetadata = serde_yaml_ng::from_str(text)
         .map_err(|error| format!("cannot read {METADATA_FILE}: {error}"))?;
     metadata.present = true;
     Ok(metadata)

@@ -25,6 +25,29 @@ import { walkInlines, type Block, type Inline } from "./tree";
 const INTERNALS = ".abcd/development/brief/05-internals.md";
 const RENDERINGS: readonly Rendering[] = ["article", "slides", "print"];
 
+/**
+ * The brief's own placement table, parsed into rows of cells.
+ *
+ * Four cells a row: the construct, then the article, the slides and the PDF,
+ * in the chapter's own column order.
+ */
+function briefTable(): string[][] {
+  const brief = readFileSync(INTERNALS, "utf8");
+  const from = brief.indexOf("### What each rendering does with each construct");
+  const table = brief.slice(from, brief.indexOf("\n## ", from));
+  return table
+    .split("\n")
+    .filter((line) => line.startsWith("|"))
+    .map((line) =>
+      line
+        .replace(/^\|/, "")
+        .replace(/\|\s*$/, "")
+        .split("|")
+        .map((cell) => cell.trim()),
+    )
+    .filter((cells) => cells[0] !== "Construct" && !(cells[0] ?? "").startsWith("---"));
+}
+
 /** The first block of a source. */
 function block(source: string): Block {
   const first = parseChapter(source).blocks[0];
@@ -57,22 +80,34 @@ describe("the table", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("quotes the internals chapter word for word", () => {
-    const brief = readFileSync(INTERNALS, "utf8");
-    for (const row of CANON_ROWS) {
-      for (const rendering of RENDERINGS) {
-        expect(brief, `${row.id}.${rendering}`).toContain(row[rendering].wording);
-      }
-    }
+  it("quotes the internals chapter cell for cell", () => {
+    // Not `toContain` against the whole chapter: that passes even when two
+    // cells of a row have been swapped, which is exactly the drift this is
+    // here to catch. The brief's table is parsed, and each cell is held
+    // against the cell in the same row and the same column.
+    const brief = briefTable();
+    expect(brief.length).toBe(CANON_ROWS.length);
+    CANON_ROWS.forEach((row, index) => {
+      const cells = brief[index];
+      expect(cells, row.id).toBeDefined();
+      expect(cells?.[0], `${row.id}.construct`).toBe(row.construct);
+      RENDERINGS.forEach((rendering, column) => {
+        expect(cells?.[column + 1], `${row.id}.${rendering}`).toBe(row[rendering].wording);
+      });
+    });
+  });
+
+  it("catches a row whose cells have been swapped", () => {
+    // The check above must fail on a swap, or it is checking nothing.
+    const brief = briefTable();
+    const row = CANON_ROWS.find((candidate) => candidate.id === "columns");
+    const cells = brief.find((line) => line[0] === row?.construct);
+    expect(row?.article.wording).not.toBe(row?.slides.wording);
+    expect(cells?.[1]).not.toBe(row?.slides.wording);
   });
 
   it("covers every construct the brief's own table lists", () => {
-    const brief = readFileSync(INTERNALS, "utf8");
-    const from = brief.indexOf("### What each rendering does with each construct");
-    const table = brief.slice(from, brief.indexOf("\n## ", from));
-    const constructs = [...table.matchAll(/^\| ([^|]+?) \| /gm)]
-      .map((match) => (match[1] ?? "").trim())
-      .filter((name) => name !== "Construct" && !name.startsWith("---"));
+    const constructs = briefTable().map((cells) => cells[0]);
     expect(constructs.length).toBe(CANON_ROWS.length);
     expect(CANON_ROWS.map((row) => row.construct)).toEqual(constructs);
   });

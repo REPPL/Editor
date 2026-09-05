@@ -87,9 +87,13 @@ function inline(node: Inline, context: RenderContext): string {
     case "break":
       return "\n";
     case "html":
-      // The canon lets an author write HTML; a rendering that escaped it would
-      // put their markup on the page as text.
-      return node.text;
+      // The trust contract: a chapter is a file, and a file can come from
+      // anywhere — a Markdown file dropped onto a Part becomes a chapter. The
+      // tree keeps raw HTML as written, because a plain tool reads the file
+      // and the parse must not lose what is in it; every renderer escapes it.
+      // A `<script>` in a chapter is therefore text on the page, never a
+      // script in the reader's browser or on the published site.
+      return escapeText(node.text);
     case "code":
       return `<code>${escapeText(node.text)}</code>`;
     case "emphasis":
@@ -214,7 +218,8 @@ export function renderCommonBlock(
       return `<table${attributes([["id", block.attributes.id]])}>${caption}${head}${body}</table>`;
     }
     case "html":
-      return block.text;
+      // Escaped, under the same trust contract as an inline `html` node.
+      return `<p>${escapeText(block.text)}</p>`;
     case "comment":
       // Read and thrown away in both phase-1 renderings.
       return "";
