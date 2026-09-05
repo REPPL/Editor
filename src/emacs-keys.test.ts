@@ -1346,19 +1346,96 @@ describe("Editor's own chords", () => {
     app.view.dispatch({ changes: { from: 0, insert: "Edited. " } });
     expect(pressSequence(app.view, "C-x C-c")).toBe(true);
     expect(document.querySelector(".confirm")).not.toBeNull();
-    // The first row is "Quit without saving".
+
+    // The overlay opens on "Keep editing", so a reflex Return keeps the edits
+    // rather than throwing them away.
+    const enter = (): void => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    };
+    const rows = (): HTMLElement[] =>
+      Array.from(document.querySelectorAll<HTMLElement>(".confirm .palette-row"));
+    expect(rows().map((row) => row.textContent)).toEqual([
+      "Keep editing",
+      "Quit without saving",
+    ]);
+    expect(rows()[0]?.dataset["current"]).toBe("yes");
+    enter();
+    expect(document.querySelector(".confirm")).toBeNull();
+    expect(quitCalls).toBe(1);
+    expect(app.dirty).toBe(true);
+
+    // Quitting without saving is a row she has to move onto first.
+    expect(pressSequence(app.view, "C-x C-c")).toBe(true);
     document.dispatchEvent(
       new KeyboardEvent("keydown", {
-        key: "Enter",
-        code: "Enter",
+        key: "n",
+        code: "KeyN",
+        ctrlKey: true,
         bubbles: true,
         cancelable: true,
       }),
     );
+    expect(rows()[1]?.dataset["current"]).toBe("yes");
+    enter();
     expect(document.querySelector(".confirm")).toBeNull();
     expect(quitCalls).toBe(2);
     // Nothing was written on the way out: quitting is not saving.
     expect(written).toBeNull();
+  });
+
+  it("cancels the quit question rather than leaving it listening behind the text", async () => {
+    // An overlay holds the keyboard with a document-level capture listener,
+    // and `C-x o` moves the keyboard without that listener knowing. The
+    // question was then invisible and still answering: the next ordinary
+    // Return in the buffer chose its first row and threw the edits away
+    // (iss-2609052115254279). Leaving the overlay now cancels it, which for
+    // this question means keep editing.
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    app.view.dispatch({ changes: { from: 0, insert: "Edited. " } });
+    place(app.view, 0);
+    expect(pressSequence(app.view, "C-x C-c")).toBe(true);
+    expect(document.querySelector(".confirm")).not.toBeNull();
+
+    expect(pressSequence(app.view, "C-x o")).toBe(true);
+    expect(document.querySelector(".confirm")).toBeNull();
+    expect(app.focus.pane).toBe("editor");
+
+    // Return is the editor's again: a newline in the chapter, and no quit.
+    press(app.view, "Return");
+    expect(quitCalls).toBe(0);
+    expect(written).toBeNull();
+    expect(app.dirty).toBe(true);
+    expect(documentText(app.view)).toBe(`\nEdited. ${SAMPLE}`);
+  });
+
+  it("cancels M-x rather than leaving it listening behind the text", async () => {
+    // The same listener, the same route: the palette left open behind the
+    // buffer would claim `C-n` for its own highlight instead of moving the
+    // cursor down a line.
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    place(app.view, 0);
+    expect(pressSequence(app.view, "M-x")).toBe(true);
+    expect(document.querySelector(".palette")).not.toBeNull();
+
+    expect(pressSequence(app.view, "C-x o")).toBe(true);
+    expect(document.querySelector(".palette")).toBeNull();
+    expect(app.focus.pane).toBe("editor");
+
+    const before = app.view.state.selection.main.head;
+    expect(press(app.view, "C-n")).toBe(true);
+    expect(app.view.state.doc.lineAt(app.view.state.selection.main.head).number).toBe(
+      app.view.state.doc.lineAt(before).number + 1,
+    );
+    expect(documentText(app.view)).toBe(SAMPLE);
   });
 
   it("toggles the key log on C-x k", () => {
@@ -1917,6 +1994,13 @@ describe("the package's own installation", () => {
     expect(patternFor("BIND_LOOP").test(source)).toBe(true);
     expect(patternFor("ADD_COMMANDS").test(source)).toBe(true);
     expect(guard).toContain("killLine");
+    // And the witness is a property of the table, which is what tells the
+    // dependency's own `killLine` apart from the name this module carries as
+    // a string. Both spellings are in the dependency; only one is a key.
+    expect(patternFor("WITNESS_KEY").test(source)).toBe(true);
+    // `PACKAGE_COMMAND` in `src/emacs.ts`, spelled the way the bundler emits
+    // it: a string, and not a key of anything.
+    expect(patternFor("WITNESS_KEY").test('const x="killLine";')).toBe(false);
   });
 
   it("is what a built bundle is failed for lacking", async () => {
@@ -1936,10 +2020,15 @@ describe("the package's own installation", () => {
     // command table with it.
     const dropped = "const Ww={a:1};for(let e in Ww)Ww[e];\n";
 
-    const run = (source: string): { code: number; output: string } => {
+    /** Write one `dist` folder of named chunks and run the guard over it. */
+    const runOver = (
+      chunks: Readonly<Record<string, string>>,
+    ): { code: number; output: string } => {
       const dist = mkdtempSync(join(tmpdir(), "check-bundle-"));
       mkdirSync(join(dist, "assets"));
-      writeFileSync(join(dist, "assets", "main-abc123.js"), source);
+      for (const [name, source] of Object.entries(chunks)) {
+        writeFileSync(join(dist, "assets", name), source);
+      }
       try {
         const output = execFileSync(
           process.execPath,
@@ -1953,6 +2042,9 @@ describe("the package's own installation", () => {
       }
     };
 
+    const run = (source: string): { code: number; output: string } =>
+      runOver({ "main-abc123.js": source });
+
     const whole = run(installed);
     expect(whole.code, whole.output).toBe(0);
     expect(whole.output).toContain("the Emacs keymap is installed");
@@ -1961,6 +2053,41 @@ describe("the package's own installation", () => {
     expect(inert.code).not.toBe(0);
     expect(inert.output).toContain("bindKey loop");
     expect(inert.output).toContain("addCommands call");
+
+    // The witness is the table's `killLine`, not the file's. This is the
+    // application's own `PACKAGE_COMMAND` sitting in a bundle whose table was
+    // registered without the command: the name is in the file and the command
+    // is not, which is exactly the build the witness exists to fail.
+    const named = [
+      "const Ww={a:1};class Q{static bindKey(){}static addCommands(){}}",
+      "for(let e in Ww)Q.bindKey(e,Ww[e]);",
+      "Q.addCommands({unsetTransientMark:function(){}});",
+      'const PACKAGE_COMMAND="killLine";console.log(PACKAGE_COMMAND);',
+    ].join("\n");
+    const witness = run(named);
+    expect(witness.code).not.toBe(0);
+    expect(witness.output).toContain("killLine");
+    expect(witness.output).not.toContain("bindKey loop");
+
+    // A chunk split is not a keymap dropped. The entry loads the chunk the
+    // package landed in, so the build works and the guard says so.
+    const split = runOver({
+      "main-abc123.js": 'import"./emacs-def456.js";\nconsole.log(1);',
+      "emacs-def456.js": installed,
+    });
+    expect(split.code, split.output).toBe(0);
+    expect(split.output).toContain("emacs-def456.js");
+    expect(split.output).toContain("main-abc123.js");
+
+    // And a chunk the entry does not load is not a keymap the application
+    // has: that is a wiring failure, reported as one.
+    const orphaned = runOver({
+      "main-abc123.js": dropped,
+      "emacs-def456.js": installed,
+    });
+    expect(orphaned.code).not.toBe(0);
+    expect(orphaned.output).toContain("emacs-def456.js");
+    expect(orphaned.output).toContain("does not load");
   });
 });
 

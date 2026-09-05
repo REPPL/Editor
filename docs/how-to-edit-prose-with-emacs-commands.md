@@ -32,6 +32,12 @@ reason is that the document model records where a paragraph starts and stops
 but records no continuation prefix for a list item or a quotation, so a command
 that reflowed one would be guessing at what the second line should begin with.
 
+A line ending in two spaces or in a backslash is a hard break, which Markdown
+renders as a line break inside the paragraph. Filling keeps it: the paragraph
+is wrapped in the pieces its hard breaks divide it into, and each piece keeps
+the break that ended it. An address or a stanza of verse comes back with its
+lines where you put them.
+
 Filling never leaves a line starting with a character that opens a block
 construct — `#`, `>`, `-`, `+`, `*`, `|`, `:`, `=`, a number followed by `.`,
 or a code fence. A word like that stays on the line it is on, even where that
@@ -67,14 +73,18 @@ spaces after every sentence it fills.
 
 `M-z` prompts in the modeline and waits for one key. What it kills goes on the
 kill ring, so `C-y` yanks it back and `M-y` reaches it later. `C-g` or Escape
-cancels the prompt and changes nothing.
+cancels the prompt and changes nothing. What it wants is a character, so a
+chord held with Control, Option or Command is refused and the prompt says so;
+Shift is how a capital is typed, and `M-z` `A` zaps to `A`.
 
 ## Complete a word from the document
 
 Type the first few letters of a word you have already used and press `M-/`.
 
 Editor completes it from the chapter's own words, taking the nearest match
-before the cursor first and then the nearest after it. Pressing `M-/` again
+before the cursor first and then the nearest after it. The match ignores case
+and the answer keeps yours: type `Lant` at the start of a sentence and a
+chapter that says `lanternkeeper` offers `Lanternkeeper`. Pressing `M-/` again
 takes the next candidate; pressing it past the last candidate puts back the
 letters you typed, and the cycle begins again. Typing anything else, or moving
 the cursor, ends the cycle.
@@ -83,8 +93,10 @@ the cursor, ends the cycle.
 
 Press `M-x` and type a few letters of what you want.
 
-The palette lists every command the binding table carries and every construct
-the insert palette offers, filtered as you type. Three kinds of typing reach a
+The palette lists every command the text answers — every row of the binding
+table the editing surface owns — and every construct the insert palette offers,
+filtered as you type. The sidebar's own chords are not in it: they are answered
+by the tree, and `M-x` opens over the text. Three kinds of typing reach a
 row: the start of its label, the start of any word in its label, and the
 initials of those words, so `tw` reaches **Transpose words**. Its Emacs name
 works too, so `dabbrev` reaches **Expand the word from the document**.

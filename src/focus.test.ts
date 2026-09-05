@@ -13,11 +13,14 @@
  * 820 CSS pixels look like is manual check M30-1.
  */
 
+import { openSearchPanel } from "@codemirror/search";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp, type App, type AppServices } from "./app";
 import type { Chapter, DocumentTree, Part } from "./doctree";
 import { cursorPosition, documentText } from "./editor";
+import { createExportPanel, mountExportPanel } from "./export-panel";
+import type { ExportServices } from "./export/services";
 import { BINDINGS, bindingById, canonicalChord, scopeOf } from "./keys";
 import { openKeysPanel } from "./keyspanel";
 import { closeOverlay } from "./overlay";
@@ -151,9 +154,13 @@ let written: { path: string; text: string } | null = null;
 
 const services: AppServices = {
   chooseFolder: () => Promise.resolve(null),
-  openFolder: () =>
+  // A folder that holds no chapters draws a tree with no rows, which is the
+  // one state the second pane cannot be in.
+  openFolder: (path) =>
     Promise.resolve(
-      treeOf([ALICE_CHAPTER, BOB_CHAPTER, CAROL_CHAPTER, HAZARD_CHAPTER]),
+      path === "empty"
+        ? { root: { ...treeOf([]).root, parts: [] }, failures: [] }
+        : treeOf([ALICE_CHAPTER, BOB_CHAPTER, CAROL_CHAPTER, HAZARD_CHAPTER]),
     ),
   readChapter: (path) => Promise.resolve(TEXT.get(path) ?? ""),
   writeChapter: (path, text) => {
@@ -307,6 +314,29 @@ function settingsServices(): SettingsServices {
   };
 }
 
+/** An export panel with a plan that answers and services that never write. */
+function exportServices(): ExportServices {
+  const nothing = (): never => {
+    throw new Error("not used here");
+  };
+  return {
+    plan: () =>
+      Promise.resolve({
+        title: "document",
+        variant: "talk",
+        slug: "document",
+        files: [{ path: "index.html", text: "<!doctype html>\n" }],
+        copies: [],
+        refusals: [],
+        beside: "/documents",
+      }),
+    chooseFolder: nothing,
+    exportRendering: nothing,
+    dryRun: nothing,
+    revealStagedVersion: nothing,
+  };
+}
+
 // --------------------------------------------------------------- the harness
 
 let host: HTMLElement;
@@ -400,21 +430,42 @@ describe("the pane cycle", () => {
   it("cycles editor, sidebar, panel, editor in one fixed order", async () => {
     // The table: four panels, one order. Each opens by its own route and each
     // takes the third place, and no other place.
-    const panels: { label: string; open: () => Promise<void> | void }[] = [
+    //
+    // What differs is what leaving does. A registered panel stays open and the
+    // cycle comes back round to it. An overlay holds the keyboard with a
+    // document-level listener that cannot be handed on, so leaving it cancels
+    // it — see `panelTarget.release` — and the third place is then empty.
+    const panels: {
+      label: string;
+      overlay: boolean;
+      open: () => Promise<void> | void;
+    }[] = [
       {
         label: "Keys",
+        overlay: true,
         open: () => {
           press(app, bindingById("keys-panel")?.chords[0] ?? "C-h b");
         },
       },
       {
         label: "Insert",
+        overlay: true,
         open: () => {
           press(app, bindingById("insert-palette")?.chords[0] ?? "C-c i");
         },
       },
       {
+        label: "Export",
+        overlay: true,
+        open: async () => {
+          const panel = createExportPanel(exportServices());
+          mountExportPanel(app, panel);
+          await panel.open();
+        },
+      },
+      {
         label: "Publish",
+        overlay: false,
         open: async () => {
           const panel = createPublishPanel(publishServices());
           mountPublishPanel(app, panel);
@@ -423,6 +474,7 @@ describe("the pane cycle", () => {
       },
       {
         label: "Settings",
+        overlay: false,
         open: async () => {
           const panel = createSettingsPanel(settingsServices());
           mountSettingsPanel(app, panel);
@@ -451,12 +503,19 @@ describe("the pane cycle", () => {
       expect(modeline(app)).toContain("[Sidebar]");
 
       press(app, "C-x o");
-      expect(app.focus.pane, panel.label).toBe("panel");
-      expect(modeline(app)).toContain(`[${panel.label}]`);
+      if (panel.overlay) {
+        // Cancelled on the way out, so there is no third place to come back
+        // to and the walk goes straight on to the editor.
+        expect(app.focus.pane, panel.label).toBe("editor");
+        expect(modeline(app)).toContain("[Editor]");
+      } else {
+        expect(app.focus.pane, panel.label).toBe("panel");
+        expect(modeline(app)).toContain(`[${panel.label}]`);
 
-      press(app, "C-x o");
-      expect(app.focus.pane, panel.label).toBe("editor");
-      expect(modeline(app)).toContain("[Editor]");
+        press(app, "C-x o");
+        expect(app.focus.pane, panel.label).toBe("editor");
+        expect(modeline(app)).toContain("[Editor]");
+      }
 
       closeOverlay();
       app.destroy();
@@ -871,6 +930,80 @@ describe("the keyboard arriving on its own", () => {
     expect(modeline(app)).toContain("[Editor]");
     pressAt(app.view.contentDOM, "Return");
     expect(documentText(app.view)).not.toBe(ALICE);
+  });
+
+  it("leaves the keyboard in CodeMirror's search field, which is the editor", async () => {
+    // The search panel is mounted in the surface and not in the content, so
+    // the model read a cursor in it as focus lost and took the keyboard back
+    // into the text — deleting the search she was in the middle of typing.
+    // The surface is the pane, furniture included: the model records that the
+    // tree has stopped answering and moves nothing.
+    await mount();
+    openSearchPanel(app.view);
+    await settle();
+    const field = app.view.dom.querySelector<HTMLInputElement>(
+      ".cm-panel input",
+    );
+    expect(field).not.toBeNull();
+    expect(app.view.contentDOM.contains(field)).toBe(false);
+
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+
+    // She points at the search field. The tree loses the keyboard; the field
+    // keeps it.
+    field?.focus();
+    await settle();
+
+    expect(document.activeElement).toBe(field);
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.focused).toBe(false);
+    expect(modeline(app)).toContain("[Editor]");
+    // And the tree is no longer answering the chords it shares with the text.
+    const row = cursorRow(app);
+    pressAt(field as HTMLElement, "C-n");
+    expect(cursorRow(app)).toBe(row);
+    expect(documentText(app.view)).toBe(ALICE);
+  });
+
+  it("gives the keyboard back when the tree empties under it", async () => {
+    // A tree with no rows is not a pane: `C-x o` will not go to it. It could
+    // still be left holding the keyboard, because nothing reports a row count
+    // changing — so the chords the two panes share went on being answered by
+    // a tree with nothing in it, and Return and `C-n` did nothing at all.
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+
+    // She opens a folder that holds no chapters.
+    await app.openFolder("empty");
+    await settle();
+
+    expect(app.sidebar.rows()).toHaveLength(0);
+    expect(app.focus.pane).toBe("editor");
+    expect(modeline(app)).toContain("[Editor]");
+    // And the text has its own chords back.
+    const before = documentText(app.view);
+    pressAt(app.view.contentDOM, "Return");
+    expect(documentText(app.view)).not.toBe(before);
+  });
+
+  it("takes the keyboard back only when nothing at all is holding it", async () => {
+    // The narrow condition, stated against the thing that is not a pane and
+    // is not nowhere: a focusable element of the page's own chrome. The tree
+    // stops answering, and what has the focus keeps it.
+    await mount();
+    const elsewhere = document.createElement("input");
+    document.body.append(elsewhere);
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+
+    elsewhere.focus();
+    await settle();
+    expect(document.activeElement).toBe(elsewhere);
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.focused).toBe(false);
+    elsewhere.remove();
   });
 
   it("adopts the panel when the keyboard lands in it and gives it back", async () => {

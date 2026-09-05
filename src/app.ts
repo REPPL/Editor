@@ -155,10 +155,18 @@ const WELCOME = [
   "",
 ].join("\n");
 
-/** The two answers the quit question takes. */
+/**
+ * The two answers the quit question takes, the safe one first.
+ *
+ * The overlay opens on its first row, and Return takes the row the cursor is
+ * on. The destructive answer throws away everything Alice has not saved, so it
+ * is never the one a reflex reaches: she has to move onto "Quit without
+ * saving" before Return means it. Every other confirmation in the application
+ * makes the same promise.
+ */
 const QUIT_CHOICES: readonly ListEntry[] = [
-  { id: "quit", label: "Quit without saving" },
   { id: "keep", label: "Keep editing" },
+  { id: "quit", label: "Quit without saving" },
 ];
 
 /** Every chapter in a tree, in the order the sidebar draws them. */
@@ -238,9 +246,12 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    */
   const focus: FocusModel = createFocusModel({
     sidebar,
-    // The content, not the whole surface: it is the element the keyboard
-    // actually lands in when Alice clicks in a paragraph.
+    // The content, because it is the element the keyboard actually lands in
+    // when Alice clicks in a paragraph.
     editorContent: view.contentDOM,
+    // And the whole surface beside it, because CodeMirror's own panels — the
+    // search field `C-s` opens — are in here and not in the content.
+    editorSurface: view.dom,
     focusEditor: () => {
       view.focus();
     },
@@ -350,6 +361,10 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     outlines = await readOutlines(next);
     sidebar.show(tree, outlines);
     sidebar.select(openChapterPath, openNodeId);
+    // The tree is the second pane, and a tree with no rows is not a pane at
+    // all. Redrawing it can empty it — a folder opened that holds no chapters
+    // — and the keyboard must not be left in a pane that has gone away.
+    focus.reconcile();
   }
 
   /** The chapter with a given path in the tree that is drawn, if any. */

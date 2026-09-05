@@ -232,20 +232,58 @@ export function endsSentence(word: string): boolean {
 }
 
 /**
- * Re-wrap one paragraph's own text at a column.
+ * How Markdown writes a line break inside a paragraph.
  *
- * The first line's leading whitespace becomes every line's prefix, runs of
- * whitespace collapse to one space — two after a sentence end — and a word
- * that would not fit starts the next line, unless it is longer than the column
- * or would open a block construct there.
+ * Two or more spaces at the end of a line, or a backslash. Either renders as a
+ * break, which is how an address, a stanza of verse, or a run of short lines
+ * is written without leaving the paragraph.
  */
-export function fillText(
+const HARD_BREAK = /(?: {2,}|\\)$/;
+
+/** One stretch of a paragraph, and the hard break that ended it, if any. */
+interface Piece {
+  readonly text: string;
+  readonly ends: string;
+}
+
+/**
+ * A paragraph's source, cut at its hard breaks.
+ *
+ * Filling collapses runs of whitespace, and two trailing spaces are a run of
+ * whitespace: a fill that did not know about them erased every break in the
+ * paragraph and ran a stanza together into one block of prose, recoverable
+ * only by undo. So the breaks are found first, the pieces between them are
+ * filled one at a time, and each keeps the break that ended it — exactly the
+ * bytes the author wrote, spaces or backslash.
+ */
+function piecesOf(source: string): Piece[] {
+  const pieces: Piece[] = [];
+  let held: string[] = [];
+  for (const line of source.split(/\r\n|\n|\r/)) {
+    const found = HARD_BREAK.exec(line);
+    // A line of nothing but spaces is whitespace, not a break somebody meant.
+    if (found && line.trim() !== "") {
+      held.push(line.slice(0, line.length - found[0].length));
+      pieces.push({ text: held.join(" "), ends: found[0] });
+      held = [];
+      continue;
+    }
+    held.push(line);
+  }
+  if (held.length > 0 || pieces.length === 0) {
+    pieces.push({ text: held.join(" "), ends: "" });
+  }
+  return pieces;
+}
+
+/** Re-wrap one stretch of prose, with the paragraph's own indent. */
+function fillPiece(
   source: string,
+  indent: string,
   column: number,
   doubleSpace: boolean,
   lineBreak: string,
 ): string {
-  const indent = /^[ \t]*/.exec(source)?.[0] ?? "";
   const words = source.trim().split(/\s+/).filter((word) => word !== "");
   const first = words[0];
   if (first === undefined) return source;
@@ -266,6 +304,34 @@ export function fillText(
   }
   lines.push(current);
   return lines.join(lineBreak);
+}
+
+/**
+ * Re-wrap one paragraph's own text at a column.
+ *
+ * The first line's leading whitespace becomes every line's prefix, runs of
+ * whitespace collapse to one space — two after a sentence end — and a word
+ * that would not fit starts the next line, unless it is longer than the column
+ * or would open a block construct there.
+ *
+ * A hard break is not whitespace to collapse: it is a break the author wrote,
+ * and it survives the fill where it was. See `piecesOf`.
+ */
+export function fillText(
+  source: string,
+  column: number,
+  doubleSpace: boolean,
+  lineBreak: string,
+): string {
+  if (source.trim() === "") return source;
+  const indent = /^[ \t]*/.exec(source)?.[0] ?? "";
+  return piecesOf(source)
+    .map(
+      (piece) =>
+        fillPiece(piece.text, indent, column, doubleSpace, lineBreak) +
+        piece.ends,
+    )
+    .join(lineBreak);
 }
 
 /**
@@ -293,7 +359,12 @@ export function fillParagraph(
 
   const from = state.doc.line(Math.min(block.line, state.doc.lines)).from;
   const to = state.doc.line(Math.min(block.endLine, state.doc.lines)).to;
-  const source = state.doc.sliceString(from, to);
+  // `sliceDoc`, not `sliceString`: the latter joins lines with `\n` whatever
+  // the document's own separator is, and the fill writes `state.lineBreak`.
+  // On a chapter that arrived with `\r\n` the two were never the same string,
+  // so a paragraph already filled compared as changed and every `M-q` on it
+  // dispatched a transaction — a step on the undo stack that undid nothing.
+  const source = state.sliceDoc(from, to);
   const filled = fillText(source, column, doubleSpace, state.lineBreak);
   if (filled === source) return null;
   // One transaction, so one `C-/` takes the whole fill back.
@@ -319,7 +390,11 @@ export function transposeWords(view: EditorView): string | null {
   if (!first || !second || first.to > second.from) {
     return NO_TWO_WORDS;
   }
-  const between = text.slice(first.to, second.from);
+  // What lies between the two words is read back from the document rather
+  // than from the `\n`-joined string the offsets were found in: on a chapter
+  // whose separator is `\r\n`, a `\n` written back is not a line break at all
+  // but a stray character inside a line, and it would be saved as one.
+  const between = state.sliceDoc(first.to, second.from);
   replace(view, first.from, second.to, second.text + between + first.text);
   return null;
 }
@@ -541,17 +616,32 @@ interface Expansion {
 
 const expansions = new WeakMap<EditorView, Expansion>();
 
-/** The document's own words that a prefix could grow into, nearest first. */
+/**
+ * The document's own words that a prefix could grow into, nearest first.
+ *
+ * The match folds case and the answer does not: `Alic` finds `alicedottir`
+ * further up the chapter and offers `Alicedottir`, because the case in the
+ * buffer is the case the author is typing and the case in the document is
+ * whatever that sentence needed. This is Emacs's own rule — `dabbrev` folds
+ * case when it searches and keeps what you typed when it replaces — and
+ * without it the expansion an author reaches for at the start of a sentence
+ * is the one expansion the command cannot find.
+ */
 export function expansionsFor(
   text: string,
   prefix: string,
   from: number,
   head: number,
 ): readonly string[] {
+  const needle = prefix.toLowerCase();
   const backwards: { word: string; distance: number }[] = [];
   const forwards: { word: string; distance: number }[] = [];
-  for (const word of wordsOf(text)) {
-    if (!word.text.startsWith(prefix) || word.text === prefix) continue;
+  for (const found of wordsOf(text)) {
+    const folded = found.text.toLowerCase();
+    if (!folded.startsWith(needle) || folded === needle) continue;
+    // The typed characters back, then the document's own tail: the prefix is
+    // hers and the rest is the document's.
+    const word = { ...found, text: prefix + found.text.slice(prefix.length) };
     if (word.to <= from) {
       backwards.push({ word: word.text, distance: from - word.to });
     } else if (word.from >= head) {
@@ -678,6 +768,18 @@ function openPrompt(
 export function zapToChar(view: EditorView, hooks: PromptHooks): Overlay {
   return openPrompt(ZAP_PROMPT, hooks, (event) => {
     if (isModifierOnly(event)) return true;
+    // What the prompt is waiting for is a character, and `event.key` cannot
+    // tell one from a chord: it is `a` for `C-a`, `M-a` and `s-a` as much as
+    // for `a`. So `M-z C-a` read as "zap to the next a" and killed a stretch
+    // of the chapter on a chord the author pressed meaning something else.
+    // The table's own reading of the event says which it was. Shift is not one
+    // of these — it is how an upper-case letter is typed, and zapping to `A`
+    // is a zap.
+    const chord = chordFromEvent(event);
+    if (/^(?:C-|M-|s-)/.test(chord)) {
+      hooks.announce(ZAP_NEEDS_A_CHARACTER);
+      return false;
+    }
     const character = event.key;
     if ([...character].length !== 1) {
       hooks.announce(ZAP_NEEDS_A_CHARACTER);

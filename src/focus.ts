@@ -110,6 +110,17 @@ export interface FocusHooks {
    * the keys.
    */
   readonly editorContent: HTMLElement;
+  /**
+   * The editing surface's whole element, content and furniture alike.
+   *
+   * CodeMirror's own panels live here and not in the content: the search
+   * panel's input, and whatever else the surface mounts around the text. They
+   * are the editor for the purpose of naming a pane — they are not a fourth
+   * place in the cycle, and the keyboard being in one of them is not the
+   * keyboard being nowhere. Without this the model read a click into the
+   * search field as focus lost, and took it back into the text mid-search.
+   */
+  readonly editorSurface: HTMLElement;
   /** The sidebar, which is the second pane. */
   readonly sidebar: Sidebar;
   /** The pane or the prefix changed, and the modeline has to say so. */
@@ -233,9 +244,26 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
     );
   }
 
+  /** What holds the third place, if anything does: its key and its contract. */
+  function heldPlace(): { key: object; focus: PanelFocus } | null {
+    return openPanels()[0] ?? null;
+  }
+
   /** The panel that holds the third place, if anything does. */
   function activePanel(): PanelFocus | null {
-    return openPanels()[0]?.focus ?? null;
+    return heldPlace()?.focus ?? null;
+  }
+
+  /**
+   * The overlay in the third place, or null when a registered panel is there.
+   *
+   * The two fill the same place and are left differently, and this is the one
+   * question that tells them apart — see `panelTarget.release`.
+   */
+  function heldOverlay(): { close(chosen?: boolean): void } | null {
+    const overlay = currentOverlay();
+    if (!overlay?.open) return null;
+    return heldPlace()?.key === overlay ? overlay : null;
   }
 
   const editorTarget: PaneTarget = {
@@ -273,8 +301,23 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
       activePanel()?.focus();
     },
     release: () => {
-      // A panel cycled away from stays open: leaving a pane is not cancelling
-      // it, and cancelling is the one cancel contract's business.
+      // A *registered* panel cycled away from stays open: leaving a pane is
+      // not cancelling it, it hears only the keys that reach the element the
+      // keyboard is in, and cancelling is the one cancel contract's business.
+      //
+      // An overlay is not like that. "Holding the keyboard" is implemented as
+      // a document-level listener in the capture phase, and that listener does
+      // not stop when the keyboard goes elsewhere. An overlay left open behind
+      // the text goes on claiming `Return`: `C-x o` out of the quit question
+      // and one ordinary Return in the buffer answered the invisible question
+      // instead of typing a newline, and the answer threw away every unsaved
+      // edit (iss-2609052115254279). `M-x`, the insert palette, the prompts
+      // and the export panel all sat on the same listener.
+      //
+      // So an overlay is closed, cancelled, the moment the keyboard leaves it.
+      // Cancelled is the right answer everywhere: it is what `C-g` does, it
+      // writes nothing, and for the quit question it means keep editing.
+      heldOverlay()?.close(false);
     },
   };
 
@@ -351,6 +394,10 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
     if (openPanels().some((entry) => entry.focus.element.contains(landed))) {
       return "panel";
     }
+    // The whole surface, not only the content: a caret in a paragraph and a
+    // cursor in CodeMirror's own search field are both "the keyboard is in
+    // the editor", and only one of them is inside `contentDOM`.
+    if (hooks.editorSurface.contains(landed)) return "editor";
     if (hooks.editorContent.contains(landed)) return "editor";
     // A tree with no rows cannot hold a cursor, and its one button is the
     // page's own: leaving it out keeps the reader off that button's keys.
@@ -379,6 +426,13 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
    * has to answer the case where it went nowhere — a click on the page's
    * chrome, a blur — in which the model would otherwise keep the reader
    * claiming `C-n` and Return for a tree nothing is pointing at.
+   *
+   * Nowhere is the whole condition, and it has to be read narrowly. Taking
+   * the keyboard back is a real move: `toEditor` puts the caret in the text,
+   * and anything that had the focus loses it. So the keyboard is only taken
+   * where nothing is holding it — the body, or nothing at all. Something
+   * focusable that is not a pane is holding it for a reason, and the model
+   * records that the tree no longer answers without moving it.
    */
   function onFocusOut(event: FocusEvent): void {
     const left = event.target;
@@ -391,8 +445,12 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
       const active = document.activeElement;
       if (active !== null && sidebar.element.contains(active)) return;
       const now = paneOf(active);
-      if (now === null) toEditor();
-      else adopt(now);
+      if (now !== null) {
+        adopt(now);
+        return;
+      }
+      if (active === null || active === document.body) toEditor();
+      else adopt("editor");
     });
   }
 
@@ -447,6 +505,13 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
   }
 
   function onKeydown(event: KeyboardEvent): void {
+    // A pane can go away under the keyboard: a tree redrawn with no rows in
+    // it, a panel closed by its own key. Nothing reports a row count changing,
+    // so the question is asked where it matters — before a chord is answered
+    // by a pane that cannot answer it. `showTree` asks it too, so the modeline
+    // is right without waiting for a keystroke; this is the guard that does
+    // not depend on a caller remembering.
+    if (pane !== "editor") reconcile();
     if (pane === "editor") return;
     const step = canonicalChord(chordFromEvent(event));
     if (isModifierOnly(step)) return;

@@ -38,6 +38,7 @@ import {
   bindingById,
   canonicalChord,
   fromKeymapSpec,
+  scopeOf,
 } from "./keys";
 
 /** What the modeline reports about the Emacs handler. */
@@ -445,10 +446,19 @@ function runPackageBinding(handler: EmacsHandler, binding: unknown): boolean {
  * the row's chords; or the `run` of the CodeMirror keymap binding that carries
  * one of them. A row none of the three answers returns a refusal rather than
  * doing nothing quietly.
+ *
+ * Only an `editor` row is run. The last two ways resolve a row *by chord*, and
+ * a chord is only unique inside a scope: `Return` is "Open the chapter here"
+ * in the tree and a newline in the text, so running a `sidebar` row here would
+ * not open the chapter — it would type into the buffer. The scope is refused
+ * before any chord is looked at, so no such row can reach the search at all.
  */
 export function runBinding(view: EditorView, id: string): string | null {
   const binding = bindingById(id);
   if (!binding) return `${id} is not in the binding table`;
+  if (scopeOf(binding) !== "editor") {
+    return `${binding.label} is the sidebar's, and the text is where you are`;
+  }
   const handler = handlerFor(view);
 
   const own = EmacsHandler.commands[`editor:${id}`];

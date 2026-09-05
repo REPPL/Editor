@@ -28,15 +28,17 @@ disagree with what the keyboard does.
 
 Press `M-x` and type a few letters of what the command is called.
 
-The palette lists every row of the binding table the page can run, plus every
+The palette lists every row of the binding table the text answers, plus every
 construct the insert palette offers, and filters as you type. Choosing a row
 runs it; `C-g` or Escape closes the palette having changed nothing. It is the
 way to reach an action whose chord you cannot recall, and the way to see what
 the surface answers without leaving the text.
 
-The one kind of row it leaves out is a chord the window's menu answers, marked
-`menu` in the keys panel: the page has no command behind it, so offering it
-would be a dead end.
+Two kinds of row are left out. A chord the window's menu answers, marked `menu`
+in the keys panel, has no command behind it in the page, so offering it would
+be a dead end. A chord the sidebar answers is the tree's: `M-x` is open over
+the text, and a row that moves a cursor in a pane you are not in belongs to
+that pane. Reach those by giving the tree the keyboard with `C-x o`.
 
 ## Ask what one chord does
 

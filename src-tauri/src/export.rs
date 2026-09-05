@@ -40,10 +40,14 @@ const COLLISION_LIMIT: usize = 99;
 
 /// How long the folder the author chose stays claimable.
 ///
-/// The page asks for the export as soon as the dialog closes, so this only has
-/// to cover one round trip; a nonce left lying around after it is worth
-/// nothing.
-pub const DESTINATION_LIFETIME: Duration = Duration::from_secs(120);
+/// The page asks for the export as soon as the dialog closes, so the only
+/// thing this has to cover is that one round trip: build the request, call
+/// `export_rendering`, claim the folder. Thirty seconds is generous for a
+/// hand-off measured in milliseconds, and every second past what the round
+/// trip needs is a second in which a script in the web view can spend a nonce
+/// the author has already forgotten choosing. A nonce that has expired costs
+/// one more press of the same button.
+pub const DESTINATION_LIFETIME: Duration = Duration::from_secs(30);
 
 /// One answer the author gave the folder dialog.
 struct ChosenFolder {
@@ -63,12 +67,27 @@ pub struct ExportDestinations(Mutex<Vec<ChosenFolder>>);
 impl ExportDestinations {
     /// Hold the folder the author chose and mint the nonce that claims it.
     pub fn offer(&self, path: PathBuf) -> Result<String, String> {
+        self.offer_at(path, Instant::now())
+    }
+
+    /// Take the folder a nonce names. An unknown or expired nonce is refused.
+    pub fn claim(&self, nonce: &str) -> Result<PathBuf, String> {
+        self.claim_at(nonce, Instant::now())
+    }
+
+    /// `offer`, told what time it is.
+    ///
+    /// The clock is an argument rather than a call to `Instant::now` inside
+    /// the body, because the thing worth proving about a nonce is what it does
+    /// *after* `DESTINATION_LIFETIME` has passed, and a test that proves it by
+    /// waiting is a test nobody runs. Both wrappers above pass the real clock;
+    /// nothing else may.
+    fn offer_at(&self, path: PathBuf, now: Instant) -> Result<String, String> {
         let nonce = crate::assets::mint_nonce()?;
         let mut held = self
             .0
             .lock()
             .map_err(|_| "the chosen folder is unreadable".to_string())?;
-        let now = Instant::now();
         held.retain(|chosen| now.duration_since(chosen.at) < DESTINATION_LIFETIME);
         held.push(ChosenFolder {
             nonce: nonce.clone(),
@@ -78,13 +97,12 @@ impl ExportDestinations {
         Ok(nonce)
     }
 
-    /// Take the folder a nonce names. An unknown or expired nonce is refused.
-    pub fn claim(&self, nonce: &str) -> Result<PathBuf, String> {
+    /// `claim`, told what time it is. See `offer_at`.
+    fn claim_at(&self, nonce: &str, now: Instant) -> Result<PathBuf, String> {
         let mut held = self
             .0
             .lock()
             .map_err(|_| "the chosen folder is unreadable".to_string())?;
-        let now = Instant::now();
         held.retain(|chosen| now.duration_since(chosen.at) < DESTINATION_LIFETIME);
         let index = held
             .iter()
@@ -189,6 +207,12 @@ fn free_folder(destination: &Path, base: &str) -> Result<PathBuf, String> {
 }
 
 /// Write one of the chrome's files inside the exported folder.
+///
+/// Every message names the file by its path *inside* the folder and never by
+/// its path on the machine. These strings cross the IPC boundary into the
+/// panel, where they are shown; `an_exported_folder_carries_no_absolute_path`
+/// holds the same promise for what an export says it wrote, and a failure is
+/// not the place to start naming somebody's home directory.
 fn write_chrome(target: &Path, name: &str, text: &str) -> Result<(), String> {
     if name.starts_with('/') || name.split('/').any(|segment| segment == "..") {
         return Err(format!("{name} is not a path inside the folder"));
@@ -196,10 +220,9 @@ fn write_chrome(target: &Path, name: &str, text: &str) -> Result<(), String> {
     let path = target.join(name);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .map_err(|error| format!("cannot create {}: {error}", parent.display()))?;
+            .map_err(|error| format!("cannot create the folder {name} sits in: {error}"))?;
     }
-    fs::write(&path, text.as_bytes())
-        .map_err(|error| format!("cannot write {}: {error}", path.display()))
+    fs::write(&path, text.as_bytes()).map_err(|error| format!("cannot write {name}: {error}"))
 }
 
 /// The folder the dry run staged, refusing when no dry run has been run.
@@ -302,30 +325,67 @@ pub fn run_export(
         )
     })?;
 
+    // Everything from here writes inside a folder that did not exist a moment
+    // ago, and any of it can fail: a staging tree that cannot be built, a disk
+    // that fills during the copy, a chrome file that cannot be written. The
+    // folder must not be left behind when it does. It would be an empty or
+    // half-filled `a-talk-deck` standing in the folder Alice chose, looking
+    // like an export that worked, and the next attempt — which never writes
+    // over anything — would have to call itself `a-talk-deck-2` to get past
+    // it. The folder is one this function made, so it is this function's to
+    // take away again.
+    match staged_into(context, request, &document_root, &target, &chrome) {
+        Ok(files) => Ok(Export {
+            outcome: ExportOutcome {
+                folder: name_of(&target),
+                files,
+            },
+            target,
+        }),
+        Err(error) => {
+            // The failure Alice is told about is the one that happened. A
+            // folder that will not go away is worth a line in the log and
+            // nothing more: the export failed either way.
+            if let Err(swept) = fs::remove_dir_all(&target) {
+                eprintln!(
+                    "export: cannot remove {} after a failed export: {swept}",
+                    name_of(&target)
+                );
+            }
+            Err(error)
+        }
+    }
+}
+
+/// Fill an export's own folder, and say how many files went into it.
+///
+/// Split out so that everything written after the folder is created has one
+/// exit, which is what lets `run_export` sweep the folder away on any failure
+/// rather than on the ones somebody remembered to name.
+fn staged_into(
+    context: &ExportContext,
+    request: &ExportRequest,
+    document_root: &Path,
+    target: &Path,
+    chrome: &[(&str, &str)],
+) -> Result<usize, String> {
     // The dry run's own function, on a staging tree of its own.
     let staged = stage::stage_version(
         &context.cache_dir.join(EXPORT_STAGING_FOLDER),
-        &document_root,
+        document_root,
         &request.files,
         &request.copies,
     )?;
 
     let mut files = 0usize;
-    stage::copy_tree(&staged.path, &target, &mut |_| {
+    stage::copy_tree(&staged.path, target, &mut |_| {
         files += 1;
     })?;
     for (name, text) in chrome {
-        write_chrome(&target, name, text)?;
+        write_chrome(target, name, text)?;
         files += 1;
     }
-
-    Ok(Export {
-        outcome: ExportOutcome {
-            folder: name_of(&target),
-            files,
-        },
-        target,
-    })
+    Ok(files)
 }
 
 /* ---------------------------------------------------------------------------
@@ -656,14 +716,76 @@ mod tests {
     }
 
     #[test]
+    fn a_nonce_expires_after_the_lifetime_it_is_given() {
+        // On an injected clock, because the thing worth proving is what a
+        // nonce does after `DESTINATION_LIFETIME` and no test may spend that
+        // long finding out. A nonce is good right up to the moment it is not.
+        let fixture = fixture();
+        let chosen = ExportDestinations::default();
+        let start = Instant::now();
+
+        let nonce = chosen
+            .offer_at(fixture.outside.path().to_path_buf(), start)
+            .expect("minted");
+        // Just inside the window it is still the folder she chose.
+        assert_eq!(
+            chosen
+                .claim_at(
+                    &nonce,
+                    start + DESTINATION_LIFETIME - Duration::from_millis(1)
+                )
+                .expect("claimed"),
+            fixture.outside.path()
+        );
+
+        // And one minted at the same moment is gone by the time the window is.
+        let stale = chosen
+            .offer_at(fixture.outside.path().to_path_buf(), start)
+            .expect("minted");
+        let refused = chosen
+            .claim_at(&stale, start + DESTINATION_LIFETIME)
+            .expect_err("expired");
+        assert!(refused.contains("no longer on offer"), "{refused}");
+
+        // Expiry is not a way in: the folder is not handed over late either.
+        let later = chosen
+            .claim_at(
+                &stale,
+                start + DESTINATION_LIFETIME + Duration::from_secs(600),
+            )
+            .expect_err("expired");
+        assert!(later.contains("no longer on offer"), "{later}");
+    }
+
+    #[test]
     fn an_export_request_carries_no_folder_of_its_own() {
         // The wire shape: what the page hands the shell names a nonce and a
         // folder name, and no path on the author's machine at all.
         let request = request("deck");
-        let json = serde_json::to_string(&request).expect("serialised");
-        assert!(json.contains("destination_nonce"), "{json}");
-        assert!(!json.contains("\"destination\""), "{json}");
-        assert!(!json.contains('/') || !json.contains(":\"/"), "{json}");
+        let json = serde_json::to_value(&request).expect("serialised");
+        let fields = json.as_object().expect("an object");
+        assert!(fields.contains_key("destination_nonce"), "{json}");
+        assert!(!fields.contains_key("destination"), "{json}");
+        // Not "the JSON has no slash in it" — the built files are full of
+        // them. No *value* the request carries is an absolute path.
+        for (name, value) in fields {
+            for text in strings_in(value) {
+                assert!(
+                    !text.starts_with('/'),
+                    "{name} carries an absolute path: {text}"
+                );
+            }
+        }
+    }
+
+    /// Every string anywhere inside a JSON value.
+    fn strings_in(value: &serde_json::Value) -> Vec<String> {
+        match value {
+            serde_json::Value::String(text) => vec![text.clone()],
+            serde_json::Value::Array(items) => items.iter().flat_map(strings_in).collect(),
+            serde_json::Value::Object(fields) => fields.values().flat_map(strings_in).collect(),
+            _ => Vec::new(),
+        }
     }
 
     #[test]
@@ -721,6 +843,85 @@ mod tests {
             "the export staged a tree for a folder it could not create"
         );
         assert!(walk(destination).is_empty());
+    }
+
+    #[test]
+    fn a_failed_export_takes_its_own_folder_away_again() {
+        // Two failures, one after the other, on either side of the copy: a
+        // staging that refuses before a byte reaches the folder, and a chrome
+        // file that cannot be written after the copy has half filled it. In
+        // both the folder the export made is gone afterwards, so the next
+        // attempt gets the name Alice expects rather than `a-talk-deck-2`, and
+        // she is never left with a folder that looks like an export that
+        // worked.
+        let fixture = fixture();
+        let destination = fixture.outside.path();
+
+        // Before the copy: an asset the staging tree refuses to carry.
+        let mut refused = request("deck");
+        refused.copies = vec![AssetCopy {
+            from: "01-part/assets/lantern.jpg".to_string(),
+            to: "assets/01-part/lantern.key".to_string(),
+        }];
+        let message = run_export(&fixture.context, &refused, destination).expect_err("refused");
+        assert!(
+            message.contains("not a file a published version carries"),
+            "{message}"
+        );
+        assert!(!destination.join("a-talk-deck").exists(), "{message}");
+        assert!(walk(destination).is_empty(), "{message}");
+
+        // After the copy: an asset staged at the name a chrome file needs, so
+        // `write_chrome` meets a folder where it wants to write a file.
+        let mut collides = request("deck");
+        collides.copies = vec![AssetCopy {
+            from: "01-part/assets/lantern.jpg".to_string(),
+            to: "presenter/slides.css/lantern.jpg".to_string(),
+        }];
+        let message = run_export(&fixture.context, &collides, destination).expect_err("refused");
+        assert!(message.contains("presenter/slides.css"), "{message}");
+        assert!(!destination.join("a-talk-deck").exists(), "{message}");
+        assert!(walk(destination).is_empty(), "{message}");
+
+        // And a folder swept away is a folder the next export can have.
+        let export = run_export(&fixture.context, &request("deck"), destination).expect("exported");
+        assert_eq!(export.outcome.folder, "a-talk-deck");
+    }
+
+    #[test]
+    fn nothing_an_export_says_names_a_path_on_the_machine() {
+        // What the shell answers with — an outcome or a refusal — crosses the
+        // IPC into the panel and is shown there. A message naming the author's
+        // home directory puts their machine on the screen, and it was
+        // `write_chrome` that did it.
+        let fixture = fixture();
+        let destination = fixture.outside.path();
+        let root = fixture.document.path().to_string_lossy().to_string();
+
+        let mut collides = request("deck");
+        collides.copies = vec![AssetCopy {
+            from: "01-part/assets/lantern.jpg".to_string(),
+            to: "presenter/slides.css/lantern.jpg".to_string(),
+        }];
+        let message = run_export(&fixture.context, &collides, destination).expect_err("refused");
+        assert!(
+            !message.contains('/') || !message.contains("://"),
+            "{message}"
+        );
+        for named in [
+            destination.to_string_lossy().to_string(),
+            root,
+            fixture.context.cache_dir.to_string_lossy().to_string(),
+        ] {
+            assert!(!message.contains(&named), "{message}");
+        }
+        // And no absolute path of any shape: nothing in it starts at the root.
+        for word in message.split_whitespace() {
+            assert!(!word.trim_matches(':').starts_with('/'), "{message}");
+        }
+
+        let export = run_export(&fixture.context, &request("deck"), destination).expect("exported");
+        assert!(!export.outcome.folder.contains('/'), "{:?}", export.outcome);
     }
 
     #[test]

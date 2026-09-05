@@ -9,7 +9,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { invoke } from "@tauri-apps/api/core";
 
 import { parseChapter } from "../core/parse";
 import { DECK_ENGINE_FILES } from "../core/render/slides";
@@ -31,6 +33,20 @@ import {
   slugFor,
   type ExportPlan,
 } from "./services";
+
+/**
+ * The one seam between the page and the shell.
+ *
+ * Every command the panel reaches goes through `invoke`, and what it is called
+ * with is the whole of the wire contract: a name the shell answers, and the
+ * arguments that name takes. Nothing else in this file needs it, so it answers
+ * with nothing and the calls are read back off the mock.
+ */
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(() => Promise.resolve(null)),
+}));
+
+const invoked = vi.mocked(invoke);
 
 const EXAMPLES = join(__dirname, "..", "..", "examples");
 const ROOT = "/documents/presentation";
@@ -56,6 +72,45 @@ function document(): DocumentForPublish {
 function services(root: string | null = ROOT): ReturnType<typeof createExportServices> {
   return createExportServices(() => Promise.resolve(document()), () => root);
 }
+
+beforeEach(() => {
+  invoked.mockClear();
+});
+
+describe("what the services ask the shell for", () => {
+  it("opens the dialog through the shell's own command, and names no folder", async () => {
+    // The dialog is the shell's, and this is the call that opens it. Without
+    // this, `chooseFolder` could have gone on answering a path the page chose
+    // for itself and every test above would still have passed: the panel is
+    // driven by fakes, and the fakes are not the wire.
+    const chosen = await services().chooseFolder("/documents");
+    expect(invoked).toHaveBeenCalledWith("choose_export_destination", {
+      defaultPath: "/documents",
+    });
+    // What comes back is the shell's nonce, handed on unchanged.
+    expect(chosen).toBeNull();
+
+    // A dialog with nowhere to open beside says so, rather than inventing one.
+    invoked.mockClear();
+    await services(null).chooseFolder(null);
+    expect(invoked).toHaveBeenCalledWith("choose_export_destination", {
+      defaultPath: null,
+    });
+  });
+
+  it("hands the export and the reveal to their own commands", async () => {
+    const built = await services().plan();
+    invoked.mockClear();
+
+    const request = requestFor("deck", built, "a-nonce-the-shell-minted");
+    await services().exportRendering(request);
+    expect(invoked).toHaveBeenCalledWith("export_rendering", { request });
+
+    invoked.mockClear();
+    await services().revealStagedVersion();
+    expect(invoked).toHaveBeenCalledWith("reveal_staged_version");
+  });
+});
 
 describe("the export plan", () => {
   it("builds through buildVersion, from the tree the dry run builds from", async () => {

@@ -373,6 +373,71 @@ describe("filling a paragraph", () => {
       expect(line.startsWith("  ")).toBe(true);
     }
   });
+
+  it("keeps a hard break, and fills the lines either side of it", () => {
+    // Two trailing spaces and a trailing backslash are how Markdown writes a
+    // break inside a paragraph — an address, a stanza of verse. Filling
+    // collapses runs of whitespace, and the two spaces are a run of
+    // whitespace: erasing them ran the stanza together into one block of
+    // prose, and only undo brought it back.
+    const stanza = [
+      "The lanternkeeper walked the harbour wall each evening  ",
+      "counting the lamps she had trimmed that morning\\",
+      "and noting which of them had guttered before dawn.",
+    ].join("\n");
+    const filled = fillText(stanza, 40, true, "\n");
+
+    const lines = filled.split("\n");
+    // Every break the author wrote is still a break, on the same words.
+    expect(lines.filter((line) => / {2,}$/.test(line))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith("\\"))).toHaveLength(1);
+    // The break is where the author put it: after "evening", whatever the
+    // column did with the words in front of it.
+    expect(lines.find((line) => / {2,}$/.test(line))?.trim()).toMatch(
+      /\bevening$/,
+    );
+    expect(lines.find((line) => line.endsWith("\\"))).toMatch(/\bmorning\\$/);
+    // And the words are the words, in order, with nothing lost or added.
+    expect(filled.replace(/\\/g, "").split(/\s+/)).toEqual(
+      stanza.replace(/\\/g, "").split(/\s+/),
+    );
+    // The stretches between the breaks were filled: the first is too long for
+    // the column and came back as more than one line.
+    expect(lines.length).toBeGreaterThan(3);
+
+    // A paragraph with no hard break is filled exactly as it was before.
+    expect(fillText("alpha beta gamma", 40, true, "\n")).toBe("alpha beta gamma");
+  });
+
+  it("fills a paragraph in a document whose line ending is CRLF", () => {
+    // `sliceString` joins lines with `\n` whatever the document's separator
+    // is, and the fill writes `state.lineBreak`. Compared against each other
+    // they were never equal, so `M-q` on an already-filled paragraph reported
+    // a change and pushed a step onto the undo stack that undid nothing.
+    const chapter = CHAPTER.split("\n").join("\r\n");
+    const crlf = createEditor(host, chapter);
+    try {
+      expect(documentText(crlf)).toBe(chapter);
+      const at = crlf.state.doc.line(PARAGRAPH_LINE).from + 30;
+      crlf.dispatch({ selection: EditorSelection.cursor(at) });
+
+      expect(fillParagraph(crlf, { fillColumn: DEFAULT_FILL_COLUMN })).toBeNull();
+      const filled = documentText(crlf);
+      // The document's own endings, everywhere: not one bare `\n` was written.
+      expect(filled.replace(/\r\n/g, "")).not.toContain("\n");
+      expect(filled.split("\r\n").length).toBeGreaterThan(chapter.split("\r\n").length);
+
+      // And filling it again changes nothing, which is the whole claim.
+      const before = documentText(crlf);
+      crlf.dispatch({
+        selection: EditorSelection.cursor(crlf.state.doc.line(PARAGRAPH_LINE).from),
+      });
+      expect(fillParagraph(crlf, { fillColumn: DEFAULT_FILL_COLUMN })).toBeNull();
+      expect(documentText(crlf)).toBe(before);
+    } finally {
+      crlf.destroy();
+    }
+  });
 });
 
 describe("transposing", () => {
@@ -396,6 +461,28 @@ describe("transposing", () => {
     place(5);
     expect(transposeWords(view)).toBe(NO_TWO_WORDS);
     expect(documentText(view)).toBe("alpha\n");
+  });
+
+  it("keeps the document's own line ending when the two words are on two lines", () => {
+    // The offsets are found in the `\n`-joined string, and what lies between
+    // the words was taken from it too. On a chapter whose separator is `\r\n`
+    // that `\n` is not a line break at all — it is a stray character written
+    // into the middle of a line, and it would have been saved as one.
+    const chapter = ["alpha", "beta gamma", ""].join("\r\n");
+    const crlf = createEditor(host, chapter);
+    try {
+      expect(documentText(crlf)).toBe(chapter);
+      crlf.dispatch({ selection: EditorSelection.cursor("alpha".length) });
+      expect(transposeWords(crlf)).toBeNull();
+
+      const after = documentText(crlf);
+      expect(after).toBe(["beta", "alpha gamma", ""].join("\r\n"));
+      // Not one bare newline anywhere: every break is the document's own.
+      expect(after.replace(/\r\n/g, "")).not.toContain("\n");
+      expect(crlf.state.doc.lines).toBe(3);
+    } finally {
+      crlf.destroy();
+    }
   });
 
   it("swaps a line with the one above it", () => {
@@ -592,6 +679,35 @@ describe("expanding a word from the document", () => {
     expect(dabbrevExpand(view)).toBe(NOTHING_TO_EXPAND);
   });
 
+  it("matches without regard to case and puts back the case that was typed", () => {
+    // Emacs's own rule. The document says `lanternkeeper` in the middle of a
+    // sentence; she is starting one, so she types `Lant`. A case-sensitive
+    // match found nothing, which is the one place the command is most wanted.
+    open(["The lanternkeeper trims the lamps.", "", "Lant"].join("\n"));
+    place(view.state.doc.length);
+
+    expect(dabbrevExpand(view)).toBeNull();
+    // The document's word, with her capital: not `lanternkeeper`.
+    expect(view.state.doc.line(3).text).toBe("Lanternkeeper");
+
+    // And round the cycle back to exactly what she typed.
+    expect(dabbrevExpand(view)).toBeNull();
+    expect(view.state.doc.line(3).text).toBe("Lant");
+
+    // The other direction too: a lower-case prefix reaching a capitalised
+    // word keeps the lower case.
+    open(["Lanternkeeper trims the lamps.", "", "lant"].join("\n"));
+    place(view.state.doc.length);
+    expect(dabbrevExpand(view)).toBeNull();
+    expect(view.state.doc.line(3).text).toBe("lanternkeeper");
+
+    // A word that differs from the prefix only in case is not an expansion.
+    open(["Alpha beta.", "", "alpha"].join("\n"));
+    place(view.state.doc.length);
+    expect(dabbrevExpand(view)).toBe(NO_EXPANSION);
+    expect(view.state.doc.line(3).text).toBe("alpha");
+  });
+
   it("refuses with nothing before the cursor, and with nothing to expand to", () => {
     open("alpha beta\n\n");
     onLine(2);
@@ -642,6 +758,29 @@ describe("the prompts", () => {
     pressKey("z");
     expect(documentText(view)).toBe("alpha beta\n");
     expect(said[said.length - 1]).toContain("ahead to zap to");
+  });
+
+  it("refuses a chord as the character to zap to", () => {
+    // `event.key` is `a` for `C-a` as much as for `a`, so a modified chord
+    // typed at the prompt read as "zap to a" and killed the chapter up to the
+    // next one. Control, Option and Command make a chord, not a character.
+    for (const modifier of ["C", "M", "s"]) {
+      open("alpha beta gamma\n");
+      place(0);
+      zapToChar(view, { host, announce });
+      pressKey("b", [modifier]);
+      expect(documentText(view), modifier).toBe("alpha beta gamma\n");
+      expect(said[said.length - 1], modifier).toContain("character");
+      closeOverlay();
+    }
+
+    // Shift is not one of them: it is how a capital is typed, and zapping to
+    // `B` is a zap.
+    open("alpha Beta gamma\n");
+    place(0);
+    zapToChar(view, { host, announce });
+    pressKey("B", ["S"]);
+    expect(view.state.doc.line(1).text).toBe("eta gamma");
   });
 
   it("cancels on C-g and changes not one byte", () => {

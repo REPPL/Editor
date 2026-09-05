@@ -21,7 +21,8 @@ import {
 } from "./command-palette";
 import { formsVisibleIn } from "./core/inserts";
 import { documentText, setDocument } from "./editor";
-import { BINDINGS, bindingById } from "./keys";
+import { runBinding } from "./emacs";
+import { BINDINGS, bindingById, scopeOf } from "./keys";
 import { closeOverlay } from "./overlay";
 import { PALETTE_PHASE } from "./palette";
 
@@ -131,9 +132,11 @@ afterEach(() => {
 describe("the command palette", () => {
   it("lists every runnable row of the table and every insert form", () => {
     // One source, always: the list is the two tables read at open time, and
-    // the only rows it leaves out are the ones the page cannot run.
+    // the only rows it leaves out are the ones the page cannot run from here.
     const entries = commandEntries();
-    const runnable = BINDINGS.filter((binding) => binding.owner !== "shell");
+    const runnable = BINDINGS.filter(
+      (binding) => binding.owner !== "shell" && scopeOf(binding) === "editor",
+    );
     for (const binding of runnable) {
       expect(
         entries.some((entry) => entry.id === binding.id),
@@ -151,10 +154,46 @@ describe("the command palette", () => {
     );
     // A menu accelerator has no page-side command, so it is not offered.
     expect(entries.some((entry) => entry.id === "open-folder-menu")).toBe(false);
+    // Nor is a row the tree answers: `M-x` is open over the text.
+    for (const binding of BINDINGS) {
+      if (scopeOf(binding) === "editor") continue;
+      expect(
+        entries.some((entry) => entry.id === binding.id),
+        binding.id,
+      ).toBe(false);
+    }
     // Every label is the table's own; nothing here writes one.
     for (const entry of entries) {
       if (!entry.binding) continue;
       expect(entry.label).toBe(bindingById(entry.id)?.label);
+    }
+  });
+
+  it("does not offer a tree row, and refuses one run from the text", () => {
+    // The palette is open over the buffer, and `runBinding` resolves a row it
+    // does not own itself by chord. `sidebar-open-node` carries `Return`, and
+    // so does the editor's own newline: offering the row would have made
+    // "Open the chapter here" type into the chapter instead of opening one.
+    const open = bindingById("sidebar-open-node");
+    expect(open?.label).toBe("Open the chapter here");
+
+    openCommandPalette(view, { host, announce });
+    type("Open the chapter here");
+    expect(offered()).not.toContain("sidebar-open-node");
+    press("C-g");
+
+    // And the refusal is the runner's, not the list's: an id reaching it from
+    // anywhere is turned away before a chord is looked at, so not one byte of
+    // the buffer moves and the cursor stays where it was.
+    place(view.state.doc.line(3).from + "alpha".length);
+    const before = view.state.selection.main;
+    for (const binding of BINDINGS) {
+      if (scopeOf(binding) === "editor") continue;
+      const refusal = runBinding(view, binding.id);
+      expect(refusal, binding.id).not.toBeNull();
+      expect(refusal, binding.id).toContain(binding.label);
+      expect(documentText(view), binding.id).toBe(SAMPLE);
+      expect(view.state.selection.main.head, binding.id).toBe(before.head);
     }
   });
 

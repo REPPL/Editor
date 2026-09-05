@@ -195,9 +195,10 @@ Choosing an insert entry calls `src/palette.ts`'s own `insertForm`.
 ### `quit`
 
 `C-x C-c` is an application command. With nothing unsaved it quits; with
-unsaved edits it opens a two-row confirmation overlay — "Quit without saving",
-"Keep editing" — in the overlay host, so `C-g` and Escape return Alice to the
-text with her edits intact, which a native dialog cannot do. Quitting goes
+unsaved edits it opens a two-row confirmation overlay — "Keep editing" first,
+then "Quit without saving", so that the destructive answer is one the cursor
+has to be moved onto — in the overlay host, so `C-g` and Escape return Alice
+to the text with her edits intact, which a native dialog cannot do. Quitting goes
 through a new optional `AppServices.quit?()`, wired in `src/main.ts` to the two
 steps the held-back window close already takes, `setDirty(false)` then
 `getCurrentWindow().destroy()`, extracted into one function so there is one

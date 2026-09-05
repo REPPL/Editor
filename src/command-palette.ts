@@ -2,8 +2,10 @@
  * `M-x`: one place to reach anything the keyboard reaches.
  *
  * The palette is a view over two tables and copies neither. Its rows are every
- * binding the page can run — every row of `src/keys.ts` whose owner is not
- * `shell`, because a menu accelerator has no page-side command — plus every
+ * binding the page can run from the text — every row of `src/keys.ts` in the
+ * `editor` scope whose owner is not `shell`, because a menu accelerator has no
+ * page-side command and a `sidebar` row is answered by a pane the palette is
+ * not open over — plus every
  * insert form `src/core/inserts.ts` offers in this phase. Choosing a binding
  * runs it through `runBinding`; choosing a form inserts it through the insert
  * palette's own `insertForm`. Nothing about a chord, a label, or a canonical
@@ -17,7 +19,7 @@ import type { EditorView } from "@codemirror/view";
 
 import { formsVisibleIn, type InsertForm } from "./core/inserts";
 import { runBinding } from "./emacs";
-import { BINDINGS, type Binding } from "./keys";
+import { BINDINGS, scopeOf, type Binding } from "./keys";
 import { openListOverlay, type ListEntry, type Overlay } from "./overlay";
 import { insertForm, PALETTE_PHASE } from "./palette";
 
@@ -51,6 +53,12 @@ export function commandEntries(): readonly CommandEntry[] {
     // A `shell` row is the window menu's accelerator; the page has no command
     // behind it, so offering it would be a dead end.
     if (binding.owner === "shell") continue;
+    // `M-x` is opened over the text, and the text is where the row it runs
+    // has to answer. A `sidebar` row is the tree's — it moves a cursor the
+    // palette is not looking at, and `runBinding` would otherwise resolve it
+    // by chord against whatever the editor binds the same chord to: Return on
+    // "Open the chapter here" would insert a newline. Both ends refuse.
+    if (scopeOf(binding) !== "editor") continue;
     entries.push({
       id: binding.id,
       label: binding.label,

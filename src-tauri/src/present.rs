@@ -412,11 +412,15 @@ pub fn present_log_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<
 ///
 /// The confined name may still be a symlink pointing out of the scratch
 /// directory, and an append would follow it — so the name is refused when
-/// anything but a regular file is standing at it. The check and the open are
-/// two steps, which a link made between them would slip through; on this
-/// path — a development-only surface, inside a directory the shell chose —
-/// that is the residual the refusal leaves, and it is named here rather than
-/// left to be discovered.
+/// anything but a regular file is standing at it.
+///
+/// The check and the open are two steps, and a link made between them would
+/// be followed by the open. So the question is asked a second time, of the
+/// open handle rather than of the name: a file descriptor cannot be swapped
+/// under the process, and the file that was opened is the file that was
+/// checked exactly when they are one inode on one device. A link standing at
+/// the name — before the check, between the check and the open, or after it —
+/// opens something whose inode is not the link's, and nothing is written.
 fn append_log_line(path: &Path, line: &str) -> Result<bool, String> {
     if line.len() > MAX_LOG_LINE {
         return Err(format!(
@@ -444,9 +448,42 @@ fn append_log_line(path: &Path, line: &str) -> Result<bool, String> {
         .append(true)
         .open(path)
         .map_err(|error| format!("cannot open the present log: {error}"))?;
+
+    // The same question, now of the handle: see this function's own note.
+    opened_the_name(path, &file)?;
+
     writeln!(file, "{line}")
         .map_err(|error| format!("cannot write the present log: {error}"))
         .map(|()| true)
+}
+
+/// Whether the file that was opened is the file the name stands for.
+///
+/// A name can be swapped between being checked and being opened; an open file
+/// descriptor cannot. One inode on one device is the whole test: a link at the
+/// name resolves to something else, and something else has another inode. The
+/// message names no path, exactly as the check before the open does not.
+#[cfg(unix)]
+fn opened_the_name(path: &Path, file: &fs::File) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let named = fs::symlink_metadata(path)
+        .map_err(|error| format!("cannot read the present log name: {error}"))?;
+    let opened = file
+        .metadata()
+        .map_err(|error| format!("cannot read the present log: {error}"))?;
+    if named.dev() != opened.dev() || named.ino() != opened.ino() {
+        return Err(
+            "the present log name is a link rather than a file, and the log is not written through a link"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+/// Nothing to check where there are no inodes to compare.
+#[cfg(not(unix))]
+fn opened_the_name(_path: &Path, _file: &fs::File) -> Result<(), String> {
+    Ok(())
 }
 
 /// Append one observation to the present log, if the run asked for one.
@@ -803,6 +840,42 @@ mod tests {
         assert!(!message.contains('/'), "{message}");
         fs::remove_file(&path).expect("clean");
         fs::remove_file(&target).expect("clean");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn refuses_a_present_log_that_became_a_link_after_it_was_checked() {
+        // The check before the open cannot see a link made after it. This is
+        // the second half of the guard, asked of the open handle: the file the
+        // append would go to, against the name it was opened by. A link made
+        // in the gap is exactly this — a name whose own inode is not the inode
+        // of what opening it reaches — so the append is refused.
+        let dir = scratch("handle");
+        let plain = dir.join("plain.jsonl");
+        let target = dir.join("elsewhere.txt");
+        let linked = dir.join("raced.jsonl");
+        for name in [&plain, &target, &linked] {
+            let _ = fs::remove_file(name);
+        }
+
+        // The honest case: a regular file opened by its own name.
+        fs::write(&plain, "before\n").expect("file");
+        let file = OpenOptions::new().append(true).open(&plain).expect("open");
+        assert!(opened_the_name(&plain, &file).is_ok());
+
+        // The raced case: the handle is the target's, the name is a link's.
+        fs::write(&target, "before\n").expect("target");
+        let opened = OpenOptions::new().append(true).open(&target).expect("open");
+        std::os::unix::fs::symlink(&target, &linked).expect("link");
+        let message = opened_the_name(&linked, &opened).expect_err("refused");
+        assert!(message.contains("link"), "{message}");
+        assert!(!message.contains('/'), "{message}");
+        // And nothing reached the file the link points at.
+        assert_eq!(fs::read_to_string(&target).expect("read"), "before\n");
+
+        for name in [&plain, &target, &linked] {
+            let _ = fs::remove_file(name);
+        }
     }
 
     #[test]
