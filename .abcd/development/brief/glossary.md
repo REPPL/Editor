@@ -26,10 +26,18 @@ use it; two thirds of the acceptance project's headings are at this level.
 its manifest, its Parts and Chapters, and their assets. It is the thing
 that has a stable id and gets published.
 
+**document metadata** — `document.yaml` at the document root: title,
+subtitle, abstract, author, affiliation, variants, default variant,
+bibliography, citation style, theme, asset threshold, and the stable id.
+Everything belonging to the whole document lives there; a chapter's own
+front matter is chapter-level only.
+
 **variant** — one of several renderings of a document's text for different
 audiences. A block or span marked with a variant belongs to that variant
 alone; unmarked content belongs to all of them. Variants are declared once
-for the document, selected by link, and never exposed as a switcher.
+in the document's metadata, selected by link, and never exposed as a
+switcher. A variant block may contain headings, so a Section can belong to
+one audience alone.
 
 **round trip** — reading a document's Markdown and writing it back, through
 any path: the editor, the split on import, the single HTML file. A round
@@ -42,13 +50,20 @@ first publish and stored in its metadata. It names the document's place on
 the presenter site for the rest of its life, and its stable link always
 shows the latest version.
 
+**variant token** — the unguessable path segment minted for each of a
+document's variants, sitting between the stable id and the version in
+every link. It is not the variant's name, so no link to one variant can be
+shortened or guessed into another.
+
 **version hash** — a hash computed from one publish's built output. Each
-publish keeps its own path under the stable id, so a link shared in March
-still shows what it showed in March.
+publish keeps its own path under the variant token, so a link shared in
+March still shows what it showed in March. Unchanged content republishes to
+the same hash and adds no version.
 
 **presenter** — the public page at the root of the published site. It shows
-a document when its URL carries a stable id or a version, and shows nothing
-and lists nothing otherwise.
+a document when its URL carries a variant token, and otherwise shows the
+same empty page — which is also the site's not-found page — listing
+nothing and enumerating nothing.
 
 **unlisted** — published so that anyone holding the link can read it, with
 nothing on the site linking to it or listing it. Unlisted is not private:
@@ -56,14 +71,23 @@ a link, once shared, cannot be recalled.
 
 **gated** — published behind an access policy with an email allow-list, so
 that a reader is asked to sign in and only an allow-listed address gets
-through. The choice between unlisted and gated is made at every publish.
+through. The choice between unlisted and gated is made at every publish and
+applies to the whole document: every version and every variant under its
+id. The pipeline applies the policy from a file committed beside the
+document's output, so Editor holds no credential for the access provider.
 
 **publish log** — the record inside the document folder of every publish:
-its timestamp, version hash, variants, flag, and links.
+its timestamp, version hash, variants, flag, and links. Every publish makes
+an entry, including a republish that changes nothing and the withdrawal
+that takes a document off the site.
 
 **production repository** — the private GitHub repository that Editor
 pushes built documents to and that Cloudflare Pages deploys as the public
 site.
+
+**object store** — the storage the pipeline puts assets in when they pass
+the host's per-file ceiling, under the same document id. The credential for
+it is the pipeline's; the app never holds one.
 
 ## Assets
 
@@ -76,6 +100,11 @@ is referenced by a relative path.
 
 **threshold** — the size, set per document, that decides between a copied
 and a referenced asset.
+
+**ceiling** — the host's per-file limit for the deployed repository. A
+referenced asset above it is published through the object store instead of
+the repository. The ceiling belongs to the host, not to the author, and is
+not a setting.
 
 **asset root** — a name for a place on the author's machine where large
 assets live, resolved by app settings rather than written into the
@@ -99,10 +128,11 @@ the default mapping and the authored slide constructs.
 **PDF** — the print rendering, in a modern academic-journal layout,
 produced by Typst in the publish pipeline and never in the app.
 
-**single file** — one self-contained HTML file holding the article, the
-deck, and every embedded asset, which opens from disk with no network. It
-is also an editor: it imports a chapter's Markdown, edits it with the same
-bindings, and exports the Markdown back.
+**single file** — one self-contained HTML file holding one variant of the
+document: the article, the deck, and every embedded asset, opening from
+disk with no network. It is also an editor, a chapter at a time: it imports
+a chapter's Markdown, edits it with the same bindings, and exports the
+Markdown back.
 
 **rendering core** — the one TypeScript implementation of parsing,
 serialising, variant filtering, and every rendering, shared unchanged by
@@ -111,21 +141,33 @@ the desktop app, the single file, the presenter site, and the pipeline.
 ## Editing
 
 **insert palette** — the list, one key away in the editor, of the canonical
-Pandoc constructs: divider, columns, speaker notes, callout, variant block,
-video block, citation, footnote, page break, easter egg, opening quotation.
-Choosing one inserts its exact form at the cursor.
+Pandoc constructs: divider, columns, speaker notes, callout, margin aside,
+credit, variant block, variant span, video block, citation, footnote, page
+break, easter egg, opening quotation. Choosing one inserts its exact form
+at the cursor.
 
 **canon** — the Markdown Editor writes and reads: Pandoc-compatible, with
-every extension expressed as a fenced div with attributes, a heading or
-image attribute, or an HTML comment.
+every extension expressed in one of five forms — a fenced div with
+attributes, a heading attribute, an image attribute, a bracketed span
+attribute, or an HTML comment. Pandoc's own citations and footnotes are
+not extensions and need no form of their own.
+
+**credit** — the fenced div that names a source: a margin note in the
+article, a line at the foot of the slide, a note in the PDF. A citation in
+the same Section supplies a slide's credit line the same way.
+
+**margin aside** — a bracketed span marked `.margin`, a remark that sits in
+the margin of the article without a marker in the text.
 
 **binding table** — the finite list of Emacs key bindings the editor
 supports: one entry per action with an id, a label, and its chords, held as
 data, shown to the user in a keys panel, produced by the spike, and used as
 the acceptance list.
 
-**import by split** — turning one flat Markdown file into a chapter folder,
-one file per level-one heading, numbered in order, with the text unchanged.
+**import by split** — turning one flat Markdown file into a document
+folder: one Part named for the document, holding one chapter file per
+level-one heading, numbered in order, with any text before the first
+heading as the first chapter and the text otherwise unchanged.
 
 ## Annotations
 
@@ -136,9 +178,14 @@ for it. The chapter's Markdown is never modified by annotating.
 path, a block index, a quoted excerpt with its surrounding text, and
 offsets. It is re-resolved on load so that annotations survive edits.
 
-**layer** — an annotation file published beside a document version so that
-readers can show or hide it. Alice makes a layer from her own annotations
-or from a file someone sends her; private annotations stay private.
+**orphaned** — what an annotation becomes when its anchor no longer
+resolves: listed, kept, and shown to be adrift, never re-attached to words
+it was not written against.
+
+**layer** — a named annotation file published beside a document version so
+that readers can show or hide it. Alice makes a layer from her own
+annotations or from a file someone sends her; no layer is on until a
+reader turns it on, and private annotations stay private.
 
 **rehearsal deck** — cards generated from a chapter's headings and stored
 in the sidecar, run in flip mode or scored mode for recall rather than for

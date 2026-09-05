@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335415528
 slug: insert-a-construct-i-cannot-remember
-spec_id: null
-kind: null
+spec_id: spc-2609051353398011
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -26,8 +26,9 @@ closing fences — with the cursor sitting inside the first column, where
 the words go. She types. The palette has closed and taken nothing with it.
 
 The palette lists the constructs the canon defines: divider, columns,
-speaker notes, callout, variant block, video block, citation, footnote,
-page break, easter egg, and opening quotation. Each writes the canonical
+speaker notes, callout, margin aside, credit, variant block, variant
+span, video block, citation, footnote, page break, easter egg, and
+opening quotation. Each writes the canonical
 form and nothing else. It is the only place the syntax has to live in
 anyone's memory, which is why Alice can write in a deliberately verbose,
 plain-Markdown canon without ever having learned it — and why what lands
@@ -82,27 +83,33 @@ plain-tool guarantee affordable to the person paying for it.
 
 ## Scope Conditions
 
-- Platform: the desktop app only — a Tauri 2 shell around the macOS
+- Platform: the desktop app only — a Tauri 2 shell around the macOS <!-- cond: cond-2609051353399760 -->
   system web view (`02-constraints.md`). The palette is frontend, so the
   code is shared, but no other host is claimed here.
-- Population: Alice, one author, editing one chapter. The palette acts at
+- Population: Alice, one author, editing one chapter. The palette acts at <!-- cond: cond-2609051353399534 -->
   the cursor in the chapter she has open.
-- Phase: seeded with the slide constructs, because phase 1 is the deck
-  (`06-delivery.md`; `07-intent-map.md`). An entry is added when its
-  construct's rendering arrives; that addition is an entry, not a new
-  intent.
-- Boundary with the intents that define constructs — map #6,
-  `itd-2609051335458626`; map #11, `itd-2609051335502171`; map #12,
+- Phase: seeded with the slide constructs, because phase 1 is the deck <!-- cond: cond-2609051353392265 -->
+  (`06-delivery.md`; `07-intent-map.md`) — the horizontal rule split, the
+  divider heading attribute, columns, speaker notes, and credit. An entry
+  is added when its construct's rendering arrives; that addition is an
+  entry, not a new intent. The full list the palette carries once every
+  phase has landed is divider, columns, speaker notes, callout, margin
+  aside, credit, variant block, variant span, video block, citation,
+  footnote, page break, easter egg, and opening quotation.
+- Boundary with the intents that define constructs — map #6, <!-- cond: cond-2609051353398378 -->
+  `itd-2609051335458626`; map #9, `itd-2609051335489928`, which owns the
+  callout and the margin aside; map #11, `itd-2609051335502171`; map #12,
   `itd-2609051335518134`; map #14, `itd-2609051335537470`; map #16,
   `itd-2609051335568936`; and map #21, `itd-2609051336019782`: each of
   those owns what its construct means in a rendering. 3 owns only that
   the canonical form appears at the cursor, correct and complete. What a
-  `.notes` div does to a deck, what `[@key]` resolves against, what a
-  variant block hides — all out of scope here.
-- Bundle: member of the Editing surface bundle with map #1,
+  `.notes` div does to a deck, what a callout or a margin aside looks
+  like on the page, what `[@key]` resolves against, what a variant block
+  hides — all out of scope here.
+- Bundle: member of the Editing surface bundle with map #1, <!-- cond: cond-2609051353396605 -->
   `itd-2609051335399446`, and map #2, `itd-2609051335406422`. One spec —
   a canon nobody can type is a canon nobody uses.
-- Plumbing inherited, not owned: the canon itself, which is
+- Plumbing inherited, not owned: the canon itself, which is <!-- cond: cond-2609051353396144 -->
   `05-internals.md` section 3, and the parse and serialise path that
   proves an inserted form round-trips.
 
@@ -135,10 +142,12 @@ plain-tool guarantee affordable to the person paying for it.
 - Given the palette lists an entry, When that entry's inserted form is
   compared against `05-internals.md` section 3, Then it matches a form
   written there; the palette offers no construct outside the canon.
-- Given the desktop app window narrowed to iPad width, When Alice opens
-  the palette and filters it by typing, Then the list and its labels are
-  fully legible with no horizontal scrolling and no pinch zoom, and
-  Return still inserts at the cursor.
+- Given the desktop app window narrowed to iPad width (820 CSS px), and
+  again at iPhone width (390 CSS px) and desktop width (1280 CSS px),
+  When Alice opens the palette and filters it by typing, Then the list
+  and its labels are fully legible at every one of the three widths with
+  no horizontal scrolling and no pinch zoom, and Return still inserts at
+  the cursor.
 - Inherits: round-trip byte-fidelity (`itd-2609051336074533`); no machine
   in the document (`itd-2609051336080960`); one source, always
   (`itd-2609051336090390`); degrade gracefully in a plain tool
@@ -160,3 +169,7 @@ plain-tool guarantee affordable to the person paying for it.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: an insert palette removes the need to remember fenced-div syntax; wrong if authors still hand-type constructs incorrectly or the palette's forms drift from the canon

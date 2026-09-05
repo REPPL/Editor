@@ -26,8 +26,10 @@ table assigns each.
 - A citation key resolving in one rendering and printing as literal
   brackets in another.
 - Reference lists that disagree in membership: an entry in the PDF that
-  no article margin note produced, or a key cited in a slide credit and
-  missing from the list.
+  no article margin note produced, or a key credited on a slide and
+  missing from the article's and the PDF's lists. The deck carries credit
+  lines and no reference list, which is a difference in presentation the
+  mapping table assigns, not a disagreement about the source.
 - A footnote present in one rendering and silently absent from another,
   where the mapping table says it appears in both.
 - A variant filtered in one rendering and not in another, or two
@@ -48,9 +50,10 @@ per-variant links.
 
 - Given a chapter citing three keys against `references.bib` and
   carrying two footnotes, When the article, the deck, and the PDF are
-  built from it, Then the same set of keys resolves in each and each
-  generated reference list holds the same entries, differing only in
-  style and placement.
+  built from it, Then the same set of keys resolves in all three; the
+  article's and the PDF's generated reference lists hold the same entries,
+  differing only in style and placement; and every key credited at the
+  foot of a slide is one of the entries in those lists.
 - Given a citation key that resolves to nothing, When each rendering is
   built, Then none of the three prints the raw key as prose, and each
   marks it unresolved in the form its own surface defines.

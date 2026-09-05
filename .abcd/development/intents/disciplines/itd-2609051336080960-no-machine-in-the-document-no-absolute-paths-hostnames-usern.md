@@ -16,26 +16,33 @@ production_mode: dictated-and-formatted
 
 ## Rule
 
-Nothing inside a document folder names a machine. Every reference is
-relative to the chapter that makes it, or to a named asset root the app
-resolves locally, so the folder means the same thing wherever it is
-opened.
+Nothing inside a document folder names the author's machine. Every
+reference is relative to the chapter that makes it, to a named asset root
+the app resolves locally, or to a public address on the web, so the folder
+means the same thing wherever it is opened.
 
 ## Forbids
 
-- Absolute paths in any file in the document folder: chapter Markdown,
-  `document.yaml`, `assets.json`, `publish-log.json`, annotation
-  sidecars.
-- Hostnames or machine names, including a share name or a mounted
-  volume's name, written into a reference.
-- Usernames, home directory names, or an author's email address in any
-  path or field.
+- Absolute local paths in any file in the document folder: chapter
+  Markdown, `document.yaml`, `assets.json`, `publish-log.json`,
+  annotation sidecars.
+- The name of a machine on the author's own network, including a share
+  name or a mounted volume's name, written into a reference.
+- Usernames, home directory names, or an email address in any path or
+  field. The allow-list of a gated document is committed with the built
+  output, never in the document folder, for exactly this reason.
 - Machine-local settings inside the document: an asset root's local
   location, a tool's install path, a credential, a token.
 - A referenced asset recorded by where it happens to sit on this machine
   rather than by root plus a path relative to that root.
 - A rendering that resolves a machine-local reference silently instead of
   reporting it.
+
+A public address on the web is not a machine in this sense. The published
+links in `publish-log.json`, the `site` and `gated` sources of a video
+block, and the object-store URL of an uploaded asset are all references
+anyone can follow from anywhere, which is the opposite of what this rule
+forbids.
 
 ## Binds From
 
@@ -65,6 +72,14 @@ file inherits the rule as written here.
   chapter is opened, Then the sidebar reports it as a machine-local
   reference and publish refuses it rather than embedding it in the
   output.
+- Given a document folder whose referenced assets name a root, When it is
+  opened on a machine that has not named that root, Then those assets are
+  reported as unresolved, renderings fall back to a poster and a link, and
+  publish refuses; nothing is guessed from what happens to be on the disk.
+- Given a chapter carrying `- gated: https://media.example.org/keynote.mp4`
+  and a publish log carrying the document's published links, When the
+  folder is scanned, Then both pass: a public URL is a reference, not a
+  machine.
 - Given a published version's output, When its HTML, its manifest, and
   its assets are inspected, Then nothing in them names the machine that
   built them.
@@ -84,7 +99,9 @@ from the text": a document that only works on the machine that made it.
 Editor exists to hand Alice a folder of plain files she owns, and a
 folder that carries a machine inside it is not portable, not archivable,
 and not safe to publish, because a path can disclose as much as its
-contents.
+contents. The rule is about the author's machine and not about the web:
+a link to a published copy or to a gated site is what makes the document
+readable elsewhere, and forbidding it would forbid the design.
 
 ## Audit Notes
 

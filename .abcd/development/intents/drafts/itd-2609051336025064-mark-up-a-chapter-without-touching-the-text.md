@@ -96,10 +96,10 @@ through — without the text becoming something other than what she wrote.
 - Assumption carried: annotations re-attach after edits from a quoted
   excerpt plus a position, held until overturned in 01-product. How much
   editing that tolerates is open (see Open Questions).
-- In scope: the four kinds — `highlight` with a colour, `note` with text,
-  `reviewed` against a heading, and `card` — written to one sidecar per
-  chapter; anchor resolution on load; the orphan list when resolution
-  fails.
+- In scope: the four kinds of mark — a highlight in a colour, a note with
+  text, a reviewed mark against a heading, and a card — written to one
+  sidecar per chapter; anchor resolution on load; and the orphan list
+  when resolution fails.
 - Bundle: this intent is a member of the **Annotations** bundle with map
   #23 | itd-2609051336037640 (Keep my own marks on someone else's page),
   and shares one spec with it. 22 is Alice in the app writing the sidecar;
@@ -121,34 +121,40 @@ through — without the text becoming something other than what she wrote.
   the edits they permit, and asserts that annotating itself never writes
   to the chapter.
 - Out of scope: the resolution ladder's implementation and the sidecar
-  schema, which are plumbing in 05-internals section 7; rendering marks on
-  a published page, which is 23 and 24.
+  schema — its field names, its shape, and its version — which are
+  plumbing in 05-internals section 7; and rendering marks on a published
+  page, which is 23 and 24. Every criterion below is written against what
+  Alice can observe — where a mark sits, what the orphan list shows, what
+  the chapter's bytes are, and that the sidecar is readable text beside
+  the chapter — rather than against a field in a file.
 
 ## Acceptance Criteria
 
-- Given a chapter `01-opening.md` with no sidecar, when Alice highlights a
-  sentence and picks amber, then `01-opening.annotations.json` is written
-  beside it with `schema_version`, `chapter: "01-opening.md"`, and one
-  annotation of kind `highlight`, `colour: "amber"`, whose `anchor`
-  carries `path`, `block`, `quote`, `prefix`, `suffix`, `start` and `end`.
-- Given that same chapter now carries a highlight, a note, a `reviewed`
-  mark on a Sub-section heading and a `card`, when the Markdown file is
+- Given a chapter with no marks against it, when Alice highlights a
+  sentence and picks amber, then one sidecar file appears beside that
+  chapter and named for it, the highlight is on those words and in that
+  colour when the chapter is reopened, and the sidecar is plain text a
+  person can read: opened in any editor, it names the chapter it belongs
+  to and quotes the sentence the highlight was made against.
+- Given that same chapter now carries a highlight, a note, a reviewed
+  mark on a Sub-section heading and a card, when the Markdown file is
   opened in a plain text editor, then it contains no `::: {.note}` block,
   no `<!-- done -->` comment and no `[…]{.mark}` span, and its SHA-256
   matches the hash taken before the first mark was made.
 - Given an annotation anchored inside a Section, when Alice inserts two
   paragraphs above it, rewords a sentence elsewhere in the same Section
-  and saves, then on reload the highlight covers the same words, the note
-  sits against the same paragraph, and the sidecar's `start` and `end`
-  have been rewritten to the new offsets.
-- Given an annotation whose quoted excerpt no longer appears anywhere in
-  the chapter, when the chapter reloads, then the annotation is listed as
-  orphaned with its `quote` and its heading `path`, remains in the
-  sidecar, and no highlight is painted over any other text.
+  and saves, then on reload the highlight covers the same words and the
+  note sits against the same paragraph, and it does so without Alice
+  re-placing either of them.
+- Given an annotation whose quoted words no longer appear anywhere in the
+  chapter, when the chapter reloads, then the annotation is listed as
+  orphaned, showing the words it was made against and the heading it sat
+  under, it is still in the sidecar afterwards, and no highlight is
+  painted over any other text. (Negative case.)
 - Given a chapter whose headings Alice has turned into cards, when she
-  inspects the document folder, then every card is an annotation of kind
-  `card` inside that chapter's one sidecar and no separate deck file
-  exists.
+  inspects the document folder, then the cards live in that chapter's one
+  sidecar beside its highlights and notes, and no separate deck file
+  exists anywhere.
 - Given a chapter with a sidecar, when Alice deletes the sidecar in Finder
   and reopens the chapter, then the text and every preview are exactly as
   before, the marks are simply gone, and the app reports the absent file
@@ -157,11 +163,19 @@ through — without the text becoming something other than what she wrote.
   for ten minutes without pressing Publish, when outbound network activity
   is observed, then no request is made at all.
 - Given a chapter carrying twenty annotations, when the app window is
-  narrowed to iPad width (1024 px), then the text and the list of marks
-  are both legible with no horizontal scrolling and no clipped controls.
-- Inherits: Round-trip byte-fidelity; No machine in the document; One
-  source, always; Degrade gracefully in a plain tool; Legible on three
-  device classes; Network only on publish.
+  narrowed to iPad width (820 CSS px), and again to iPhone width (390 CSS
+  px) and desktop width (1280 CSS px), then the text and the list of
+  marks are both legible at every one of the three widths, with no
+  horizontal scrolling, no pinch zoom, and no clipped controls.
+- Inherits: round-trip byte-fidelity (`itd-2609051336074533`); no machine
+  in the document (`itd-2609051336080960`); one source, always
+  (`itd-2609051336090390`); degrade gracefully in a plain tool
+  (`itd-2609051336110536`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; network only on
+  publish (`itd-2609051336158553`); and orphan, never guess
+  (`itd-2609051402235443`), which owns the rule that an unresolved anchor
+  is reported rather than re-attached to different words — this moment is
+  where it first binds.
 
 ## Open Questions
 

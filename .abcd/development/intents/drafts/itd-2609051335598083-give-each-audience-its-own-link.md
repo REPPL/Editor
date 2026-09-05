@@ -6,7 +6,7 @@ kind: null
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
-severity: minor
+severity: major
 impact: additive
 origin: researcher-authored
 production_mode: dictated-and-formatted
@@ -67,6 +67,15 @@ siblings under the stable id and nothing links between them
 search every file of one variant's build for another variant's name or
 path, and the claim fails on the first hit.
 
+We expect a link not to give up its siblings when a reader shortens it,
+because a variant's path segment is an unguessable token minted with the
+id rather than the variant's own name: shortening the talk link reaches
+the document's id and nothing else, the id alone renders the presenter's
+empty shell, and no path a reader can construct from what they hold
+reaches another audience's reading. A variant path that spelled out
+`talk` or `full` would defeat every other guarantee in this intent with a
+single edit to the address bar.
+
 We expect this to be the correct unit of work because the acceptance
 project already carries three variants of one text, with the
 conditionality living in heading heuristics and positional CSS and a
@@ -92,9 +101,12 @@ them; producing a second path costs a second write, not a second publish.
 - Assumption: the set of variants is declared once for the document, with
   one of them the default, and a document that declares a single variant
   publishes exactly as it does with none.
-- Assumption: the stable link serves the default variant's latest
-  version, and each variant also has its own stable path and its own path
-  beneath each published version.
+- Assumption: each variant has its own path token, minted with the id and
+  unguessable, its own stable link under that token serving that
+  variant's latest version, and its own path beneath each published
+  version. The document's id alone is not a link to anything: it renders
+  the presenter's empty shell, exactly as a wrong id does, so there is no
+  default-variant address derivable from another variant's.
 - Boundary with map #14 (itd-2609051335537470, Write one text for two
   audiences): 14 owns the moment of marking — the `.variant` fenced div
   and the inline span, the preview of one variant in the app, and the
@@ -138,35 +150,48 @@ them; producing a second path costs a second write, not a second publish.
   then neither the footnote nor the reference appears in the talk
   article, the talk deck, or the talk's generated reference list.
 - Given the complete build of one variant, when every file in it is
-  searched, then no other declared variant's name appears as a path
-  segment, a link target, or a rendered string, and no page carries a
-  control, menu item, or keyboard chord that changes variant. (Negative
-  case.)
+  searched, then no other declared variant's name or path token appears
+  as a path segment, a link target, or a rendered string, and no page
+  carries a control, menu item, or keyboard chord that changes variant.
+  (Negative case.)
+- Given Bob holds the talk link and nothing else, when he shortens it
+  segment by segment, then every address he can reach that way renders
+  the presenter's empty shell — including the document's id on its own —
+  and none of them reaches the reader's variant, its version paths, its
+  assets, or its paper. (Negative case.)
+- Given the talk link and the reader's link side by side, when their
+  paths are compared, then neither variant's segment is the variant's
+  own name, nor derivable from the other's, nor derivable from the
+  document's id: each is a token minted with the id. (Negative case.)
 - Given a chapter containing a block marked `variant="draft"` where
   `draft` is not among the document's declared variants, when Alice
   publishes, then publish stops before anything is pushed, names the
   chapter and the line, and no version folder appears on the site.
   (Negative case.)
 - Given two published versions of a document with two variants, when the
-  stable path for one variant is requested, then it serves that variant's
-  latest version, and when the earlier version's path for that variant is
+  stable link for one variant is requested, then it serves that variant's
+  latest version, and when the earlier version's link for that variant is
   requested, then it still serves what it served before, unchanged.
-- Given the talk variant's article at an iPhone width of 390 CSS pixels,
-  when Carol reads it, then the contents list and navigation show only
-  the talk's headings, margin notes fold into the flow, and no page
-  scrolls sideways or needs pinching.
-- Inherits: variant fidelity (itd-2609051336107315); one source, always
-  (itd-2609051336090390); the renderings agree (itd-2609051336130664);
-  legible on three device classes (itd-2609051336128348); network only on
-  publish (itd-2609051336158553); nothing is stored about a reader
-  (itd-2609051336145770).
+- Given the talk variant's article at iPhone width (390 CSS px), at iPad
+  width (820 CSS px), and at desktop width (1280 CSS px), when Carol
+  reads it, then the contents list and navigation show only the talk's
+  headings, margin notes fold into the flow at the narrowest width, and
+  no page scrolls sideways or needs pinching at any of the three.
+- Inherits: variant fidelity (`itd-2609051336107315`); one source, always
+  (`itd-2609051336090390`); the renderings agree
+  (`itd-2609051336130664`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; network only on
+  publish (`itd-2609051336158553`); nothing is stored about a reader
+  (`itd-2609051336145770`).
 
 ## Open Questions
 
 - The length of the stable id and of the version hash is open in
   03-evidence.md ("Publish and pipeline"). It matters here because every
-  variant path sits beneath the id, so for an unlisted document the id's
-  length is the whole of what protects each audience's link.
+  variant path sits beneath the id, so for an unlisted document the
+  length of the id and of the variant's own token together are the whole
+  of what protects each audience's link. The token's length is the same
+  question in a second place.
 - Whether the presenter, the article script, and the slide engine are
   maintained once in the production repository and shared by every
   document, rather than copied into each published version, is open in

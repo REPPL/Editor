@@ -135,12 +135,16 @@ proof-reading pass that goes with them.
   those letters, and resting on a completed key shows that entry's
   author, title, and date in place, without opening a separate window.
 - Given a chapter containing `[@smith2020, p. 4]` and a Pandoc footnote
-  written as `^[an inline note]`, when the article, the deck, and the PDF
-  are produced from that one chapter, then the citation carries its
-  locator in all three, the footnote appears as a margin note in the
-  article, as part of the slide's credit line in the deck, and as a
-  numbered note at the foot of the page in the PDF, and the entry appears
-  exactly once in each generated reference list.
+  written as `^[an inline note]`, when the article is produced from that
+  chapter, then the citation carries its locator, the footnote appears as
+  a margin note, and the entry appears exactly once in the article's
+  generated reference list; and when the deck is produced from the same
+  chapter, then the slide carries a source credit line naming that work
+  and carries no reference list at all, because a deck has a credit line
+  per slide and nothing else. The same criterion binds against the PDF
+  from phase 6, when the paper exists to be compared: the article's list
+  and the paper's must then hold the same entries in the same order, and
+  the credit line on the slide must name a work that appears in both.
 - Given a chapter containing `[@nosuchkey]`, where that key is in no
   entry of `references.bib`, when Alice opens the preview, then the
   citation is marked as unresolved in the preview and the key is listed
@@ -150,28 +154,45 @@ proof-reading pass that goes with them.
   chapter, then the slide for that Section shows a short source line at
   its foot naming the cited work, and the slide carries no margin note
   and no reference list.
-- Given the published article open at an iPhone-width viewport, when Bob
+- Given a document whose metadata names no bibliography file, and a
+  chapter carrying no citation, when the article, the deck, and the
+  preview are produced, then each renders the chapter in full, no
+  reference list appears anywhere, and nothing is reported as an error:
+  a document with no bibliography is an ordinary document. (Negative
+  case.)
+- Given the published article open at iPhone width (390 CSS px), when Bob
   reaches a paragraph carrying a citation, then the margin reference
   folds into the flow directly beneath that paragraph, and neither the
-  page nor the reference requires horizontal scrolling or pinch zoom.
+  page nor the reference requires horizontal scrolling or pinch zoom; and
+  at iPad width (820 CSS px) and desktop width (1280 CSS px) the
+  reference sits in the margin beside its paragraph with nothing wider
+  than the viewport.
 - Given a chapter carrying citations and footnotes, when it is opened in
   a plain Markdown tool that knows nothing of the canon, then every
   citation and footnote is readable as ordinary text and no construct
   stops the tool rendering the rest of the chapter.
-- Inherits: The renderings agree (this intent is its first hard test);
-  One source, always; Degrade gracefully in a plain tool; Legible on
-  three device classes; Round-trip byte-fidelity; Network only on
-  publish; Variant fidelity, from the phase it binds.
+- Inherits: the renderings agree (`itd-2609051336130664`) — this intent is
+  its first hard test, and the worked test is that the deck's credit line
+  names a key the article's and the paper's lists both carry, not that
+  the deck has a list; one source, always (`itd-2609051336090390`);
+  degrade gracefully in a plain tool (`itd-2609051336110536`); legible on
+  three device classes (`itd-2609051336128348`), at 390, 820, and 1280
+  CSS px; round-trip byte-fidelity (`itd-2609051336074533`); network only
+  on publish (`itd-2609051336158553`); and variant fidelity
+  (`itd-2609051336107315`), from phase 3 where it binds, which owns the
+  removal of a citation inside a filtered block and of its entry from
+  that variant's list.
 
 ## Open Questions
 
 - Which citation styles ship first (`03-evidence.md`, "Open questions",
   "Citations"). Until this is settled, the acceptance criteria above
   describe one configured style, not a choice offered to Alice.
-- Where the `bibliography` and `citation_style` keys this moment reads
-  actually live: a metadata file at the document root, or front matter in
-  the first chapter (`03-evidence.md`, "Open questions", "Document model
-  and canon").
+- What a footnote does on a slide. The mapping table in
+  `05-internals.md` section 3 gives citations and footnotes one row, and
+  `04-surfaces.md` section 5 describes only citations on the deck, so
+  whether a footnote inside a Section reaches its credit line or is
+  absent from the slide altogether is not yet written down.
 
 ## Audit Notes
 

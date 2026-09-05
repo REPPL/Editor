@@ -37,10 +37,11 @@ of the text at phone width, with nothing to pinch or scroll sideways.
 Because her marks are kept per browser, her reading of the document and
 Bob's never touch.
 
-When Bob has something worth sending, he exports. He gets one small JSON
-file — the same file Alice's own marks live in beside her chapters — and
-sends it to her however he likes. That is where his part ends: the file is
-his, and what Alice does with it is her business.
+When Bob has something worth sending, he exports. He gets a small file for
+each chapter he marked, in exactly the shape Alice's own marks take beside
+her chapters, and sends them to her however he likes. That is where his
+part ends: the files are his, and what Alice does with them is her
+business.
 
 ## Why This Matters
 
@@ -81,7 +82,8 @@ file the reader chooses to hand over.
 ## Scope Conditions
 
 - Platform: the published article in a reader's browser, on desktop, iPad
-  and iPhone widths. No account, no sign-in, and no capability required of
+  and iPhone widths — 1280, 820, and 390 CSS px. No account, no sign-in,
+  and no capability required of
   the reader beyond the browser's own storage.
 - Population: Bob and Carol — readers of a document they did not write and
   cannot edit. It applies equally to a document published unlisted and to
@@ -90,6 +92,10 @@ file the reader chooses to hand over.
 - Assumption: a reader's browser retains its storage between visits.
   Private windows, cleared site data and a second device each start empty,
   and the export file is the only way marks move between them.
+- Assumption: a mark belongs to the chapter whose text it was made
+  against, even though the article is one page for the whole document. A
+  reader who marks two chapters exports two files, each in the same shape
+  as the sidecar the app writes beside that chapter.
 - Bundle: this intent is a member of the **Annotations** bundle with map
   #22 | itd-2609051336025064 (Mark up a chapter without touching the
   text), and shares one spec with it. 22 is Alice in the app writing the
@@ -127,12 +133,11 @@ file the reader chooses to hand over.
 - Given Bob's marks in one browser, when the same link is opened in a
   private window, in a second browser, or on a second device, then the
   page shows the document with no marks on it.
-- Given Bob has a highlight, a note and a reviewed mark, when he exports,
-  then he receives one JSON file carrying `schema_version`, the `chapter`
-  it belongs to, and an `annotations` list whose entries use the same
-  `kind`, `colour` and `anchor` fields (`path`, `block`, `quote`,
-  `prefix`, `suffix`, `start`, `end`) as a sidecar written by the app, and
-  that file loads in the app unmodified.
+- Given Bob has a highlight, a note and a reviewed mark, and they fall in
+  two different chapters of the one page he is reading, when he exports,
+  then he receives one file per chapter he has marked, each in the same
+  format the app writes beside a chapter, and each loads in the app with
+  no conversion step and lands on the chapter it was made against.
 - Given Bob has set theme to dark and text size to larger and has made
   three marks, when he clears his marks, then the theme and text size
   survive; and when he instead resets the reader controls, then the three
@@ -142,12 +147,18 @@ file the reader chooses to hand over.
   the stable link, then each mark either re-attaches to its quoted words
   or is listed as orphaned with its quote, and no mark is drawn over
   different words.
-- Given Carol opens the same link at iPhone width (390 px), when she
+- Given Carol opens the same link at iPhone width (390 CSS px), when she
   selects a passage, highlights it and adds a note, then the mark and the
   note read in the flow of the text with no horizontal scrolling and no
-  pinch zoom, and the same holds at iPad width (1024 px).
-- Inherits: Nothing is stored about a reader; Legible on three device
-  classes; No machine in the document; One source, always.
+  pinch zoom, and the same holds at iPad width (820 CSS px) and desktop
+  width (1280 CSS px).
+- Inherits: nothing is stored about a reader (`itd-2609051336145770`);
+  legible on three device classes (`itd-2609051336128348`), at 390, 820,
+  and 1280 CSS px; no machine in the document (`itd-2609051336080960`);
+  one source, always (`itd-2609051336090390`); and orphan, never guess
+  (`itd-2609051402235443`) — a reader's mark re-resolved against a
+  version they did not edit either finds its own words or is reported as
+  orphaned, and never lands on different ones.
 
 ## Open Questions
 
@@ -156,6 +167,13 @@ file the reader chooses to hand over.
   03-evidence under "Annotations". It bites harder here than in the app,
   because a reader's marks are re-resolved against a version they did not
   edit and cannot inspect.
+- How a mark made in the browser names the chapter it belongs to, given
+  that the published page exposes no chapter filenames. The export has to
+  carry a name the app can match, and what that name is has not been
+  settled.
+- Whether a reader can bring an exported file back into a browser — from
+  a laptop to a phone, say — since export is currently the only way marks
+  leave and there is no way in.
 
 ## Audit Notes
 

@@ -87,7 +87,8 @@ hurried one, and that costs the reader nothing in privacy to enjoy.
 ## Scope Conditions
 
 - Platform: the published online article and the same article inside the
-  single HTML file, at desktop, iPad, and iPhone widths. The deck omits
+  single HTML file, at desktop, iPad, and iPhone widths — 1280, 820, and
+  390 CSS px. The deck omits
   both constructs entirely; the PDF prints their static forms. Alice sees
   the same behaviour in the app's preview.
 - Population: this is Bob and Carol's moment. Alice authors the
@@ -100,6 +101,13 @@ hurried one, and that costs the reader nothing in privacy to enjoy.
   reachable.
 - Assumption: the Konami code reveals; it does not collect. A revealed
   mark is still uncollected until the reader opens it.
+- Assumption: an inline marker with no block, and a block no marker
+  names, are both authoring mistakes rather than reader-facing features.
+  Each renders harmlessly — the marker as ordinary text, the block as
+  nothing — and each is listed against its chapter in the sidebar so
+  Alice finds it while writing.
+- Assumption: the opening quotation belongs to the first chapter's first
+  block. A document has one opening, not one per chapter.
 - Boundary with map #9, itd-2609051335489928 (Read the document as a
   Tufte article): #9 owns the page these things sit in — layout,
   navigation, margin notes, the video rule, and the reading views'
@@ -155,26 +163,46 @@ hurried one, and that costs the reader nothing in privacy to enjoy.
   matches no `.egg` block in that chapter, when the article renders, then
   the marker's label appears as ordinary text, nothing at that point is
   clickable, no entry is created in the tray, and the Konami reveal does
-  not count it. The rest of the chapter renders unchanged.
-- Given the published article at an iPhone-width viewport, when Carol
+  not count it; and when Alice has that chapter open in the app, then the
+  sidebar lists the marker against that chapter as unresolved. The rest
+  of the chapter renders unchanged. (Negative case.)
+- Given a `::: {.egg #lantern label="✦"}` block that no inline marker in
+  that chapter names, when the article renders, then the block's content
+  appears nowhere in the flow, nothing is added to the tray, and the
+  sidebar lists the block against that chapter as unresolved for Alice to
+  find. (Negative case.)
+- Given a document of four chapters where the second chapter's first
+  block is `::: {.opening once="per-browser"}`, when Bob opens the
+  article, then no quotation is shown over the page: the opening belongs
+  to the first chapter's first block alone, and the sidebar lists the
+  misplaced block against that chapter. (Negative case.)
+- Given the published article at iPhone width (390 CSS px), when Carol
   opens a mark, then the panel fits the width of the viewport with no
   horizontal scrolling and no pinch zoom, and closing it returns her to
   the paragraph she was reading with the tray still reachable by
-  scrolling.
+  scrolling; and at iPad width (820 CSS px) and desktop width (1280 CSS
+  px) the panel opens beside the text with nothing wider than the
+  viewport.
 - Given one chapter carrying an opening quotation and three eggs, when
-  the deck and the PDF are produced from it, then the deck contains
-  neither the quotation nor any egg or its content, and the PDF carries
-  the quotation as an epigraph on its first page and each egg's content
-  as a static aside.
+  the deck is produced from it, then the deck contains neither the
+  quotation nor any egg or its content. The same criterion binds against
+  the paper from phase 6, when it exists to be compared: the paper then
+  carries the quotation as an epigraph on its first page and each egg's
+  content as a static aside.
 - Given Bob has dismissed the quotation and collected two marks, when the
   published site is inspected, then nothing about his reading is held
   outside his own browser and no request carries it anywhere; and when
   that browser's storage is cleared, then the page returns to its
   first-visit state with the quotation shown and the tray empty.
-- Inherits: Nothing is stored about a reader; Legible on three device
-  classes; The renderings agree; One source, always; Degrade gracefully
-  in a plain tool; Network only on publish; Variant fidelity, from the
-  phase it binds.
+- Inherits: nothing is stored about a reader (`itd-2609051336145770`);
+  legible on three device classes (`itd-2609051336128348`), at 390, 820,
+  and 1280 CSS px; the renderings agree (`itd-2609051336130664`); one
+  source, always (`itd-2609051336090390`); degrade gracefully in a plain
+  tool (`itd-2609051336110536`); network only on publish
+  (`itd-2609051336158553`); and variant fidelity
+  (`itd-2609051336107315`), from phase 3 where it binds — this page is a
+  rendering of an already-filtered tree, and neither a mark nor a tray
+  entry may survive from a variant it does not belong to.
 
 ## Open Questions
 

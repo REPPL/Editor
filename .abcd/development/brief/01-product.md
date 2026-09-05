@@ -26,25 +26,28 @@ projector, a tablet, or a phone, and they may be reading months later.
   Sub-sub-sections. On disk a Part is a folder, a Chapter a Markdown file,
   and the three levels below are headings two, three, and four inside it.
   Numeric filename prefixes give the order. The structure is the file
-  system, so it is editable with any tool. A flat single-file manuscript
-  splits into this shape on import; a single-chapter document is a folder
-  with one file.
+  system, so it is editable with any tool. Every chapter lives inside a
+  Part: a flat single-file manuscript splits into that shape on import,
+  and a single-chapter document is one Part folder with one file.
 - **Editor.** A desktop app with an HTML frontend in its web view. A
   sidebar shows the hierarchy; the Markdown is visible and is the source of
   truth. Editing uses full Emacs key bindings. An insert palette offers the
   Pandoc constructs an author cannot be expected to remember: divider,
-  columns, speaker notes, callout, variant block, video block, citation,
-  footnote, page break, easter egg, opening quotation.
-  Drag and drop for images, video links, and other files.
+  columns, speaker notes, callout, margin aside, credit, variant block,
+  variant span, video block, citation, footnote, page break, easter egg,
+  opening quotation. Drag and drop for images, video links, and other
+  files.
 - **Assets.** Small files copy beside the chapter and are referenced by
   relative path. Large ones are referenced rather than copied, recorded
-  once by content hash, and uploaded to the site on publish. A video names
+  once by content hash, and uploaded to the site on publish — through
+  object storage rather than the repository once they pass the host's
+  per-file ceiling. A video names
   its sources in order: a local file, the published copy, and, where the
   material lives elsewhere on purpose, a separate gated website that asks
   the viewer to sign in.
 - **Variants.** One text, several audiences: a block or span marked with a
   variant belongs only to that variant's renderings, each variant has its
-  own link, and no page reveals that the others exist.
+  own unguessable link, and no page reveals that the others exist.
 - **Tablet editing.** Text only, through the single HTML file: it embeds a
   text editor, imports Markdown, and exports Markdown, so the iPad, a
   borrowed machine, or a future machine with nothing installed can all
@@ -56,19 +59,23 @@ projector, a tablet, or a phone, and they may be reading months later.
   tables, numbered references, contents, and page numbers, rendered by
   Typst in the publish pipeline rather than the app. Slides: a web
   presentation whose default is the hierarchy — a Section's headline is a
-  slide and its text the speaker notes, a Sub-section hangs beneath it, and
-  every image becomes a slide of its own — shaped further by constructs
-  written in the same text. All three share footnotes and native
-  bibliography references from a bibliography file beside the document.
+  horizontal slide and its text the speaker notes, a Sub-section is a
+  vertical slide beneath it, a Sub-sub-section folds into that slide's
+  notes, and every image becomes a slide of its own — shaped further by
+  constructs written in the same text. All three share footnotes and
+  native bibliography references from a bibliography file beside the
+  document.
 - **Publishing.** One action through one production system: Editor builds
   the renderings, commits them under the document's stable id, pushes to
   the production GitHub repository, and hands Alice the link. Cloudflare
   Pages deploys the site: a public presenter page plus every published
   document. The stable link shows the latest version; each publish also
   keeps its own versioned link. Per document, one flag chooses unlisted or
-  gated. The pipeline renders the PDF beside the document.
-- **Single file.** The local alternative: one HTML file with the article and the deck,
-  every asset (large media excepted), and the editor embedded.
+  gated, and the pipeline applies the gate. The pipeline renders the PDF
+  beside the document.
+- **Single file.** The local alternative: one HTML file carrying one
+  variant of the document — the article and the deck, every asset (large
+  media excepted), and the editor embedded.
 - **Annotations.** A sidecar file per chapter holds highlights, notes,
   reviewed marks, and rehearsal decks. Private by default; the author can
   load anyone's file and publish it as a public layer.
@@ -126,10 +133,8 @@ still genuinely an assumption.
 | CodeMirror is the editing surface in both the app and the single file | One editor build for both, and its keymap is the candidate named in the constraints | Confirmed or replaced by the spike |
 | A hardware keyboard on the iPad gives the same bindings in Safari | The tablet path is the single file opened in Safari | The spike, on the tablet target |
 | Interactive elements degrade to static content the PDF can print | One source must print sensibly | Per-element fallback specified with the article |
-| Document metadata lives in a YAML file at the document root | Chapters stay pure Markdown; every tool still reads them | Open question in [`03-evidence.md`](03-evidence.md) |
-| The stable id is long enough that guessing it is not a threat | Unlisted documents rely on it, gated ones do not | Open question: id and hash length |
-| Editor pushes with the author's existing git setup and holds no token | Nothing to store, nothing to leak | Open question: confirm with the first publish |
-| The presenter and the renderers are maintained once in the production repository and shared by every document | One place to fix a bug in the reading experience | Open question: confirm against versioned output |
+| The stable id and each variant's path token are long enough that guessing them is not a threat | Unlisted documents rely on them, gated ones do not | Open question: id, token, and hash length |
+| Editor pushes with the author's existing git setup and holds no token of its own | Nothing for the app to store, nothing for it to leak; the pipeline holds the storage and access secrets | Open question: confirm with the first publish |
 | Sidecar annotations re-attach after edits from a quoted excerpt plus a position | The maintainer's own reading app does this already | Anchor format, open in [`03-evidence.md`](03-evidence.md) |
 | Byte-fidelity on round trip is achievable through one parser and one serialiser | The acceptance project makes it a hard criterion | Proven by the round-trip discipline's tests |
 | reveal.js drives the deck on the presenter site, and a dependency-free build drives it inside the single file | The slide prototype proves both, and a CDN is unacceptable offline | Confirmed with the first published deck |

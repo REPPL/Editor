@@ -65,7 +65,8 @@ own browser.
   fight it, because the layout folds by width alone (`03-evidence.md`:
   "margin notes work on all three device classes with CSS alone"), so
   changing the measure re-runs the same fold the device width would have
-  run. Falsifiable: set the widest measure at iPad width and look for a
+  run. Falsifiable: set the widest measure at iPad width (820 CSS px) and
+  look for a
   margin note overlapping the text.
 - We expect no reader state to leave the page, because the site is static
   output deployed from the production repository (`05-internals.md`
@@ -78,9 +79,13 @@ own browser.
 - Bundle: this intent belongs to the bundle **The article** (phase 2) with
   map #9, `itd-2609051335489928`, "Read the document as a Tufte article".
   One spec covers both: the page and the reader's control over it.
-- Platform: current browsers at iPhone, iPad, and desktop widths, wherever
-  the article renders — the presenter site and the desktop app's preview
-  now, the single HTML file when map #17 ships.
+- Platform: current Safari and Chromium engines at iPhone, iPad, and
+  desktop widths — 390, 820, and 1280 CSS px — wherever the article
+  renders: the presenter site and the desktop app's preview now, and the
+  single HTML file from phase 5, where the controls travel with the file
+  and remember per browser against that file. Where a browser makes
+  storage unavailable, the controls still work for the visit and simply
+  do not persist.
 - Population: Bob and Carol reading a published document, and Alice
   reading her own draft with the same controls. There is no author-facing
   setting in this moment.
@@ -118,27 +123,42 @@ own browser.
   the recording is read, then no request carries a preference, and the
   same article opened in a second browser on the same machine renders at
   the defaults.
-- Given the article at an iPhone width of 390 CSS pixels, when Carol sets
-  the largest text size and the wide measure together, then the page
-  scrolls vertically only and no element is wider than the viewport.
+- Given the article at iPhone width (390 CSS px), when Carol sets the
+  largest text size and the wide measure together, then the page scrolls
+  vertically only and no element is wider than the viewport; and the same
+  holds at iPad width (820 CSS px) and desktop width (1280 CSS px).
 - Given a chapter whose paragraphs carry citations and `.credit` blocks,
-  when Bob changes the measure at desktop width, then every margin note
-  stays level with the block it belongs to and none overlaps the text
-  column.
+  when Bob changes the measure at desktop width (1280 CSS px), then every
+  margin note stays level with the block it belongs to and none overlaps
+  the text column.
+- Given the same article inside the exported single HTML file, opened
+  from disk with the network switched off, when Carol chooses the dark
+  theme and the larger text and reopens the file in that browser, then
+  the toolbar offers the same three controls and the same reset, and her
+  choices are still in force. (The file remembers per browser and per
+  file, so a second copy of the file opens at the defaults.)
 - Given a browser in which stored preferences are unavailable or have
   been cleared, when Carol changes a control, then the change applies for
   that visit, the page renders at the defaults on the next load, and no
   error is shown.
-- Inherits: nothing is stored about a reader; legible on three device
-  classes; one source, always.
+- Inherits: nothing is stored about a reader (`itd-2609051336145770`);
+  legible on three device classes (`itd-2609051336128348`), at 390, 820,
+  and 1280 CSS px; one source, always (`itd-2609051336090390`); and, from
+  phase 3 where it binds, variant fidelity (`itd-2609051336107315`) — no
+  control in this toolbar names, offers, or hints at a variant.
 
 ## Open Questions
 
 - Which navigation chords the reading views share with the editor
-  (`03-evidence.md`, open questions, "Editor"). Until that list exists,
-  whether the toolbar is reachable and operable without a pointer is
-  undecided. `03-evidence.md` leaves no other question open for the
-  reader controls: it records them as proven by the article prototype.
+  (`03-evidence.md`, open questions, "Editor"). Reaching and operating
+  this toolbar without a pointer belongs to map #26,
+  `itd-2609051402083398` (Move through the article by keyboard), which is
+  where that list is settled; what the toolbar holds is settled here.
+  `03-evidence.md` leaves no other question open for the reader controls:
+  it records them as proven by the article prototype.
+- Whether a reader's choices should follow the document or the browser
+  when the same document is read at a link and again from a single file
+  she was sent. Each is its own origin, so today she sets them twice.
 
 ## Audit Notes
 

@@ -90,8 +90,9 @@ rustup component add rustfmt clippy
 npm install
 ```
 
-Xcode command line tools and Pandoc are also required; Pandoc and Typst are
-used by the publish pipeline, not by the app.
+Xcode command line tools are also required. Typst is used by the publish
+pipeline, not by the app; Pandoc is a development convenience for
+converting source documents into examples and is not part of the pipeline.
 
 ### Frontend
 

@@ -38,24 +38,29 @@ document model, publishing, the PDF engine, and annotations.
 
 ### Phase 1 — Slides for a talk
 
-The first usable slice, because a talk has a date. Alice opens a chapter
-folder, edits it with the bindings, drops in an image, presses Present, and
-publishes an unlisted link she can open from the lectern.
+The first usable slice, because a talk has a date. Alice starts a document
+or opens one, edits it with the bindings, drops in an image, presses
+Present, and publishes an unlisted link she can open from the lectern.
 
-Includes: the folder and the sidebar; the editing surface and the binding
-table; the insert palette for the slide constructs; the copied-asset drop
-path only; the default slide mapping and the authored constructs; the deck
-running locally and on the presenter site; publish with a stable id and a
-version hash, unlisted, default variant.
+Includes: starting a document; the folder and the sidebar; the editing
+surface, the binding table, and the explicit save; the insert palette
+seeded with the slide constructs — divider, columns, speaker notes,
+credit, page break; the copied-asset drop path with conversion; the
+default slide mapping and the authored constructs; the deck running
+locally and on the presenter site; publish with a stable id, a variant
+token, and a version hash, with the flag recorded as unlisted; the publish
+log.
 
 Excludes: the threshold and referenced assets, gated video sources, the
-article, citations, variants, the PDF, the single file, annotations.
+article, citations and the credit lines they supply, variants, the PDF,
+the single file, annotations.
 
 ### Phase 2 — The article
 
-The rendering that must be perfect. The Tufte page with navigation, margin
-notes, images and video in the flow, and the three device widths; the
-reader controls; citations and footnotes against the bibliography file,
+The rendering that must be perfect. The Tufte page with its contents,
+margin notes, images and video in the flow, and the three device widths;
+the reader controls; moving through the page by keyboard; the callout and
+the margin aside; citations and footnotes against the bibliography file,
 with generated reference lists; then the once-only quotation and the easter
 eggs.
 
@@ -68,10 +73,11 @@ harness that proves no rendering path rewrites the source.
 
 ### Phase 4 — Assets at scale
 
-The threshold, referenced assets recorded by content hash against a named
-root, de-duplication, conversion of phone-native images, and the ordered
-video source list including a gated source. This is the phase the
-acceptance project's 2.5 GB exists to break.
+The threshold and the asset-root settings, referenced assets recorded by
+content hash against a named root, de-duplication, the upload of every
+referenced asset on publish — through object storage above the host's
+per-file ceiling — and the ordered video source list including a gated
+source. This is the phase the acceptance project's 2.5 GB exists to break.
 
 ### Phase 5 — The single file
 
@@ -82,15 +88,16 @@ into the desktop app with every asset reference still resolving.
 
 ### Phase 6 — Publish in full
 
-Per-variant links under one id, the gated flag with its allow-list, the
-publish log, and the journal PDF rendered by Typst in the pipeline and
-offered beside each version.
+Per-variant links under one id, the gated flag with the allow-list the
+pipeline applies, taking a document off the site, and the journal PDF
+rendered by Typst in the pipeline and offered beside each version.
 
 ### Phase 7 — Annotations and layers
 
-Sidecar annotations with anchors that survive edits; reader annotations in
-the browser with export; loading someone's file and publishing it as a
-public layer; rehearsal decks in flip and scored modes.
+Sidecar annotations with anchors that survive edits and are reported as
+orphaned rather than guessed at; reader annotations in the browser with
+export and import; loading someone's file and publishing it as a public
+layer; rehearsal decks in flip and scored modes.
 
 ## Definition of done for a phase
 
@@ -100,10 +107,13 @@ A phase is done when all of the following hold:
    real document rather than a fixture.
 2. The build, the full test run, and the lint command all pass, and the
    commands in `AGENTS.md` are the ones that were run.
-3. The disciplines hold across the phase: round-trip byte-fidelity, no
-   absolute path in any document folder, one source with no second copy of
-   the text, every extension still readable by a plain Markdown tool, and
-   every rendering legible at iPhone, iPad, and desktop widths.
+3. Every discipline binding in the phase holds across it: round-trip
+   byte-fidelity, no machine in the document, one source with no second
+   copy of the text, every extension still readable by a plain Markdown
+   tool, every screen rendering legible at the three fixed widths, the
+   renderings agreeing, nothing stored about a reader, network only on
+   publish, variant fidelity from phase 3, and orphaned annotations
+   reported rather than guessed at from phase 7.
 4. The phase's renderings agree with each other on the same source:
    citations, footnotes, and variant filtering give the same answer
    everywhere they appear.
@@ -120,12 +130,17 @@ Not built, and not to be designed around:
 - **Collaboration.** One author. Concurrent edits from two devices are not
   supported: the last write wins and the app says so.
 - **Cloud sync.** No server, no account, no background network. The network
-  is touched by the publish action alone.
+  is touched by a publish Alice started, and by nothing else.
 - **A standalone tablet app.** The tablet path is the single HTML file in
   Safari with a hardware keyboard.
 - **WYSIWYG editing.** The Markdown is visible and is the source of truth.
 - **Alternative key binding sets.** Emacs bindings are the one set.
-- **Author themes.** One built-in article style and one deck theme.
+- **Author themes.** One built-in article style and one deck theme. The
+  reader's light, dark, and sepia are three palettes of that one style,
+  not themes an author chooses.
+- **A local export of the renderings as files.** The single HTML file is
+  the local artefact; there is no folder of article and deck files to
+  serve.
 - **Hosting or transcoding video.** Video is linked; the site carries only
   what publish uploads.
 - **Assets reachable from anywhere for editing away from the computer.**

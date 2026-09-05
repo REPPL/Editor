@@ -72,7 +72,10 @@ holding the document without a second tool or an account.
   held to the three device classes, and the reading views share the
   editor's navigation vocabulary — next, previous, and one cancel chord
   that closes whatever is open — so a deck needs no controls of its own
-  invention (`03-evidence.md`, the keyboard-navigation prototype).
+  invention (`03-evidence.md`, the keyboard-navigation prototype). That
+  vocabulary is map #26's, `itd-2609051402083398` (Move through the
+  article by keyboard), which this moment consumes: a deck that had to
+  name a chord #26 does not would show the shared set is incomplete.
 - We expect a score to need no storage anywhere, because it is a count
   held for the sitting: the site keeps nothing about a reader, and a
   reader's own state leaves their browser only as a file they export
@@ -82,7 +85,8 @@ holding the document without a second tool or an account.
 
 - Platform: the deck is built in the desktop app from one chapter, and
   runs wherever the article's script runs — the app and the published
-  page — at desktop, iPad, and iPhone widths.
+  page — at desktop, iPad, and iPhone widths, which are 1280, 820, and
+  390 CSS px.
 - Population: Alice builds and runs a deck from her own document; Carol
   runs a deck that reaches her with a document she has been given. Bob
   is not involved in this moment.
@@ -95,8 +99,8 @@ holding the document without a second tool or an account.
 - Boundary with map #22, itd-2609051336025064: 22 owns the sidecar file,
   the anchor model, and how an anchor behaves when the chapter is
   edited. 25 owns generating cards from headings and running them in two
-  modes; its cards are `card` entries in 22's schema and add no new
-  anchor behaviour.
+  modes; its cards live in 22's sidecar beside the other marks and add no
+  new anchor behaviour.
 - Boundary with map #5, itd-2609051335447894: 5 turns headings into
   slides for an audience by the default mapping; 25 turns headings into
   cards to test one person's recall. The artefacts are different and
@@ -105,26 +109,38 @@ holding the document without a second tool or an account.
 - Boundary with map #24, itd-2609051336040242: getting a deck to a
   reader means publishing a sidecar as a layer, which 24 owns. 25 owns
   what a deck is and how it runs once it is in front of someone.
-- Excluded plumbing: card generation from the heading tree, and session
-  scoring, both of which live in `05-internals.md` section 7.
+- Boundary with map #26, itd-2609051402083398 (Move through the article
+  by keyboard): 26 owns the reading views' chords — next, previous,
+  search, and cancel — and the panel that lists them. 25 owns the cards
+  and the two modes, and moves by the chords 26 settles rather than
+  declaring any of its own.
+- Excluded plumbing: card generation from the heading tree, session
+  scoring, and the sidecar's schema — its field names and shape — all of
+  which live in `05-internals.md` section 7. Every criterion below is
+  written against what Alice or Carol can observe: how many cards there
+  are, what is on their faces, what the orphan list shows, and what the
+  chapter's bytes are.
 
 ## Acceptance Criteria
 
 - Given a chapter with 4 Sections, 12 Sub-sections, and 30
   Sub-sub-sections, when Alice builds a deck at the Sub-sub-section
-  level, then the chapter's sidecar gains 30 entries with
-  `"kind": "card"`, each carrying the heading `path` it was made from,
-  and the chapter's Markdown file is byte-identical to before.
+  level, then the deck holds 30 cards, one for each of those headings and
+  none for a heading at another level, every card's front is its heading
+  and its back the text beneath it, the cards are kept in that chapter's
+  one sidecar beside its other marks, and the chapter's Markdown file is
+  byte-identical to before.
 - Given a heading with no text between it and the next heading, when the
   deck is built, then that heading yields a card marked as having no
   back, and it does not take the following heading's text as its answer.
 - Given a Section containing `::: {.notes}` speaker notes and a
   `::: {.columns}` block, when the deck is built, then neither the notes
   nor the column markup appears on any card back.
-- Given Carol running the deck in flip mode at an iPhone width of 390
-  CSS pixels, when she taps a card, then it turns to show the back, next
-  and previous move both by swipe and by the reading views' navigation
-  chords, and nothing scrolls sideways or needs pinch zoom.
+- Given Carol running the deck in flip mode at iPhone width (390 CSS px),
+  when she taps a card, then it turns to show the back, next and previous
+  move both by swipe and by the reading views' navigation chords, and
+  nothing scrolls sideways or needs pinch zoom; and the same holds at
+  iPad width (820 CSS px) and desktop width (1280 CSS px).
 - Given Carol running the deck in scored mode, when she has marked ten
   cards right or wrong and reaches the end, then the sitting's score is
   shown; and when she reloads the page, the deck starts unscored and
@@ -133,15 +149,19 @@ holding the document without a second tool or an account.
 - Given a deck already built, when Alice rewrites the text under one
   heading and deletes another heading entirely, then reopening the deck
   shows the new text on the first heading's card and lists the second
-  heading's card as orphaned with its heading `path`, rather than
-  dropping it.
+  heading's card as orphaned, naming the heading it was made from, rather
+  than dropping it or taking the next heading as its front. (Negative
+  case.)
 - Given a chapter carrying a deck as well as highlights and notes, when
-  Alice deletes the deck, then every `card` entry is gone from the
-  sidecar and every `highlight`, `note`, and `reviewed` entry is
-  unchanged.
-- Inherits: nothing is stored about a reader; round-trip byte-fidelity;
-  one source, always; legible on three device classes; network only on
-  publish.
+  Alice deletes the deck, then no card remains against that chapter and
+  every highlight, note, and reviewed mark is exactly as it was.
+- Inherits: nothing is stored about a reader (`itd-2609051336145770`);
+  round-trip byte-fidelity (`itd-2609051336074533`); one source, always
+  (`itd-2609051336090390`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; network only on
+  publish (`itd-2609051336158553`); and orphan, never guess
+  (`itd-2609051402235443`) — a card whose heading has gone is reported,
+  never re-pointed at a different heading.
 
 ## Open Questions
 

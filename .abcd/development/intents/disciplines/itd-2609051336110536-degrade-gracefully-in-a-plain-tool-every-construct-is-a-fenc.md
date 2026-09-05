@@ -16,18 +16,24 @@ production_mode: dictated-and-formatted
 
 ## Rule
 
-Every extension is a fenced div with attributes, a heading or image
-attribute, or an HTML comment. A plain Markdown reader reads past it, the
-prose around it stays intact, and no content is lost.
+Every extension is written in one of five forms: a fenced div with
+attributes, a heading attribute, an image attribute, a bracketed span
+attribute, or an HTML comment. Pandoc's own citations and footnotes are
+not extensions and are always permitted. A plain Markdown reader reads
+past every construct, the prose around it stays intact, and no content is
+lost.
 
 ## Forbids
 
 - A bespoke lightweight syntax: a new inline delimiter, a pipe-separated
-  directive line, a `Video:` convention, or any form that needs a parser
-  extension beyond attributes, fenced divs, and comments.
+  directive line, a `Video:` convention, or any form outside the five —
+  fenced divs with attributes, heading attributes, image attributes,
+  bracketed span attributes, and HTML comments.
 - Meaning carried outside the text: a heading heuristic, a positional CSS
-  selector, a filename convention, or a script that wires content the
-  Markdown does not name.
+  selector, content wired by filename convention, or a script that
+  supplies content the Markdown does not name. Ordering by numeric
+  filename prefix is not this: the order is the one thing a filename is
+  allowed to say, and it says it to every tool, not only to Editor.
 - A construct whose content disappears in a plain reader, or whose
   markers break the paragraph they sit in.
 - Metadata in a form a plain tool cannot skip, in place of front matter
@@ -59,16 +65,21 @@ phase 3, the video block in phase 4.
   inline delimiter, or a directive line with its own separator — When it
   is offered for the canon, Then it is refused, however convenient it
   reads.
+- Given a chapter carrying `[@smith2020, p. 4]`, `^[an inline note]`, and
+  `[a remark]{.margin}`, When it is measured against this discipline, Then
+  all three pass: two are Pandoc's own syntax and the third is one of the
+  five forms.
 - Given a chapter edited in another Markdown tool and saved, When Editor
   reopens it, Then every construct still parses and no attribute has been
   lost.
 
 ## Why
 
-`02-constraints.md` locks the canon in these words: "Every extension is a
-fenced div with attributes, a heading attribute, or an HTML comment, so
-Emacs, Pandoc, and any plain renderer read the file and degrade
-gracefully." The evidence for the cost of the alternative is the
+`02-constraints.md` locks the canon in these words: "Every extension is
+written in one of five forms — a fenced div with attributes, a heading
+attribute, an image attribute, a bracketed span attribute, or an HTML
+comment — so Emacs, Pandoc, and any plain renderer read the file and
+degrade gracefully." The evidence for the cost of the alternative is the
 acceptance project, where interactivity "lives in a hand-built reading
 app, not in the Markdown" and "every video, transcript, and PDF is wired
 from JavaScript by filename convention, not from the text": content that

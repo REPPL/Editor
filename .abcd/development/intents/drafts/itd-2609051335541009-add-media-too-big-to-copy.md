@@ -6,7 +6,7 @@ kind: null
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
-severity: minor
+severity: major
 impact: additive
 origin: researcher-authored
 production_mode: dictated-and-formatted
@@ -34,15 +34,19 @@ changes is whether the document folder gains a copy.
 
 She drops the same video again the next day, from a different folder.
 Editor recognises it by its content and records nothing new: one asset,
-two references to it. She drags in eighty photographs straight off her
-phone. Each is converted to a web format on the way in, each reference
-points at the conversion, and each record remembers the format it came
-from.
+two references to it. Beside each chapter the sidebar says how many assets
+it draws on, so she can see at a glance which chapter is carrying the
+weight, and it says plainly when one of them cannot be found where the
+root points.
 
-When she publishes, every referenced asset uploads once and every
-rendering links to that single copy. Until then the document is still a
-folder of plain files she can carry to another machine: it names roots,
-never drives, so nothing inside it says where her media lives.
+When she publishes, every referenced asset goes up once and every
+rendering links to that single copy. The ones a repository can carry
+travel with the document; the half-gigabyte video is too large for that
+and goes straight to the site's own storage under the document's id,
+without Editor ever holding a credential for it. Until then the document
+is still a folder of plain files she can carry to another machine: it
+names roots, never drives, so nothing inside it says where her media
+lives.
 
 ## Why This Matters
 
@@ -76,11 +80,16 @@ unusable.
   shows the cost of the alternative: root-relative paths into two
   different asset trees and a percent-encoded folder path containing a
   space (03-evidence.md).
-- We expect the drop to be the right moment to convert a phone-native
-  photograph because the acceptance project holds about 80 of them
-  alongside conversions twice their size (03-evidence.md): converting
-  later means keeping both, and not converting at all means the
-  renderings cannot show them.
+- We expect the upload to belong to this moment rather than to the
+  publish action because it is the threshold that creates it: an asset
+  the document folder does not carry has to reach the site some other
+  way, and which way depends on its size. Below the host's per-file
+  ceiling it travels with the document; above it — which is where the
+  acceptance project's six videos of 150 to 512 MB sit — it goes to the
+  site's object storage under the document's id, uploaded by the publish
+  pipeline with a credential Editor never holds. Falsifiable: publish a
+  document with one asset of each kind and ask for both at their
+  addresses.
 - We expect this to cost Alice nothing at the moment of dropping because
   the gesture, the reference that lands, and the cursor in the caption
   are identical above and below the threshold (04-surfaces.md section 2);
@@ -88,10 +97,17 @@ unusable.
 
 ## Scope Conditions
 
-- Platform: the desktop app alone. Hashing, de-duplication, conversion,
-  and resolving a root name to a place on the machine belong to the shell
-  (05-internals.md section 5). The single HTML file adds no assets at
-  all, so nothing in this moment happens there.
+- Platform: the desktop app for the drop and the record, and the publish
+  pipeline for the upload. Hashing, de-duplication, and resolving a root
+  name to a place on the machine belong to the shell (05-internals.md
+  section 5). The single HTML file adds no assets at all, so nothing in
+  this moment happens there.
+- Excluded as plumbing: the asset record's schema and field names, the
+  hashing algorithm, and the storage call the pipeline makes
+  (05-internals.md sections 5, 6, and 8). Every criterion below is
+  written against what Alice or a reader can observe — what the folder
+  holds, what the sidebar says, what a rendering resolves to, and what
+  answers at an address — rather than against a field in a file.
 - Population: Alice, the author, at her desk with her media reachable.
   Bob and Carol are not present; they meet the result inside a rendering.
 - Assumption: the threshold is one per-document setting whose default is
@@ -102,11 +118,18 @@ unusable.
   there.
 - Boundary with map #4, itd-2609051335420536, "Drop an image and have it
   just work": #4 owns the drop below the threshold — the copy beside the
-  chapter, the relative reference, and de-duplication among copied files.
-  In for this intent: everything the threshold turns on — the referenced
-  mode, the named root, conversion on the way in, and the single copy the
-  site will hold. Out: the gesture itself, the reference at the drop
-  point, and the cursor in the caption, which #4 owns.
+  chapter, the relative reference, de-duplication among copied files, and
+  conversion of a phone-native image, which belongs to the drop at any
+  size and is therefore #4's on both sides of the threshold. In for this
+  intent: everything else the threshold turns on — the referenced mode,
+  the named root, the record, the single copy the site will hold, and the
+  upload that puts it there. Out: the gesture itself, the reference at
+  the drop point, and the cursor in the caption, which #4 owns.
+- Boundary with map #27, itd-2609051402126424, "Set the size threshold and
+  name an asset root": 27 owns Alice choosing the number and naming the
+  root, and what happens when a named root has no local answer on this
+  machine. This intent owns what the threshold and the root then do to a
+  drop, to the record, and to the publish.
 - Boundary with map #16, itd-2609051335568936, "Point a video at several
   sources, one behind a sign-in": in for this intent is where a file
   lives and what is recorded about it. Out: the order in which a
@@ -117,58 +140,82 @@ unusable.
   an asset too large to embed. Out: embedding, offline behaviour, and the
   degradation to a poster and a link, which #17 owns.
 - Boundary with map #7, itd-2609051335468596, "Publish and get a link I
-  can open from the lectern": in for this intent is the record naming
-  where the published copy will sit. Out: the publish action that uploads
-  it, which #7 owns.
+  can open from the lectern": #7 owns the publish action, the id, the
+  version, and the link. In for this intent is what that action does with
+  referenced assets — that each one goes up exactly once, that a file
+  above the host's per-file ceiling goes to the site's object storage
+  under the document's id rather than through the repository, and that
+  every rendering then points at the one copy. Editor holds no credential
+  for that storage; the pipeline holds it.
 
 ## Acceptance Criteria
 
 - Given a document whose threshold is 8 MB and a 512 MB video file under
   an asset root named `media`, When Alice drags that file onto an open
-  chapter, Then no copy of it appears anywhere in the document folder,
-  the asset record gains one entry with `mode: referenced`, its content
-  hash as `id`, `kind: video`, `root: media`, and a path beneath that
-  root, and a `::: {.video poster="…" caption="…"}` block naming that
-  asset as its `local` source appears at the drop point.
-- Given the same document, When Alice drags a 240 KB photograph onto the
-  same chapter, Then the file is copied into that chapter's `assets/`
-  folder, its record reads `mode: copied` with a path relative to the
-  chapter, and an `![](assets/…)` reference appears at the drop point:
-  the size decides the mode, not the kind of file.
+  chapter, Then the document folder is no larger than it was — no copy of
+  the video appears anywhere inside it — a video block naming that file
+  appears at the drop point, and the chapter's preview plays it from
+  where it sits.
 - Given a referenced video already recorded, When Alice drags the
-  byte-identical file onto another chapter from a different folder, Then
-  no second record is written, the existing `id` is reused, and a second
-  video block pointing at that same asset appears at the new drop point.
-- Given a photograph in a phone-native format below the threshold, When
-  Alice drops it, Then the reference written into the chapter points at a
-  web-format conversion rather than at the original, and the record
-  carries `converted_from` naming the format it came from.
+  byte-identical file onto another chapter from a different folder under
+  a different name, Then the document folder still holds no copy, no
+  second asset is recorded, and both chapters' video blocks resolve to
+  the same file on disk.
+- Given a chapter drawing on three referenced assets and two copied ones,
+  When Alice looks at the sidebar, Then that chapter's row says it
+  carries five assets, and the count changes when she adds or removes a
+  reference.
 - Given a document folder after any number of drops, When every file in
-  it is read, Then none of them contains an absolute path, a host name,
-  or a user name: a referenced asset names a root and a path beneath it,
-  a copied asset names a path relative to its chapter, and the folder
-  opens unchanged on a machine where that root resolves elsewhere.
+  it is read, Then none of them names Alice's machine: no absolute local
+  path, no home directory name, no user name, and no local volume or
+  share name. A referenced asset names a root and a path beneath it, a
+  copied asset names a path relative to its chapter, and the folder opens
+  unchanged on a machine where that root resolves somewhere else. (Links
+  to the published site and the address of a gated video are the
+  document's own record and are not machine names.)
 - Given a chapter whose referenced video is absent from the place its
   root resolves to, When Alice opens that chapter, Then the sidebar
   reports that asset as unresolved beside the chapter, the chapter's text
   is untouched, and no request leaves the machine to look for the file.
+  (Negative case.)
+- Given a document with one referenced asset below the host's per-file
+  ceiling and one 512 MB video above it, When Alice publishes, Then each
+  is uploaded exactly once, the published article, deck, and paper all
+  link to that one copy rather than carrying their own, the large video
+  is served from the site's own storage under the document's id, and
+  republishing the same document without changing either asset uploads
+  neither of them again.
+- Given the same publish, When Alice's machine is examined for what it
+  holds, Then Editor stores no credential for the site's storage: the
+  upload is performed by the publish pipeline with a secret Editor never
+  sees and never asks her for.
 - Given a chapter carrying a referenced photograph, When the article is
-  read at iPhone width, Then the image fits within the measure and
-  nothing on the page scrolls sideways or needs pinch zoom.
-- Inherits: no machine in the document; network only on publish; one
-  source, always; round-trip byte-fidelity; degrade gracefully in a plain
-  tool; legible on three device classes.
+  read at iPhone width (390 CSS px), at iPad width (820 CSS px), and at
+  desktop width (1280 CSS px), Then the image fits within the measure at
+  every one of the three widths and nothing on the page scrolls sideways
+  or needs pinch zoom.
+- Inherits: no machine in the document (`itd-2609051336080960`); network
+  only on publish (`itd-2609051336158553`); one source, always
+  (`itd-2609051336090390`); round-trip byte-fidelity
+  (`itd-2609051336074533`); degrade gracefully in a plain tool
+  (`itd-2609051336110536`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px.
 
 ## Open Questions
 
 - What the default size threshold between copied and referenced assets is
   (03-evidence.md, open questions, "Assets": "The default size threshold
-  between copied and referenced assets").
-- Whether the referenced-asset manifest is per document or per Part
-  (03-evidence.md, open questions, "Assets").
-- What happens when conversion of a phone-native image is unavailable: a
-  placeholder, a refusal, or the original left in place (03-evidence.md,
-  open questions, "Assets").
+  between copied and referenced assets"). Alice can change it — map #27,
+  itd-2609051402126424, owns that — but what she finds there before she
+  does still decides which side an ordinary drop falls on, and the
+  copied-versus-referenced boundary between this intent and map #4 rests
+  on that number.
+- Whether the referenced-asset record is per document or per Part
+  (03-evidence.md, open questions, "Assets"), which also decides whether
+  a root is named once for the document or once per Part.
+- How a video block's `local` item names a referenced asset rather than a
+  path relative to the chapter. The canon allows both and gives a form
+  for only one of them.
 
 ## Audit Notes
 

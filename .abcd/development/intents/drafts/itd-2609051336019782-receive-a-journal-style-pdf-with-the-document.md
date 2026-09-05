@@ -50,11 +50,13 @@ Print is a different reading, and a web page pressed through a browser's
 print dialogue is not it: the tables break, the footnotes migrate, and
 the references lose their numbers. Today the only way to get a proper
 printed artefact out of a document like Alice's is a hand-maintained
-preamble and a build command nobody committed — 03-evidence.md records
-exactly that of the acceptance project: "The source relies on three
-page-break HTML comments that a LaTeX preamble turns into page breaks. No
-build command is committed; the PDF route survives only as that
-preamble." A rendering that arrives with every publish, from the same
+preamble and a build command nobody committed. 03-evidence.md records it
+of the acceptance project as "three page-break comments honoured by a
+print preamble, with no committed build command"; the research note
+`2026-09-05-acceptance-project-review.md` sets it out at length: "The
+source relies on three page-break HTML comments that a LaTeX preamble
+turns into page breaks. No build command is committed; the PDF route
+survives only as that preamble." A rendering that arrives with every publish, from the same
 text, is the difference between a printable document and a document
 somebody once managed to print.
 
@@ -69,13 +71,30 @@ PDF's reference list and the article's must hold the same entries in the
 same order, and any divergence is a bug in the core rather than in either
 renderer.
 
-We expect the pipeline to be the right place for it because Typst and
-Pandoc are single binaries in the build runner, and
-ADR-2609051324167479 records the alternative that was rejected for its
-cost — a TeX toolchain in CI and slower builds. Keeping the render off
-Alice's machine also means the app never needs fonts, a typesetter, or a
-second install path, so a publish from a fresh machine produces the same
-PDF as a publish from hers.
+We expect the pipeline to be the right place for it because Typst is a
+single binary in the build runner, and ADR-2609051324167479 records the
+alternative that was rejected for its cost — a TeX toolchain in CI and
+slower builds. Keeping the render off Alice's machine also means the app
+never needs fonts, a typesetter, or a second install path, so a publish
+from a fresh machine produces the same PDF as a publish from hers.
+
+We expect there to be exactly one resolver of citations in the product,
+because the core's print renderer emits references already resolved — the
+numbers, the entries, and the list — and the typesetter only sets what it
+is handed. Two resolvers would be two chances to disagree, which is the
+one thing the renderings-agree discipline forbids. The core emits the
+typesetter's source directly from the shared document model; nothing in
+the pipeline converts the text a second time. Falsifiable: the entries
+and their order in the paper and in the article must match for one
+variant, and any difference is a bug in the core.
+
+We expect the app to be able to report the render's progress without
+breaking the network rule, because the rule is that Editor touches the
+network during a publish Alice started — the upload, the push, the access
+policy, and asking that publish's pipeline how it is getting on — and
+never otherwise. The polling ends when the pipeline reports done or
+failed, or when Alice cancels; it does not run in the background of an
+ordinary editing session.
 
 We expect the deliberate difference from the article to reduce work
 rather than add it, because dropping Tufte from print "removes the
@@ -97,7 +116,14 @@ that authors already write exactly this and depend on it.
 ## Scope Conditions
 
 - Platform: the publish pipeline in the build runner, on every publish.
-  Never Alice's machine, never the app, and never a reader's browser.
+  Never Alice's machine, never the app, and never a reader's browser. The
+  app's part is to report the render's status against the version while
+  the publish Alice started is still running, and to stop when it reports
+  done or failed or she cancels.
+- Assumption: the core resolves every citation and emits the paper's
+  source with its references and reference list already resolved; the
+  typesetter sets what it is handed and resolves nothing. There is one
+  resolver in the product, and map #11, itd-2609051335502171, owns it.
 - Population: Bob and Carol read and print the PDF from the presenter.
   Alice never sees the PDF inside the app — only the render's status
   against the version.
@@ -150,6 +176,14 @@ that authors already write exactly this and depend on it.
   the PDF is rendered, then a page break falls at that point; and when
   the same chapter is rendered as the article, then nothing appears there
   at all.
+- Given a chapter carrying a pipe table with a caption and an image
+  written `![The lantern at dusk](assets/lantern.jpg "Photograph by
+  Carol"){width="75%"}`, when the PDF is rendered, then the table is set
+  as a table with every column ruled and aligned as written and its
+  caption beneath it, no row is split across a page unless the table
+  itself is longer than a page, and the image is placed at the width the
+  attribute asks for with its alt text as the caption and its title
+  attribute as the credit.
 - Given a chapter containing a `::: {.notes}` div, a `::: {.columns}` div
   with two `.column` children, and a `## Interlude {.divider}` heading,
   when the PDF is rendered, then the notes text appears nowhere in it,
@@ -175,16 +209,29 @@ that authors already write exactly this and depend on it.
   against the version, the PDF already published for an earlier version
   is untouched, and the new version's article and deck are still served.
   (Negative case.)
-- Given the presenter showing one version at an iPhone width of 390 CSS
-  pixels, when Bob reaches for the PDF, then the link sits beside the
-  article and deck links with no horizontal scrolling and no pinching,
-  and opening it hands the file to the phone's own viewer rather than
-  rendering it in the page.
-- Inherits: the renderings agree (itd-2609051336130664); variant fidelity
-  (itd-2609051336107315); one source, always (itd-2609051336090390);
-  degrade gracefully in a plain tool (itd-2609051336110536); no machine
-  in the document (itd-2609051336080960); legible on three device classes
-  (itd-2609051336128348).
+- Given the presenter showing one version at iPhone width (390 CSS px),
+  at iPad width (820 CSS px), and at desktop width (1280 CSS px), when
+  Bob reaches for the PDF, then the link sits beside the article and deck
+  links at every one of the three widths with no horizontal scrolling and
+  no pinching, and opening it hands the file to the reader's own viewer
+  rather than rendering it in the page.
+- Given the app open on a document Alice is editing and has not
+  published, when outbound network activity is observed for a full
+  session, then no request leaves the machine; and Given a publish Alice
+  has just started, when the same activity is observed, then the only
+  requests are that publish's own — the upload, the push, the access
+  policy, and asking that publish's pipeline for its status — and they
+  stop when it reports done or failed, or when she cancels.
+- Inherits: the renderings agree (`itd-2609051336130664`); variant
+  fidelity (`itd-2609051336107315`); one source, always
+  (`itd-2609051336090390`); degrade gracefully in a plain tool
+  (`itd-2609051336110536`); no machine in the document
+  (`itd-2609051336080960`); legible on three device classes
+  (`itd-2609051336128348`) — over the presenter's link and the app's
+  status at 390, 820, and 1280 CSS px, the paper itself being measured by
+  its own page rather than by a viewport; network only on publish
+  (`itd-2609051336158553`), which covers the status this moment polls
+  for.
 
 ## Open Questions
 
@@ -192,12 +239,11 @@ that authors already write exactly this and depend on it.
   build step is open in 03-evidence.md ("Publish and pipeline"). It
   decides where the status the app reports comes from, and how soon after
   a publish the link can be offered.
-- Whether the core emits Typst source directly from the shared document
-  model or the pipeline converts through Pandoc is open in
-  03-evidence.md ("Publish and pipeline"), and is also marked open in
-  05-internals.md section 4.
 - Which journal template ships — a published one or Editor's own — is
   open in 03-evidence.md ("Publish and pipeline").
+- Which of a video block's sources is the one printed beneath the poster
+  when both a site copy and a gated copy are named. The criterion above
+  fixes only that it is not the local path.
 - The exact static fallback each interactive element renders for print is
   open in 03-evidence.md ("Article and slides"). Until it is settled, the
   criteria above fix only the egg and the opening quotation.

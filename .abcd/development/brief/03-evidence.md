@@ -69,9 +69,6 @@ Questions the constraints have settled are dropped. What remains:
 
 ### Document model and canon
 
-- Where document metadata lives: a YAML file at the document root, or front
-  matter in the first chapter. The internals chapter assumes the former.
-- Whether the publish log is that metadata file or a sibling file.
 - Whether the sidebar edits structure — dragging a chapter between Parts —
   or whether structure edits stay in the file system for the first release.
 
@@ -91,40 +88,36 @@ Questions the constraints have settled are dropped. What remains:
 ### Assets
 
 - The default size threshold between copied and referenced assets.
-- Whether the referenced-asset manifest is per document or per Part.
 - What happens when conversion of a phone-native image is unavailable: a
   placeholder, a refusal, or the original left in place.
-- Which poster frame a video block uses when the author supplies none.
 
 ### Article and slides
 
 - Whether easter-egg content can itself be a variant-marked block.
 - The exact static fallback each interactive element renders for print.
-- Whether Sub-sub-sections become further vertical slides or fold into
-  their Sub-section's speaker notes.
 - The slide theme: one built-in theme, or the prototype's theme ported.
+- Whether a video carries a transcript or another text alternative, and
+  where it sits in each rendering. A moment for a later intent.
+- Whether the reading views offer full-text search across a document, as
+  distinct from the editor's in-buffer search. A moment for a later
+  intent.
 
 ### Citations
 
 - Which citation styles ship first.
 
-### Single file
-
-- Whether the single file imports and exports one chapter at a time only,
-  or can also take a whole chapter folder as an archive.
-
 ### Publish and pipeline
 
-- The length of the stable id and of the version hash.
+- The length of the stable id, of each variant's path token, and of the
+  version hash.
+- The host's per-file ceiling, above which an asset goes to object storage
+  rather than through the repository. The internals chapter states the
+  figure; the first publish confirms it.
 - Whether the PDF renders in a repository action on push or in the site
   build step.
-- Whether the core emits Typst source directly from the shared document
-  model, or the pipeline converts through Pandoc.
 - Confirmation that Editor pushes with the author's existing git setup and
-  holds no token of its own.
-- Confirmation that the presenter, the article script, and the slide engine
-  are maintained once in the production repository and shared by every
-  document, rather than copied into each published version.
+  holds no token of its own, and that the pipeline is the only holder of
+  the storage and access secrets.
 - Which Typst journal template ships: a published one or Editor's own.
 
 ### Annotations
@@ -144,6 +137,9 @@ named is the one actually considered and rejected.
 | Variants as an in-text marker | Separate files per variant, or an export-time filter driven by selectors | Every renderer and every link must honour variant selection, and the author must keep the marks correct |
 | A journal-style PDF rendered by Typst in the pipeline | Printing the Tufte article through a headless browser with paged-media CSS, or Pandoc with the Tufte LaTeX classes | A second renderer and a template to maintain, and a PDF that deliberately looks unlike the article |
 | One production system: a private GitHub repository deployed by Cloudflare Pages | Two channels — public code in git, private content uploaded straight to object storage | Assets enter a git history, which is why the repository is private |
+| Assets above the host's per-file ceiling uploaded to object storage by the pipeline, under the same document id | Pushing every asset through the repository, or dropping the promise to carry large video at all | One action still, but two stores behind it, and a storage secret the pipeline holds and the app never sees |
+| One continuous editing surface, with the Markdown always visible | A browse mode and an edit mode, switched by a chord | No reading-optimised view of the source in the app; the surface must be the same one the single HTML file carries, and it can only be one thing |
+| The single HTML file as the only local artefact | The app exporting a site folder of article and deck files | Alice cannot hand someone a folder to serve; anything local is one file or a published link |
 | A stable id with version hashes beneath it | A fresh unguessable hash on every publish, with no stable link | The stable link is a standing secret: it cannot be withdrawn without unpublishing |
 | Unlisted by default with a gate available per document | An account system, or making everything gated | Anything confidential depends on the host's access control being configured correctly |
 | Emacs bindings ported into a web editing surface | Embedding a real editor process, or writing a native editing surface | A spike, a binding table, and a fight with the platform over key combinations |

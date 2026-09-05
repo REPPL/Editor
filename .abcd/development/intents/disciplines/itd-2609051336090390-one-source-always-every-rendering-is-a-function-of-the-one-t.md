@@ -18,7 +18,9 @@ production_mode: dictated-and-formatted
 
 The text exists once. Every rendering is a function of the one parse
 tree, produced by the one core, from the chapter files the author edits;
-nothing is authored twice and no output is ever an input.
+nothing is authored twice, and no rendering is ever an input. Exported
+Markdown and annotation files are inputs by design, because they are the
+source and its sidecars travelling, not a rendering of them.
 
 ## Forbids
 
@@ -29,7 +31,9 @@ nothing is authored twice and no output is ever an input.
   written apart from the Section it comes from, a PDF abstract that is
   not the article's.
 - A rendering that carries editable text of its own, or an export that
-  round-trips through another export rather than through the source.
+  round-trips through another export rather than through the source. The
+  single HTML file edits the Markdown it embeds, not the article it
+  renders.
 - A per-host renderer with its own copy of a rule, or a host patched to
   differ from the core.
 - Structure recorded twice: an index file or an order field beside the
@@ -56,6 +60,9 @@ single file in phase 5, the PDF in phase 6.
   sentence of the document, Then the sentence is present as the embedded
   source the renderers read, and any rendered occurrence is generated
   from it at open time rather than stored beside it.
+- Given a chapter exported from the single file and re-imported into the
+  app, When the round trip completes, Then what came back was the
+  Markdown, never the article or the deck the file also rendered.
 - Given a chapter is renamed in the file system from `03-method.md` to
   `05-method.md`, When Editor reloads, Then the order changes in the
   sidebar and in all three renderings with no other file touched.

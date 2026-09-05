@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335458626
 slug: shape-the-deck-in-the-same-text
-spec_id: null
-kind: null
+spec_id: spc-2609051353425884
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -81,9 +81,10 @@ having to remember how a columns div is spelled.
 - We expect a plain tool to survive them because that is what the fenced
   div buys: `03-evidence.md` records the rejection of a bespoke dialect in
   favour of Pandoc-compatible forms, at the accepted cost of "more verbose
-  source; the author needs the insert palette to remember it". If a plain
-  Markdown conversion of a shaped chapter shows literal `:::` fences to a
-  reader, the trade did not pay.
+  source; the author needs the insert palette to remember it". The bar is
+  not that a plain tool understands the fence — it will not — but that it
+  reads past it: if a plain conversion of a shaped chapter loses a
+  paragraph, or stops before the end of the file, the trade did not pay.
 - We expect Alice to reach these forms without memorising them because
   every one of them is an entry in the insert palette, which
   `05-internals.md` names as the one place the syntax lives. The
@@ -97,54 +98,54 @@ having to remember how a columns div is spelled.
 
 ## Scope Conditions
 
-- **Bundle.** This intent is a member of the bundle *The deck*, whose
+- **Bundle.** This intent is a member of the bundle *The deck*, whose <!-- cond: cond-2609051353420101 -->
   other member is map #5 (`itd-2609051335447894`), "Present a chapter with
   no slide markup". One spec covers both halves of one rule: #5 is what
   the deck does when the author says nothing, this intent is what it does
   when they say something. Neither ships alone. The article's and the
   paper's obligation to ignore these constructs is stated once, here, for
   the whole bundle.
-- **Platform.** The desktop app on macOS — Tauri 2 with the system web
+- **Platform.** The desktop app on macOS — Tauri 2 with the system web <!-- cond: cond-2609051353425331 -->
   view — and the deck as built for the presenter site. The same constructs
   inside the single HTML file are out: map #17
   (`itd-2609051335570842`) owns that host, in phase 5.
-- **Population.** Alice, shaping her own chapter into her own talk, with
+- **Population.** Alice, shaping her own chapter into her own talk, with <!-- cond: cond-2609051353429583 -->
   Bob and Carol as the audience and, later, as readers of the same text.
   One author on one machine.
-- **Phase.** Phase 1, seeded with the slide constructs only: the
+- **Phase.** Phase 1, seeded with the slide constructs only: the <!-- cond: cond-2609051353423719 -->
   horizontal rule split, the `.divider` heading attribute, the `.columns`
   div, the `.notes` div, and the `.credit` div. `06-delivery.md` excludes
   variants, citations, the article, the PDF, the single file and
   referenced assets from this phase, so no criterion here depends on them.
-- **Boundary with map #3 (`itd-2609051335415528`), "Insert a construct I
+- **Boundary with map #3 (`itd-2609051335415528`), "Insert a construct I <!-- cond: cond-2609051353420579 -->
   cannot remember".** In: what each construct means in the deck, and that
   the palette carries an entry for each of this phase's slide constructs.
   Out: the palette itself — how it opens, how it is searched, and the
   guarantee that the canonical form arrives at the cursor with the cursor
   where the content goes. #3 owns all of that; a construct arriving in a
   later phase adds a palette entry, not a new intent.
-- **Boundary with map #9 (`itd-2609051335489928`), "Read the document as a
+- **Boundary with map #9 (`itd-2609051335489928`), "Read the document as a <!-- cond: cond-2609051353428349 -->
   Tufte article".** In: the obligation, stated here for the bundle, that
   these constructs change nothing in the article — `.columns` content
   appears in the flow, `.notes` is absent, a `.divider` heading is an
   ordinary heading, and a rule is a rule. Out: everything the article does
   render, which is #9's, in phase 2.
-- **Boundary with map #21 (`itd-2609051336019782`), "Receive a
+- **Boundary with map #21 (`itd-2609051336019782`), "Receive a <!-- cond: cond-2609051353422379 -->
   journal-style PDF with the document".** In: the same obligation for
   print — slide-only constructs do not appear in the paper. Out: the
   printed artefact, the Typst step and the template, which are #21's, in
   phase 6.
-- **Boundary with map #5 (`itd-2609051335447894`).** In: constructs that
+- **Boundary with map #5 (`itd-2609051335447894`).** In: constructs that <!-- cond: cond-2609051353424864 -->
   override or subdivide the default mapping. Out: the default mapping
   itself — Section to horizontal slide, Sub-section to vertical slide,
   image to its own slide, prose to generated speaker notes — which is #5's.
-- **Boundary with map #11 (`itd-2609051335502171`), "Cite from a
+- **Boundary with map #11 (`itd-2609051335502171`), "Cite from a <!-- cond: cond-2609051353428737 -->
   bibliography file".** In: the `.credit` div as the phase-1 way to put a
   source line at the foot of a slide. Out: resolving a citation key
   against a bibliography file and generating a reference list, which is
   #11's, in phase 2, and which supplies the same credit line from a
   different source.
-- **Assumption.** The chapter is open and the default deck already builds,
+- **Assumption.** The chapter is open and the default deck already builds, <!-- cond: cond-2609051353426648 -->
   which map #1 (`itd-2609051335399446`) and map #5 own respectively.
 
 ## Acceptance Criteria
@@ -163,25 +164,30 @@ having to remember how a columns div is spelled.
   `::: {.columns}`, then `::: {.column width="50%"}` with content, then a
   second `::: {.column width="50%"}` with content, then the closing fences
   — **when** the deck is built, **then** the two columns sit side by side
-  in the declared proportions at laptop and projector widths, and at
-  iPhone width (390 points) they stack in source order with no horizontal
-  scrolling and no pinch zoom.
+  in the declared proportions at desktop width (1280 CSS px) and at iPad
+  width (820 CSS px), and at iPhone width (390 CSS px) they stack in
+  source order with no horizontal scrolling and no pinch zoom.
 - **Given** a Section with one paragraph of prose and a `::: {.notes}` div
   holding different text, **when** Alice presents the deck, **then** the
   speaker-notes view shows the notes div's text alone, the Section's own
   paragraph is not shown as generated notes, and the notes text appears on
   no slide the audience sees.
+- **Given** a Section split by a rule into two slides, with a
+  `::: {.notes}` div written after the content of the second slide,
+  **when** Alice presents the deck, **then** the notes attach to the
+  second slide alone and the first slide keeps its own generated notes.
 - **Given** a Section holding a photograph and a `::: {.credit}` div,
   **when** the deck is built, **then** the credit renders as a line at the
   foot of that Section's slide, and it renders as a line rather than as a
   paragraph of body text.
 - **Given** a chapter carrying one of each of this phase's constructs —
-  a rule, a `{.divider}` heading, a `.columns` div, a `.notes` div, a
-  `.credit` div and a `::: {.callout kind="warning"}` — **when** the
-  chapter is converted by a plain Pandoc run with no Editor code involved,
-  **then** the output contains no literal `:::` fence and no unreadable
-  region: the columns content appears in the flow, the callout appears as
-  a block of text, and the divider heading appears as an ordinary heading.
+  a rule, a `{.divider}` heading, a `.columns` div, a `.notes` div and a
+  `.credit` div — and a copy of the same chapter with every one of those
+  constructs stripped out, **when** both are converted by a plain
+  Markdown tool that knows none of them, **then** the prose of the two
+  outputs is the same prose in the same order: no paragraph is lost, none
+  is swallowed by a construct, and the tool reaches the end of the file
+  in both cases.
 - **Given** a chapter containing `<!-- pagebreak -->` alone on a line
   inside a Section, **when** the deck is built, **then** the comment
   produces no slide break, no blank slide and no visible output anywhere
@@ -191,10 +197,15 @@ having to remember how a columns div is spelled.
   only difference is the inserted div and its surrounding blank lines: no
   paragraph elsewhere is reflowed, no character is re-escaped, and no
   table is realigned.
-- Inherits: *One source, always*; *Degrade gracefully in a plain tool*;
-  *Round-trip byte-fidelity*; *Legible on three device classes*; *No
-  machine in the document*; *Network only on publish*. From phase 2, *The
-  renderings agree* governs the ignore obligations stated above.
+- Inherits: one source, always (`itd-2609051336090390`); degrade
+  gracefully in a plain tool (`itd-2609051336110536`); round-trip
+  byte-fidelity (`itd-2609051336074533`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; no machine in
+  the document (`itd-2609051336080960`); network only on publish
+  (`itd-2609051336158553`). From phase 2, the renderings agree
+  (`itd-2609051336130664`) governs the ignore obligations stated above,
+  and from phase 3, variant fidelity (`itd-2609051336107315`) governs
+  what a shaped deck may show once the text is filtered.
 
 ## Open Questions
 
@@ -202,12 +213,18 @@ having to remember how a columns div is spelled.
   (`03-evidence.md`, open questions, "Article and slides"). Dividers,
   columns and credit lines have no appearance of their own until that is
   settled, so what a shaped slide looks like is downstream of it.
-- Whether Sub-sub-sections become further vertical slides or fold into
-  their Sub-section's speaker notes (`03-evidence.md`, open questions,
-  "Article and slides"). The answer decides what a horizontal rule splits
-  when it appears at the fourth heading level rather than inside a
-  Section.
+- Where a horizontal rule may split, now that a Sub-sub-section folds
+  into its Sub-section's speaker notes rather than becoming a slide: what
+  a rule does inside a Sub-sub-section's text, and what it does before
+  the chapter's first Section, is not yet decided.
+- What becomes of prose written beneath a `{.divider}` heading: whether
+  it feeds that slide's speaker notes or is dropped, since a section-break
+  slide shows its headline alone.
 
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: authored breaks, columns, notes, and dividers as Pandoc-compatible constructs coexist with the derived deck and are ignored by the article; wrong if the article renderer cannot cleanly skip them

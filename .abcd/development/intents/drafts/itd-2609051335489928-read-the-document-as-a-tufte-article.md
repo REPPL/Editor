@@ -18,8 +18,9 @@ supersedes: [itd-2609051221553568, itd-2609051317463033]
 
 ## Press Release
 
-Bob opens the link Alice sent him and reads. The page carries the
-document's title, a contents list drawn from the Parts and Chapters, and a
+Bob opens the link Alice sent him and reads. The whole document is one
+page: it carries the document's title, a contents list drawn from the
+Parts, the Chapters, the Sections, and the Sub-sections, and a
 generous measure with a wide margin beside it. Where Alice cited a source
 or wrote a footnote, the reference sits in that margin, level with the
 paragraph that made it, so Bob reads the note without leaving the
@@ -83,8 +84,11 @@ text.
   section 4 makes the article renderer one module of a core shared
   unchanged by the app, the single file, the presenter site, and the
   pipeline, and calls a difference between hosts a bug in the core.
-  Falsifiable: the app's preview and the pipeline's output for one chapter
-  are compared and must not differ.
+  Falsifiable, and against the hosts that actually render an article: the
+  app's preview, the article pushed to the site by the publish action,
+  and the article inside the single HTML file are compared for one
+  document and must not differ. The pipeline renders the paper, not the
+  page, so it is not one of the three.
 
 ## Scope Conditions
 
@@ -92,14 +96,16 @@ text.
   map #10, `itd-2609051335492327`, "Read it the way I like it". One spec
   covers both: a Tufte page with no way to change the measure is half the
   reading experience.
-- Platform: current browsers at iPhone, iPad, and desktop widths, on the
+- Platform: current Safari and Chromium engines at iPhone, iPad, and
+  desktop widths — 390, 820, and 1280 CSS px — on the
   presenter site and in the desktop app's preview. Native reading apps are
   out.
 - Population: Bob and Carol reading a published document, and Alice
   reading her own draft. No authoring gesture belongs to this moment.
-- Assumption: the article renders the document's default variant only.
-  Variant marking and filtering are map #14 and the variant-fidelity
-  discipline, in phase 3.
+- Assumption: in phase 2 the article renders the document's default
+  variant only. Variant marking and filtering are map #14 and the
+  variant-fidelity discipline, in phase 3; from that phase the article
+  renders whichever variant it is handed, and the discipline binds here.
 - Boundary with map #10 (`itd-2609051335492327`): #9 owns the default page
   — layout, measure, where a note sits, the contents list, the video rule.
   #10 owns the toolbar that changes theme, text size, and measure, and the
@@ -123,32 +129,49 @@ text.
 - Boundary with map #17 (carry the document as one file): #17 owns
   embedding this page, its assets, and its script into one offline file.
   #9 owns the page itself, wherever it is served from.
-- Out of this moment: keyboard movement inside the reading views. Which
-  chords the reading views share with the editor is an open question in
-  `03-evidence.md` and is owned by no intent in the map.
+- Boundary with map #26, `itd-2609051402083398` (Move through the article
+  by keyboard): #26 owns moving through this page by keyboard — the
+  chords, the contents list opened from a chord, search, and the cancel
+  rule. #9 owns the page those chords move through, and asserts nothing
+  about which chord does what.
+- In this moment, from the canon: the callout and the margin aside. The
+  article bundle owns what `::: {.callout kind="…"}` and
+  `[…]{.margin}` look like on the page, because the article is the
+  rendering where each of them has a form of its own; the deck and the
+  paper read their own columns of the mapping table in
+  `05-internals.md` section 3.
 
 ## Acceptance Criteria
 
-- Given a document folder of two Parts holding four chapters in all, when
-  Bob opens the article, then a contents list drawn from the Parts and
-  Chapters appears, and choosing an entry moves the page to that heading.
+- Given a document folder of two Parts holding four chapters in all, with
+  Sections and Sub-sections inside them, when Bob opens the article, then
+  the whole document is one page, a contents list appears carrying the
+  Parts, the Chapters, the Sections, and the Sub-sections, and choosing
+  any entry moves the page to that heading.
 - Given a paragraph carrying the citation `[@smith2020, p. 4]` and the
   footnote `^[an inline note]`, when the article renders at desktop
   width, then both appear in the margin level with that paragraph, and
   neither is printed at the foot of the page.
 - Given a chapter carrying `::: {.credit}` and `[a remark in the
-  margin]{.margin}`, when the article renders at desktop width, then each
-  appears as a margin note beside the block it follows.
+  margin]{.margin}`, when the article renders at desktop width (1280 CSS
+  px), then each appears as a margin note beside the block it follows.
+- Given a chapter carrying `::: {.callout kind="warning"}`, when the
+  article renders at desktop width (1280 CSS px), then the callout
+  appears as a box in the flow, set apart from the body text and
+  carrying its kind, and at iPhone width (390 CSS px) it keeps the full
+  measure with nothing scrolling sideways.
 - Given a chapter carrying `::: {.notes}`, `::: {.columns}` with two
   `.column` children, `## Interlude {.divider}`, and `<!-- pagebreak -->`,
   when the article renders, then the notes div produces nothing, the
   columns' content appears in the flow with no side-by-side layout, the
   divider heading renders as an ordinary heading, and the page-break
   comment produces nothing.
-- Given the same page at an iPhone width of 390 CSS pixels, when Carol
-  reads it, then every margin note appears in the flow directly after the
-  paragraph that made it, the page scrolls vertically only, and no element
-  is wider than the viewport.
+- Given the same page at iPhone width (390 CSS px), when Carol reads it,
+  then every margin note appears in the flow directly after the paragraph
+  that made it, the page scrolls vertically only, and no element is wider
+  than the viewport; and at iPad width (820 CSS px) and desktop width
+  (1280 CSS px) the margin returns and no element is wider than the
+  viewport at either.
 - Given a video block opened as
   `::: {.video poster="assets/keynote-poster.jpg" caption="Part two"}`
   whose `local`, `site`, and `gated` sources are all unreachable, when
@@ -159,18 +182,29 @@ text.
   when the article renders, then the alt text is the caption, the title
   attribute is the credit, and the image sits in the flow at full-bleed
   width.
-- Given one chapter rendered by the desktop app's preview and by the
-  publish pipeline, when the two outputs are compared, then they are
-  identical.
-- Inherits: one source, always; the renderings agree; legible on three
-  device classes; degrade gracefully in a plain tool; no machine in the
-  document; nothing is stored about a reader.
+- Given one document rendered as the article three ways — in the desktop
+  app's preview, in the build the publish action pushes to the site, and
+  inside the exported single file — when the three are compared, then
+  they carry the same headings in the same order, the same margin notes
+  against the same paragraphs, the same reference list, and the same
+  video fallbacks. (The pipeline is not compared here: it renders the
+  paper, which map #21 owns.)
+- Inherits: one source, always (`itd-2609051336090390`); the renderings
+  agree (`itd-2609051336130664`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; degrade
+  gracefully in a plain tool (`itd-2609051336110536`); no machine in the
+  document (`itd-2609051336080960`); nothing is stored about a reader
+  (`itd-2609051336145770`); and, from phase 3 where it binds, variant
+  fidelity (`itd-2609051336107315`) — the article is a rendering, so the
+  tree it is handed is already filtered and no page of it may reveal that
+  another variant exists.
 
 ## Open Questions
 
 - Which navigation chords the reading views share with the editor
   (`03-evidence.md`, open questions, "Editor"). The article's keyboard
-  movement cannot be specified until that list exists.
+  movement belongs to map #26, `itd-2609051402083398`, and cannot be
+  specified there until that list exists.
 - Which poster frame a video block uses when the author supplies none
   (`03-evidence.md`, open questions, "Assets"). The article's fallback
   needs an image whether or not `poster` is written.

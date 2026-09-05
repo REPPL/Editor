@@ -54,7 +54,8 @@ of this discipline rather than owners of it, so neither restates it.
   span, and every other line is byte-identical.
 - Given a flat manuscript of 814 lines with four heading levels, When it
   is imported by split, Then concatenating the written chapter files in
-  numeric order reproduces the original file byte for byte.
+  numeric order reproduces the original file byte for byte, and the
+  manuscript itself is left on disk exactly as it was.
 - Given a chapter imported into the single HTML file and exported again
   with no edit, When the two files are compared, Then they are
   byte-identical.

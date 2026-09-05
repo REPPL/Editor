@@ -17,9 +17,10 @@ supersedes: [itd-2609051221553568, itd-2609051317484141]
 
 ## Press Release
 
-Alice finishes a chapter folder and chooses Export single file. Editor
-writes one HTML file to the place she names. She double-clicks it and the
-document opens: the Tufte article as the published link shows it,
+Alice finishes a document and chooses Export single file. Editor writes
+one HTML file to the place she names, holding the whole document — every
+Part and every Chapter. She double-clicks it and it opens: the Tufte
+article as the published link shows it,
 navigation drawn from the Parts and Chapters, citations and footnotes in
 the margin beside the paragraph that made them, images in the flow,
 reader controls in their small toolbar. The same key that starts the deck
@@ -93,9 +94,18 @@ on a borrowed laptop, for as long as she keeps the file.
 
 ## Scope Conditions
 
-- Platform: any browser that opens a local HTML file, at iPhone, iPad,
-  and desktop widths. The file is produced on macOS by the desktop app;
-  it is not produced by the presenter site or by the pipeline.
+- Platform: any browser that opens a local HTML file — current Safari and
+  Chromium engines are the ones held to the widths — at 390, 820, and
+  1280 CSS px. The file is produced on macOS by the desktop app; it is
+  not produced by the presenter site or by the pipeline.
+- Scope: the file carries the whole document — every Part and every
+  Chapter — as the presenter site serves it. Importing and exporting one
+  chapter's Markdown for editing is map #18's,
+  `itd-2609051335586905`.
+- Assumption: the reader controls and the once-only quotation remember
+  their state per browser against this file, the file being its own
+  origin. Where storage is unavailable they do not persist, and nothing
+  is reported as an error.
 - Population: Carol and Bob, who receive the file and read it, and Alice,
   who exports it. No account, no installation, and no network is required
   of a reader.
@@ -124,15 +134,18 @@ on a borrowed laptop, for as long as she keeps the file.
 
 ## Acceptance Criteria
 
-- Given a chapter folder whose assets are all below
-  `asset_threshold_bytes`, when Alice exports the single file and opens
-  it from disk with the network switched off, then the article renders
-  complete — every image, style, font, and script inside the file — and
-  no request leaves the machine.
+- Given a document folder of two Parts whose assets are all below the
+  document's size threshold, when Alice exports the single file and opens
+  it from disk with the network switched off, then the whole document
+  renders complete — every Part, every Chapter, every image, style, font,
+  and script inside the file — and no request leaves the machine.
 - Given the same file open from disk, when Carol starts the deck, then
   the Sections and Sub-sections run as they do on the presenter site,
-  driven by the dependency-free build, and the file contains no reference
-  to any content delivery network or remote host.
+  driven by the dependency-free build, and the file fetches nothing to do
+  it: no script, stylesheet, font, or other dependency is loaded from a
+  content delivery network or any other host. (Links a reader may choose
+  to follow — a published copy, a gated video — are addresses in the text,
+  not dependencies, and are allowed.)
 - Given a video block written as
   `::: {.video poster="assets/keynote-poster.jpg" caption="The second half"}`
   whose `local` source is a referenced asset above the threshold, when
@@ -140,27 +153,41 @@ on a borrowed laptop, for as long as she keeps the file.
   frame and a link, and neither a player nor an error message.
 - Given a chapter carrying a margin aside written as
   `[a remark in the margin]{.margin}` and a full-bleed image, when Carol
-  opens the file at iPhone width and again at iPad width, then the margin
-  material folds into the flow and nothing scrolls sideways or needs
-  pinch zoom.
+  opens the file at iPhone width (390 CSS px), at iPad width (820 CSS
+  px), and at desktop width (1280 CSS px), then the margin material folds
+  into the flow at the narrowest width, returns to the margin at the two
+  wider ones, and nothing scrolls sideways or needs pinch zoom at any of
+  them.
 - Given a chapter carrying `::: {.opening once="per-browser"}` and an
   egg pair — `[✦]{.egg egg="lantern"}` in a paragraph and
   `::: {.egg #lantern label="✦"}` in the same chapter — when Carol opens
   the file twice in one browser, then the quotation appears on the first
   opening only, and on both openings the egg opens its content from disk
   and moves into the tray.
-- Given a document folder recording an asset with `"mode": "referenced"`,
-  when Alice exports the single file, then that asset's bytes are absent
-  from the file and the file contains no absolute path, no machine name,
-  no user name, and no asset root location anywhere in its text.
-- Given one chapter exported as a single file and the same chapter
+- Given a document with one asset recorded as referenced rather than
+  copied, when Alice exports the single file, then that asset's bytes are
+  absent from the file, and the file names nothing about Alice's machine:
+  no absolute local path, no user name, no local volume or share name,
+  and nowhere the asset root resolves to.
+- Given one document exported as a single file and the same document
   published to the presenter site, when both are read side by side, then
-  the headings, the footnotes, the citation numbering, and the generated
-  reference list are identical in both.
-- Inherits: one source, always; the renderings agree; legible on three
-  device classes; nothing is stored about a reader; network only on
-  publish; no machine in the document; variant fidelity; degrade
-  gracefully in a plain tool.
+  the headings, the contents, the footnotes, the citation numbering, and
+  the generated reference list are identical in both.
+- Given the exported file opened from disk, when Carol uses the reader
+  controls, then the same toolbar the published page offers is there —
+  theme, text size, measure, and a reset — her choices hold while she
+  reads, and reopening the same file in the same browser finds them still
+  in force; and where that browser makes storage unavailable, the
+  controls still work for the visit, the page opens at the defaults next
+  time, and nothing is reported as an error.
+- Inherits: one source, always (`itd-2609051336090390`); the renderings
+  agree (`itd-2609051336130664`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; nothing is
+  stored about a reader (`itd-2609051336145770`); network only on publish
+  (`itd-2609051336158553`); no machine in the document
+  (`itd-2609051336080960`); variant fidelity (`itd-2609051336107315`),
+  from the phase it binds — the file carries one variant and reveals no
+  other; degrade gracefully in a plain tool (`itd-2609051336110536`).
 
 ## Open Questions
 

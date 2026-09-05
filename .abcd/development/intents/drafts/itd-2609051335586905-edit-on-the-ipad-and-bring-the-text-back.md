@@ -33,8 +33,9 @@ believing in, and exports. The browser hands her a Markdown file. Nothing
 was uploaded, nothing was synced, nothing was fetched: the file has no
 network to reach and does not want one.
 
-Back at her desk she drops the exported Markdown on Editor. The app
-matches it to the chapter it came from and updates that chapter in place.
+Back at her desk she hands the exported Markdown to Editor's Re-import
+command. The app knows which chapter it came from, because the export
+said so, and it updates that chapter in place.
 The sidebar shows the same Parts and Chapters; every image reference
 still resolves to the file beside the chapter; the half-gigabyte video
 still resolves through the manifest to the copy that never moved. When
@@ -115,6 +116,16 @@ machine with nothing installed, and a guarantee about what comes back.
 - Assumption: text only. Images, video, and every other asset are added
   in the desktop app; the tablet neither copies, hashes, converts, nor
   references a file.
+- Assumption: an exported chapter carries, in its own front matter, the
+  path of the chapter it came from and a record of the bytes it was
+  exported from. That is what lets the Re-import command find the chapter
+  again and see that it has changed underneath her. Re-import is a
+  command of its own: a Markdown file dropped on a Part in the sidebar is
+  a new chapter and belongs to map #1, `itd-2609051335399446`; a flat
+  manuscript goes through the Import command and belongs to map #13,
+  `itd-2609051335529787`; and a file dropped on the editor text is a
+  reference at the cursor and belongs to map #4,
+  `itd-2609051335420536`.
 - Boundary with map #2 (itd-2609051335406422, edit with the Emacs
   bindings I already know): the boundary is the host. 2 owns the desktop
   app, the binding table itself, and the shell claiming combinations back
@@ -152,26 +163,40 @@ machine with nothing installed, and a guarantee about what comes back.
   live or taken by the host, every chord it marks live performs its
   action inside the text, and the cancel chord and Escape each clear a
   search, a panel, and a prefix state.
-- Given a chapter exported from the tablet, when Alice imports it into
-  the desktop app, then that chapter updates in place, every relative
-  image reference beside it still resolves, and every referenced asset id
-  still resolves through `assets.json` with no asset copied, moved, or
-  re-hashed.
+- Given a chapter exported from the tablet, when Alice brings it back
+  through the Re-import command, then Editor identifies the chapter it
+  came from without asking her which one it is, that chapter updates in
+  place, every relative image reference beside it still resolves, and
+  every referenced asset still resolves to the file it named, with no
+  asset copied, moved, or re-hashed.
 - Given a chapter Alice has also edited in the desktop app since she
   exported it, when she re-imports the tablet's copy, then Editor reports
-  that one write is replacing the other and names both, rather than
-  merging them or overwriting silently.
+  that the chapter has changed on disk since the export, names both
+  versions, and waits for her to choose, rather than merging them or
+  overwriting silently. (Negative case.)
+- Given a Markdown file that was never exported from this document, when
+  Alice offers it to the Re-import command, then Editor says it cannot
+  tell which chapter it belongs to, writes nothing, and points her at the
+  Import command for a manuscript and at a drop into a Part for a new
+  chapter. (Negative case.)
 - Given the single file open with the network switched off, when Alice
   imports a chapter, edits it, and exports it, then no request leaves the
   device, and no gesture in the file offers to add an image, a video, or
   any other asset.
-- Given the single file open at iPad width and again at iPhone width,
-  when the editing surface is showing, then the text, the modeline, and
-  the keys panel are all legible with no horizontal scrolling and no
-  pinch zoom.
-- Inherits: round-trip byte-fidelity; no machine in the document; one
-  source, always; degrade gracefully in a plain tool; legible on three
-  device classes; network only on publish.
+- Given the single file open at iPad width (820 CSS px), at iPhone width
+  (390 CSS px), and at desktop width (1280 CSS px), when the editing
+  surface is showing, then the text, the modeline, and the keys panel are
+  all legible at every one of the three widths with no horizontal
+  scrolling and no pinch zoom.
+- Inherits: round-trip byte-fidelity (`itd-2609051336074533`) — this
+  moment is its second hard test; no machine in the document
+  (`itd-2609051336080960`); one source, always (`itd-2609051336090390`);
+  degrade gracefully in a plain tool (`itd-2609051336110536`); legible on
+  three device classes (`itd-2609051336128348`), at 390, 820, and 1280
+  CSS px; network only on publish (`itd-2609051336158553`); and, from
+  phase 3 where it binds, variant fidelity (`itd-2609051336107315`),
+  since a chapter carrying variant marks must come home with every mark
+  intact.
 
 ## Open Questions
 

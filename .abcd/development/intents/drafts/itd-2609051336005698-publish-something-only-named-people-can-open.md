@@ -6,7 +6,7 @@ kind: null
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
-severity: minor
+severity: major
 impact: additive
 origin: researcher-authored
 production_mode: dictated-and-formatted
@@ -35,7 +35,10 @@ the refusal — not the title, not a heading, not the name of a file.
 
 Months later Alice opens the publish log and sees the flag against each
 version: March's went out unlisted, June's is gated, and each entry
-carries its links. She takes one address off the allow-list, publishes
+carries its links. The gate stands in front of the document, not in front
+of one version, so March's reading is behind the same door now — the words
+Bob read in March have not changed by a character, but the way to them
+runs through the sign-in. She takes one address off the allow-list, publishes
 again, and that reader stops getting in. She has not moved the document,
 changed its id, or rebuilt anything a reader had bookmarked.
 
@@ -67,11 +70,33 @@ being configured correctly." That cost is the reason the app shows the
 live allow-list beside the flag at publish, rather than storing it once
 and trusting it.
 
+We expect the policy to be applied without Editor ever holding a
+credential for the host, because the allow-list is published as a
+committed file for that document in the production repository and the
+pipeline applies the access policy from it, using a secret that lives in
+the pipeline and nowhere else. This is the same shape as the push:
+Editor writes and commits, and something else with the right key acts on
+what it committed. Falsifiable in one search: examine Alice's machine and
+the app's settings for any token belonging to the host, and there must be
+none.
+
+We expect the allow-list not to sit in the document folder, because a
+list of people's addresses is not part of the text and the folder must
+stay something Alice can send to Carol. It travels to the production
+repository, which is private, and never to the folder or the built pages.
+
 We expect gating to cost nothing inside the document, because the flag
 lives in the publish log and the policy lives at the host. The Markdown,
 the assets, and the built output of a gated document are byte-identical
 to the same document published unlisted. This is falsifiable: publish one
 document each way and compare the built trees.
+
+We expect the gate to belong to the document rather than to a version,
+because it stands in front of everything under the document's id: every
+version, every variant, every asset. A version's content never changes —
+an old link shows what it showed — but access follows the document, so
+gating a document today puts the reading Bob saved in March behind the
+same door.
 
 We expect the choice to stay deliberate because it is presented at every
 publish and recorded per version, so a version that went out unlisted can
@@ -85,8 +110,16 @@ be identified afterwards from the log alone rather than from memory
   every variant path beneath the id, and everything under them — article,
   deck, PDF, assets, and published layers.
 - Population: Alice, plus the named readers on an allow-list she edits in
-  the app. Editor holds no account, no password, and no session, and
-  keeps no record of who has read what.
+  the app's publish panel. Editor holds no account, no password, no
+  session, and no token for the host, and keeps no record of who has read
+  what. The access provider necessarily learns the identity of a reader
+  who signs in — that is what a gate is — and that is the one carve-out
+  in the rule that nothing is stored about a reader: Editor and the pages
+  it publishes hold nothing, and the door holds what a door must.
+- Assumption: the allow-list is published as a per-document file in the
+  production repository, which is private, and the pipeline applies the
+  access policy from it with a secret of its own. The allow-list never
+  enters the document folder and never reaches a built page.
 - Assumption: the production repository is private and the deployed site
   public, so for a gated document the access policy is the only thing
   between a reader and the files (ADR-2609051324157479).
@@ -120,6 +153,17 @@ be identified afterwards from the log alone rather than from memory
   then the publish completes, the publish log entry for that version
   records the flag as `gated` with its links, and the app shows the flag
   and the current allow-list against that version.
+- Given the same publish, when the document folder is searched afterwards
+  and Alice's machine and the app's settings are examined, then no file
+  in the document folder holds any address from the allow-list, and
+  Editor holds no token, password, or session for the host: the
+  allow-list has gone to the production repository and the policy has
+  been applied by the pipeline. (Negative case.)
+- Given Alice is choosing between unlisted and gated, when the publish
+  panel shows the choice, then it states in words what unlisted means —
+  that anyone holding the link can read it, and that a link once sent
+  cannot be recalled — and it asks the question every publish rather than
+  carrying her last answer forward silently.
 - Given a gated document, when a reader whose address is on the
   allow-list opens the stable link, then they are asked to sign in and,
   once signed in, reach the article; the deck, the PDF, and the assets
@@ -133,21 +177,30 @@ be identified afterwards from the log alone rather than from memory
   the response is the sign-in rather than the file. (Negative case.)
 - Given a document whose earlier version published unlisted and whose
   latest publishes gated, when any path beneath its stable id is
-  requested, including the earlier version's, then it is behind the gate,
-  and the publish log still shows each version with the flag it was
-  published under.
+  requested, including the earlier version's, then it is behind the gate;
+  and when an allow-listed reader signs in and opens that earlier
+  version, then it serves exactly the content it served before, byte for
+  byte. Access follows the document; content stays with its version, and
+  the publish log still shows each version with the flag it was published
+  under.
 - Given Alice removes one address from the allow-list and publishes
   again, when that reader opens the link they used yesterday, then they
   are refused, and when a reader still on the list opens it, then they
   reach the same version.
 - Given a gated document and a reader on the allow-list, when they sign
-  in on an iPhone at 390 CSS pixels wide, then the article renders at
-  that width with no horizontal scrolling and no pinching, and its images
-  load without a further sign-in.
-- Inherits: nothing is stored about a reader (itd-2609051336145770);
-  network only on publish (itd-2609051336158553); no machine in the
-  document (itd-2609051336080960); legible on three device classes
-  (itd-2609051336128348); variant fidelity (itd-2609051336107315).
+  in at iPhone width (390 CSS px), at iPad width (820 CSS px), and at
+  desktop width (1280 CSS px), then the sign-in and the article render at
+  every one of the three widths with no horizontal scrolling and no
+  pinching, and images load without a further sign-in.
+- Inherits: nothing is stored about a reader (`itd-2609051336145770`),
+  with the one carve-out this moment creates — the access provider holds
+  the identity of a reader who signs in, while Editor and the published
+  pages hold nothing; network only on publish (`itd-2609051336158553`),
+  which covers applying the access policy as part of the publish Alice
+  started; no machine in the document (`itd-2609051336080960`); legible
+  on three device classes (`itd-2609051336128348`), at 390, 820, and 1280
+  CSS px; variant fidelity (`itd-2609051336107315`), since the gate
+  covers every variant together and a refusal names none of them.
 
 ## Open Questions
 
@@ -157,10 +210,16 @@ be identified afterwards from the log alone rather than from memory
   should press the gated option for a document Alice calls confidential.
 - Confirmation that Editor pushes with the author's existing setup and
   holds no token of its own is open in 03-evidence.md ("Publish and
-  pipeline"). The same question decides how the access policy and its
-  allow-list are created and updated at publish, since that is a second
-  thing the publish action must be able to do without a credential of
-  Editor's own.
+  pipeline"). The allow-list travels the same way — committed and applied
+  by the pipeline — so the same confirmation covers both.
+- How quickly a change to the allow-list takes effect, since the policy
+  is applied by the pipeline after the push. Alice removing a reader
+  wants to know when that reader stops getting in, not only that they
+  eventually will.
+- Whether taking a gated document off the site removes its allow-list
+  with it. Map #28, itd-2609051402150739, holds that as its own criterion;
+  what a withdrawal leaves behind is the same question from the other
+  side.
 
 ## Audit Notes
 

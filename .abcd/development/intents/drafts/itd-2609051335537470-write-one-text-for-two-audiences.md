@@ -6,7 +6,7 @@ kind: null
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
-severity: minor
+severity: major
 impact: additive
 origin: researcher-authored
 production_mode: dictated-and-formatted
@@ -101,6 +101,13 @@ more than one variant exists in order to render the one it was asked for.
   declares none never meets this moment.
 - Scale assumption: the acceptance project's three variants of one text are
   the working case (03-evidence). Nothing here assumes exactly two.
+- Assumption: a variant block may contain headings, so a Section or
+  Sub-section can belong to one variant alone. The sidebar badges the
+  chapter that carries it, and every rendering of another variant omits
+  the heading, its body, and its entry in any contents or deck.
+- Assumption: Alice chooses which variant she is previewing from the
+  app's chrome, not from a control inside the rendered page. The page is
+  what a reader receives, and it never names a variant.
 - Boundary with the discipline *variant fidelity*
   (itd-2609051336107315): 14 owns the mark and the preview — writing the
   attribute, seeing one audience's text, and the badges that say where the
@@ -137,13 +144,29 @@ more than one variant exists in order to render the one it was asked for.
   lines do not.
 - Given the same chapter, When Alice previews `full`, Then the marked
   paragraph is absent and nothing stands in its place: no ellipsis, no
-  placeholder, no spacing artefact, and no control anywhere in the preview
-  that names or offers another variant.
+  placeholder, and no spacing artefact. Alice chooses which variant she
+  is previewing from the app's own chrome, outside the rendered page; the
+  rendered page carries no control that names or offers another variant,
+  and it is that page, not the app around it, that a reader ever
+  receives.
 - Given the sentence
   `She arrived [in the second week]{.variant variant="full"} and stayed.`,
-  When Alice previews `talk`, Then the sentence renders without the marked
-  span and without any stray bracket, brace, or attribute text; and When
-  she previews `full`, Then it renders complete.
+  When Alice previews `talk`, Then the sentence renders as
+  `She arrived and stayed.` — one space between the words either side of
+  the removed span, no double space, and no stray bracket, brace, or
+  attribute text; and When she previews `full`, Then it renders complete.
+- Given a Section heading and its whole body wrapped in
+  `::: {.variant variant="full"}`, When Alice previews `full`, Then that
+  Section appears in the preview and in the preview's contents; and When
+  she previews `talk`, Then the Section, its heading, and its entry in
+  the contents are all absent, and the Sections either side of it read as
+  neighbours with no gap in numbering or ordering to show that one was
+  removed.
+- Given a block marked `variant="draft"` where `draft` is not among the
+  variants the document declares, When Alice previews either declared
+  variant, Then the preview reports the undeclared name against that
+  chapter and line rather than silently including or excluding the block,
+  and the chapter file is unchanged. (Negative case.)
 - Given a `::: {.variant variant="talk"}` block containing a footnote
   written `^[an inline note]` and a citation written `[@smith2020]`, When
   Alice previews `full`, Then neither the footnote nor the reference for
@@ -158,12 +181,17 @@ more than one variant exists in order to render the one it was asked for.
   badged for a variant no mark in it names, and a chapter with no marks
   carries no badge.
 - Given the `talk` preview of that chapter, When Alice narrows the preview
-  to an iPhone width, Then the filtered text reflows with no horizontal
-  scrolling and no pinch zoom, and the removed blocks leave no empty
-  region behind them.
-- Inherits: variant fidelity; one source, always; degrade gracefully in a
-  plain tool; the renderings agree; legible on three device classes;
-  network only on publish.
+  to iPhone width (390 CSS px), and again to iPad width (820 CSS px) and
+  desktop width (1280 CSS px), Then the filtered text reflows at every one
+  of the three widths with no horizontal scrolling and no pinch zoom, and
+  the removed blocks leave no empty region behind them.
+- Inherits: variant fidelity (`itd-2609051336107315`), which owns every
+  renderer's, export's, and link's obligation to honour the marks this
+  moment writes; one source, always (`itd-2609051336090390`); degrade
+  gracefully in a plain tool (`itd-2609051336110536`); the renderings
+  agree (`itd-2609051336130664`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; network only on
+  publish (`itd-2609051336158553`).
 
 ## Open Questions
 
@@ -173,11 +201,11 @@ more than one variant exists in order to render the one it was asked for.
   therefore whether this moment or map #12 (itd-2609051335518134) owns the
   behaviour when an egg's marker and its content block disagree about which
   variant they belong to.
-- Where document metadata lives — a YAML file at the document root or front
-  matter in the first chapter (03-evidence, "Document model and canon").
-  The list of declared variants and the default live in that file, so the
-  answer decides what Alice edits to declare a variant and where the
-  preview reads the set of names from.
+- What gesture declares the variant set. The list and the default live in
+  the document's metadata, and every criterion here assumes they are
+  already there; whether Alice edits that file directly or declares a
+  variant from the app is not yet decided, and no moment in the map owns
+  it.
 
 ## Audit Notes
 

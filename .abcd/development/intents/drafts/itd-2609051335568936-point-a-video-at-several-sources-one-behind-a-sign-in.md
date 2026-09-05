@@ -88,9 +88,17 @@ where the author wrote the video and gives every rendering the same one.
   else. Editor neither hosts nor transcodes video (06-delivery.md, out of
   scope) and stores no credential for any source.
 - Assumption: `local` is a path relative to the chapter or an entry in
-  the asset record, `site` is a path under the published document, and
-  `gated` is a URL on a site that asks the viewer to sign in
-  (05-internals.md section 3).
+  the asset record, `site` is the copy publishing put on the site — under
+  the published document where the repository can carry it, and in the
+  site's own storage under the document's id where it is too large for
+  that — and `gated` is a URL on a site that asks the viewer to sign in
+  (05-internals.md section 3). Which of the two shapes `site` takes is
+  map #15's, itd-2609051335541009; that the rendering tries it second is
+  this intent's.
+- Assumption: a reader who is refused by the gated site and a reader who
+  cannot reach it at all arrive at the same place — the poster, the
+  caption, and the link. Nothing in the rendering distinguishes them,
+  because nothing in the rendering knows which happened.
 - Boundary with map #15, itd-2609051335541009, "Add media too big to
   copy": #15 owns where a file lives, the threshold, and what is recorded
   about it. In for this intent: the order a rendering tries the sources
@@ -133,34 +141,58 @@ where the author wrote the video and gives every rendering the same one.
   opens the same article, Then he sees the poster frame, the caption, and
   a link to the gated address, and no player control, empty frame, or
   error message appears anywhere on the page.
+- Given the same block, When Bob opens the article on a good connection
+  but with no account on the gated site — so the request reaches that
+  site and is refused rather than never answered — Then the page settles
+  on the poster frame, the caption, and the link within the time it takes
+  the refusal to arrive, shows no broken player and no error text of its
+  own, and does not retry: being refused and being unreachable end the
+  same way for the reader, and neither is reported as the other.
+  (Negative case.)
 - Given a block whose every named source fails to answer, When the
   article renders, Then the poster and a link stand in the flow where the
-  video would have been, the rest of the page is unaffected, and where
-  the author named no `poster` a labelled link appears rather than an
+  video would have been, the rest of the page is unaffected, and where no
+  poster image is available at all a labelled link appears rather than an
   empty box.
 - Given the same chapter, When the deck and the PDF are rendered from it,
   Then the slide carries the player where a source answers and the poster
   and link where none does, the PDF carries the poster with its link
   printed beneath it and no player at all, and neither of them reaches a
   source the article did not reach.
-- Given the published article at iPhone width, When a video block falls
-  back to its poster and link, Then the poster fits within the measure,
-  the link is large enough to follow by tap, and nothing on the page
-  scrolls sideways or needs pinch zoom.
+- Given the published article at iPhone width (390 CSS px), at iPad width
+  (820 CSS px), and at desktop width (1280 CSS px), When a video block
+  falls back to its poster and link, Then the poster fits within the
+  measure at every one of the three widths, the link is large enough to
+  follow by tap, and nothing on the page scrolls sideways or needs pinch
+  zoom.
 - Given the app open on a chapter carrying a `gated` source, When Alice
   edits it, previews it, and builds the renderings without pressing
   Publish, Then no request reaches the gated host, no credential for it
   is stored or asked for, and the built output names the address without
   having contacted it.
-- Inherits: the renderings agree; network only on publish; nothing is
-  stored about a reader; degrade gracefully in a plain tool; legible on
-  three device classes; no machine in the document.
+- Inherits: the renderings agree (`itd-2609051336130664`); network only on
+  publish (`itd-2609051336158553`); nothing is stored about a reader
+  (`itd-2609051336145770`); degrade gracefully in a plain tool
+  (`itd-2609051336110536`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; no machine in
+  the document (`itd-2609051336080960`) — the address of a gated source
+  is a remote content URL and is allowed, while a local path, share, or
+  volume name is not; and, from phase 3 where it binds, variant fidelity
+  (`itd-2609051336107315`), since a video block inside a filtered block
+  leaves with it.
 
 ## Open Questions
 
 - Which poster frame a video block uses when the author supplies none
   (03-evidence.md, open questions, "Assets": "Which poster frame a video
-  block uses when the author supplies none").
+  block uses when the author supplies none"). The criterion above fixes
+  only the floor — a labelled link rather than an empty box when no
+  poster image is available at all — and leaves open whether one is
+  generated for her instead.
+- Whether a rendering may probe a gated source at read time, and what it
+  does while waiting. Nothing probes at build time, and the acceptance
+  project's prior art uses a sign-in probe, so the read-time behaviour is
+  the half that is still undecided.
 
 ## Audit Notes
 

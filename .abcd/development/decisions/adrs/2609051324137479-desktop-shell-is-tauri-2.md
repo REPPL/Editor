@@ -5,7 +5,7 @@ status: accepted
 date: 2026-09-05
 supersedes: null
 superseded_by: null
-related_intents: []
+related_intents: [itd-2609051335406422, itd-2609051335586905]
 related_rfcs: []
 related_adrs: []
 ---

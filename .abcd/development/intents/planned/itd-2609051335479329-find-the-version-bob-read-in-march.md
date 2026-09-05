@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335479329
 slug: find-the-version-bob-read-in-march
-spec_id: null
-kind: null
+spec_id: spc-2609051353457083
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -22,8 +22,8 @@ In October Bob asks Alice about a figure she showed in March. The document
 has moved on since: two sections are rewritten and the figure has a
 different number. Alice opens the document in Editor and opens its publish
 log — a list of every publish, newest first, each entry with its date, its
-version hash, the variants it carried, whether it went out unlisted, and
-its links. She finds the March entry by its date, copies its version link,
+version hash, the variants it carried, the flag it went out under —
+unlisted or gated — and its links. She finds the March entry by its date, copies its version link,
 and sends it back. Bob opens the page he read in March.
 
 Every publish writes its own version path and leaves every earlier one
@@ -37,7 +37,9 @@ so it is Alice's record rather than the app's. She can read it with any
 tool, keep it in her own backups, and open or copy any entry from inside
 Editor. A version is named by what it contains, not by when the button was
 pressed: publishing again without changing anything lands on the hash that
-is already there rather than growing the list.
+is already there. The log still records that she published — every press
+of the button leaves a line — but no second version path appears on the
+site for content that has not changed.
 
 ## Why This Matters
 
@@ -60,8 +62,11 @@ loses history into something that adds to it.
 - We expect the hash to be a dependable name for a version because it is
   computed from the built output, so identical content republished
   produces the identical hash and lands on the path that already holds it
-  (05-internals.md, section 9). Falsifiable: publish the same document
-  twice unchanged and compare the two hashes.
+  (05-internals.md, section 9). The log and the site therefore count
+  different things: the log counts publishes, including one that changed
+  nothing, and the site counts distinct versions. Falsifiable: publish the
+  same document twice unchanged, compare the two hashes, and count the
+  version paths.
 - We expect Alice to find an old version months later because the log
   records the timestamp, the hash, the variants, the flag, and the links
   for every publish, and records them in the document folder rather than
@@ -81,58 +86,80 @@ loses history into something that adds to it.
 
 ## Scope Conditions
 
-- Platform: the publish log is read in the desktop app on macOS; the
-  version links it holds open in any current browser at desktop, iPad, and
-  iPhone widths.
-- Population: Alice reads the log — it is not published and no reader sees
+- Platform: the publish log is read in the desktop app on macOS; the <!-- cond: cond-2609051353457296 -->
+  version links it holds open in current Safari and Chromium engines at
+  desktop, iPad, and iPhone widths — 1280, 820, and 390 CSS px.
+- Population: Alice reads the log — it is not published and no reader sees <!-- cond: cond-2609051353458175 -->
   it. Bob and Carol only ever hold a version link she sends them.
-- Assumptions: the document has been published at least once, the log
+- Assumptions: the document has been published at least once, the log <!-- cond: cond-2609051353451554 -->
   lives in the document folder as a plain file the author owns, and the
   static host serves every published version path indefinitely.
-- In scope: one entry per publish with its timestamp, hash, variants,
-  flag, and links; open and copy for each entry; the stable pointer moving
-  to the newest version while older version paths stay exactly as
-  deployed.
-- Bundle: this intent is a member of the Publish bundle, whose other
+- In scope: one entry per publish — including a republish that changed <!-- cond: cond-2609051353452131 -->
+  nothing, which points at the hash already published and adds no version
+  path — with its timestamp, hash, variants, flag, and links; open and
+  copy for each entry; the stable link moving to the newest version while
+  older version paths stay exactly as deployed. What an old version
+  promises is its content: access follows the document, so a document
+  gated later is gated at every version, and map #20,
+  itd-2609051336005698, owns that. Taking versions off the site
+  altogether belongs to map #28, itd-2609051402150739.
+- Bundle: this intent is a member of the Publish bundle, whose other <!-- cond: cond-2609051353452105 -->
   member is map #7, itd-2609051335468596. They share one spec: #7 is the
   action that produces a link, this intent is the record of the links it
   has produced, and publishing without a version record is a link Alice
   cannot find again.
-- Boundary with map #7 (itd-2609051335468596): #7 owns the publish action,
+- Boundary with map #7 (itd-2609051335468596): #7 owns the publish action, <!-- cond: cond-2609051353450064 -->
   the minting of the stable id, the unlisted flag, and the empty
   presenter. This intent owns only the record of the entries #7 mints and
   the guarantee that an old entry still resolves to what it resolved to.
-- Excluded as plumbing: the log's file format and the pointer that names
-  the latest hash (05-internals.md, sections 9 and 10).
+- Excluded as plumbing: the log's file format and the mechanism by which <!-- cond: cond-2609051353459277 -->
+  the site records which version the stable link serves (05-internals.md,
+  sections 9 and 10). What this intent owns of that mechanism is only its
+  observable effect: the stable link serves the newest version and the
+  older version links do not move.
 
 ## Acceptance Criteria
 
 - Given a document published twice with different content, when Alice
   opens the publish log in the app, then it lists two entries, newest
   first, each showing its timestamp, its version hash, the variants
-  published, the unlisted flag, and its links, with open and copy for
-  each.
-- Given the version link `/<id>/v/<hash>/` from the earlier entry, when it
-  is opened after the later publish, then it serves that earlier publish's
-  built output, unchanged from what it deployed.
-- Given both publishes have completed, when `/<id>/` is opened, then it
-  serves the later version, and `/<id>/latest.json` names that later
-  version's hash.
+  published, the flag it went out under — `unlisted` or `gated` — and its
+  links, with open and copy for each.
+- Given the version link from the earlier entry, when it is opened after
+  the later publish, then it serves that earlier publish's built output,
+  content for content what it deployed. Access is the one thing that
+  follows the document rather than the version: a document gated later is
+  gated at every version, and what an old link promises is the same
+  reading, not the same door.
+- Given both publishes have completed, when the stable link is opened,
+  then it serves the later version, and the earlier version link
+  continues to serve the earlier one.
 - Given a document whose content has not changed since its last publish,
-  when Alice publishes again, then the version hash is identical to the
-  previous entry's and no second version path is created for the same
-  content.
-- Given a hash that has never been published, when `/<id>/v/<hash>/` is
-  requested, then the presenter shows nothing and lists nothing, and no
-  response enumerates the hashes that do exist.
-- Given the publish log opened outside Editor in a plain text editor, then
-  every entry is readable as it stands and no entry contains an absolute
-  path, a hostname, or a user name.
-- Given Bob's saved version link opened in Safari on an iPad-width
-  viewport, then the version it names is legible with no horizontal
-  scrolling and no pinch zoom.
-- Inherits: no machine in the document; network only on publish; one
-  source, always; legible on three device classes.
+  when Alice publishes again, then the log gains an entry recording that
+  publish, that entry names the hash the previous entry already named, and
+  no second version path is created on the site for the same content.
+- Given a version hash that has never been published, when a link
+  carrying it is requested, then the presenter renders the same empty
+  shell it renders with no id at all — nothing named, nothing listed, and
+  nothing that distinguishes an unpublished hash from a mistyped one.
+  (Negative case.)
+- Given the publish log opened outside Editor in a plain text editor, when
+  Alice reads every entry in it, then each one is readable as it stands
+  and none of them names her machine: no absolute local path, no local
+  host or volume name, and no user name. Published links and the
+  addresses of gated media are the document's own record and belong
+  there.
+- Given Bob's saved version link opened at iPad width (820 CSS px), and
+  again at iPhone width (390 CSS px) and desktop width (1280 CSS px),
+  then the version it names is legible at every one of the three widths
+  with no horizontal scrolling and no pinch zoom.
+- Inherits: no machine in the document (`itd-2609051336080960`); network
+  only on publish (`itd-2609051336158553`); one source, always
+  (`itd-2609051336090390`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; and, from phase
+  3 where it binds, variant fidelity (`itd-2609051336107315`), since an
+  entry lists the variants a version carried and no published page may
+  reveal them to a reader.
 
 ## Open Questions
 
@@ -141,6 +168,8 @@ loses history into something that adds to it.
   canon").
 - The length of the version hash, which is the name every entry in the log
   is keyed on (03-evidence.md, "Publish and pipeline").
+- What an entry records when a publish fails part way, and whether a
+  failed publish leaves a line in the log at all.
 - Confirmation that the presenter, the article script, and the slide
   engine are maintained once in the production repository and shared by
   every document, rather than copied into each published version
@@ -151,3 +180,7 @@ loses history into something that adds to it.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: a stable id with content-hashed versions and a publish log lets old links keep old content; wrong if authors need to edit history or revoke a version

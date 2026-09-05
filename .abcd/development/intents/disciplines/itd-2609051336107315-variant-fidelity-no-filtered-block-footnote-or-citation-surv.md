@@ -6,7 +6,7 @@ kind: discipline
 suggested_kind: discipline
 reclassification_history: []
 builds_on: []
-severity: minor
+severity: major
 impact: additive
 origin: researcher-authored
 production_mode: dictated-and-formatted
@@ -30,6 +30,9 @@ page, link, or file reveals that another variant exists.
 - A variant switcher, a list of variants, a canonical link, a navigation
   entry, or a search index that names a variant other than the one being
   read.
+- A link that can be shortened, incremented, or guessed into another
+  variant's: each variant's path token is unguessable and no path above it
+  serves a variant at all.
 - A variant name left in the output of another variant: a class on a
   wrapper, an empty placeholder, a comment, a gap in numbering that
   reveals what was removed.
@@ -66,6 +69,15 @@ per-variant PDFs beside them, and the single file in phase 5.
   and the article, deck, and PDF for one variant agree on that set.
 - Given a block with no variant attribute, When every variant is
   rendered, Then the block appears in all of them.
+- Given a `::: {.variant variant="full"}` block containing a `## Section`
+  and its Sub-sections, When the `talk` variant is rendered, Then that
+  Section is absent from the page, from the contents, from the deck, and
+  from the PDF, and no gap, empty heading, or numbering jump shows that
+  anything was removed.
+- Given a link to the `talk` variant, When its last path segment is
+  removed and the shortened link is opened, Then the empty presenter
+  shows, and no shortening or alteration of it reaches the `full`
+  variant.
 
 ## Why
 

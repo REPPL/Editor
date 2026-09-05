@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335399446
 slug: open-a-folder-and-see-the-book
-spec_id: null
-kind: null
+spec_id: spc-2609051353137620
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -76,34 +76,40 @@ the file names, and every tool she owns can edit it.
 
 ## Scope Conditions
 
-- Platform: the desktop app only — a Tauri 2 shell around the macOS
+- Platform: the desktop app only — a Tauri 2 shell around the macOS <!-- cond: cond-2609051353132058 -->
   system web view (`02-constraints.md`). Reading views and the single
   HTML file are not in scope here.
-- Population: Alice, one author, one document folder open at a time.
+- Population: Alice, one author, one document folder open at a time. <!-- cond: cond-2609051353138384 -->
   Collaboration and concurrent editing from two devices are out of scope
   for the product (`06-delivery.md`).
-- Assumption: document-level metadata is read from `document.yaml` at the
-  document root, which `05-internals.md` assumes and `03-evidence.md`
-  leaves open.
-- Boundary with map #13, `itd-2609051335529787` (Bring an old single-file
-  manuscript in): 13 owns writing the split that creates a chapter
-  folder; 1 owns reading whatever is already on disk. Dropping a flat
-  manuscript on Editor is out of scope here, and 1 makes no promise about
-  folders it did not find.
-- Boundary with map #14, `itd-2609051335537470` (Write one text for two
+- Assumption: document-level metadata is read from `document.yaml` at the <!-- cond: cond-2609051353136582 -->
+  document root, which is where the book's title comes from. A chapter's
+  own front matter carries chapter-level metadata only.
+- Boundary with map #13, `itd-2609051335529787` (Bring an old single-file <!-- cond: cond-2609051353135286 -->
+  manuscript in), and with map #29, `itd-2609051402191319` (Start a new
+  document): 13 owns writing the split that creates a chapter folder, and
+  29 owns creating the smallest folder that is already a book; 1 owns
+  reading whatever is already on disk, including what either of them
+  wrote. A flat manuscript is imported through the Import command rather
+  than by dropping it here, and 1 makes no promise about folders it did
+  not find. What 1 does own of the drop gesture is one case: a Markdown
+  file dropped on a Part in the sidebar becomes a new chapter in that
+  Part. A file dropped on the editor text is a reference at the cursor
+  and belongs to map #4, `itd-2609051335420536`.
+- Boundary with map #14, `itd-2609051335537470` (Write one text for two <!-- cond: cond-2609051353138977 -->
   audiences): 1 owns the tree, its ordering, and opening a node; 14 owns
   the variant badges beside a chapter and what they mean. In this phase
   the sidebar carries no variant badge.
-- Boundary with the phase: `06-delivery.md` excludes variants, citations,
+- Boundary with the phase: `06-delivery.md` excludes variants, citations, <!-- cond: cond-2609051353132779 -->
   and referenced assets from phase 1, so the asset counts and unresolved
   citation marks that `04-surfaces.md` describes beside a chapter arrive
   with map #11, `itd-2609051335502171`, and map #15,
   `itd-2609051335541009`. What ships here is the tree and its labels.
-- Bundle: member of the Editing surface bundle with map #2,
+- Bundle: member of the Editing surface bundle with map #2, <!-- cond: cond-2609051353135907 -->
   `itd-2609051335406422`, and map #3, `itd-2609051335415528`. One spec,
   and none of the three ships alone — a sidebar with no editor is a file
   browser.
-- Plumbing inherited, not owned: the on-disk model, the parse tree, and
+- Plumbing inherited, not owned: the on-disk model, the parse tree, and <!-- cond: cond-2609051353136134 -->
   folder watching (`05-internals.md`).
 
 ## Acceptance Criteria
@@ -132,10 +138,21 @@ the file names, and every tool she owns can edit it.
 - Given a folder holding no Markdown file at any depth, When Alice opens
   it, Then Editor reports that the folder holds no chapters, shows an
   empty sidebar, and writes no file of any kind inside that folder.
-- Given the desktop app window narrowed to iPad width, When Alice opens a
-  document whose deepest chapter title runs to sixty characters, Then the
-  sidebar and the editing surface remain legible side by side or stacked,
-  with no horizontal scrolling and no pinch zoom.
+- Given the document is open, When Alice drops a Markdown file on a Part
+  in the sidebar, Then the file is placed in that Part with the next
+  numeric prefix, the sidebar shows it as a Chapter of that Part with its
+  headings beneath it, and its bytes are what were dropped: no line
+  reflowed, no character re-escaped, and no heading rewritten.
+- Given the document is open, When Alice drops a file that is not
+  Markdown on a Part in the sidebar, Then no chapter is created, Editor
+  says what it will and will not accept there, and nothing is written
+  inside the document folder. (Negative case.)
+- Given the desktop app window narrowed to iPad width (820 CSS px), and
+  again at iPhone width (390 CSS px) and desktop width (1280 CSS px),
+  When Alice opens a document whose deepest chapter title runs to sixty
+  characters, Then the sidebar and the editing surface remain legible
+  side by side or stacked at every one of the three widths, with no
+  horizontal scrolling and no pinch zoom.
 - Given a document is open and the machine has no network connection,
   When Alice browses the sidebar and opens every chapter in the book,
   Then every action succeeds and no network request is attempted.
@@ -153,15 +170,22 @@ the file names, and every tool she owns can edit it.
   Parts — or whether structure edits stay in the file system for the
   first release". This intent is written for the second answer; the first
   would add a gesture, not change the tree.
-- Where document metadata lives: `03-evidence.md` leaves open whether it
-  sits in "a YAML file at the document root, or front matter in the first
-  chapter", which decides where the sidebar reads the book's title from.
-- How a reload behaves against unsaved work. `03-evidence.md` leaves open
-  "how concurrent edits from two devices are detected so that
-  last-write-wins can be reported rather than silently applied"; the same
-  question decides what Editor does when a chapter changes on disk while
-  Alice has it open and edited.
+- How a reload behaves against unsaved work. Closing or switching chapter
+  with unsaved changes asks, and the modeline marks an unsaved buffer, so
+  Alice's own gestures are covered. What is still open is the external
+  case: `03-evidence.md` leaves open "how concurrent edits from two
+  devices are detected so that last-write-wins can be reported rather
+  than silently applied", which is also what decides what Editor does
+  when a chapter changes on disk while Alice has it open and edited.
+- What the sidebar does with a Markdown file whose numeric prefix is
+  missing or collides with another file's, and with a non-Markdown file
+  sitting in a Part. Order comes from the prefix and nothing else records
+  it, so a missing prefix has no answer yet.
 
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: a sidebar that is the file system keeps long documents workable without leaving plain text; wrong if authors keep reaching for a single file or the sidebar and disk disagree in practice

@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335420536
 slug: drop-an-image-and-have-it-just-work
-spec_id: null
-kind: null
+spec_id: spc-2609051353405598
+kind: standalone
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
@@ -28,8 +28,12 @@ left the text she was in the middle of.
 An hour later she drops the same photograph again, further down the
 chapter. The assets folder still holds one copy: Editor recognises the
 bytes it already has and writes a second reference to the file that is
-there. A short video clip dropped the same way becomes a video block naming
-the local file; a spreadsheet becomes a link. Whatever she drops, the
+there. A photograph straight off her phone is converted to a web format on
+the way in and the reference points at the conversion, with no second copy
+of the original left behind. A short video clip dropped the same way becomes
+a video block naming the local file, a video address dragged or pasted in
+becomes a video block naming that address, and a spreadsheet becomes a
+link. Whatever she drops, the
 answer is a construct already written for her in the canon, and she is left
 with the cursor in the one place she still has something to say.
 
@@ -83,34 +87,45 @@ contains.
 
 ## Scope Conditions
 
-- Platform: the desktop app on macOS, Tauri 2 with the system web view.
+- Platform: the desktop app on macOS, Tauri 2 with the system web view. <!-- cond: cond-2609051353403730 -->
   Drag and drop from the operating system is a shell capability; the same
   gesture is not offered by the single HTML file, where "assets are added
   in the desktop app" (`04-surfaces.md` section 6).
-- Population: Alice, the author, working in an already-open document folder
+- Population: Alice, the author, working in an already-open document folder <!-- cond: cond-2609051353400979 -->
   with a chapter open in the editor.
-- Size: this intent covers files below the document's
-  `asset_threshold_bytes`, which are copied into the `assets/` folder
-  beside the chapter and referenced by a relative path. In scope: the copy,
-  the reference, the cursor, and de-duplication of copied files by content
-  hash. Out of scope and owned by map #15 `itd-2609051335541009` (Add media
-  too big to copy): everything the threshold turns on — referenced assets,
-  named asset roots, the upload on publish, and conversion of phone-native
-  images.
-- Renderings: this intent ends at the reference in the text. What any
+- Size: this intent covers files below the document's size threshold, <!-- cond: cond-2609051353401750 -->
+  which are copied into the `assets/` folder beside the chapter and
+  referenced by a relative path. In scope: the copy, the reference, the
+  cursor, de-duplication of copied files by content hash, and conversion
+  of a phone-native image on the way in — conversion belongs to the drop
+  at any size, and the original is not kept. Out of scope and owned by
+  map #15 `itd-2609051335541009` (Add media too big to copy): everything
+  the threshold turns on — referenced assets, named asset roots, the
+  record, and the upload on publish. Setting the threshold and naming a
+  root belong to map #27, `itd-2609051402126424`.
+- Renderings: this intent ends at the reference in the text. What any <!-- cond: cond-2609051353407278 -->
   rendering does with that reference is owned elsewhere; in particular the
   rule that "every image in a Section or Sub-section becomes a slide of its
   own, full-bleed, in source order" belongs to map #5
   `itd-2609051335447894` (Present a chapter with no slide markup).
-- Non-image drops: a video file below the threshold produces a `.video`
-  block naming the local file, and any other file produces a link
-  (`04-surfaces.md` section 2). The ordered source list, the gated source,
-  and what a reader sees when no source is reachable are owned by map #16
-  `itd-2609051335568936` (Point a video at several sources, one behind a
-  sign-in).
-- Plumbing inherited, not owned here: content hashing, image conversion,
-  and the `assets.json` schema (`05-internals.md` section 6).
-- Network: the drop performs no network request of any kind, on any path.
+- Non-image drops: a video file below the threshold produces a `.video` <!-- cond: cond-2609051353402131 -->
+  block naming the local file, a video URL dragged or pasted onto the
+  text produces a `.video` block naming that address, and any other file
+  produces a link (`04-surfaces.md` section 2). The ordered source list,
+  the gated source, and what a reader sees when no source is reachable
+  are owned by map #16 `itd-2609051335568936` (Point a video at several
+  sources, one behind a sign-in). What this intent owns is the drop on
+  the editor text: a Markdown file dropped on a Part in the sidebar is a
+  new chapter and belongs to map #1, `itd-2609051335399446`; a flat
+  manuscript arrives through the Import command and belongs to map #13,
+  `itd-2609051335529787`; and an edited chapter comes back through the
+  Re-import command, which belongs to map #18, `itd-2609051335586905`.
+- Plumbing inherited, not owned here: content hashing, the conversion <!-- cond: cond-2609051353400450 -->
+  itself, and the asset record's schema (`05-internals.md` section 6).
+  What this intent owns of conversion is the observable outcome: the
+  reference points at the web-format file and the phone-native original
+  is not left in the document folder.
+- Network: the drop performs no network request of any kind, on any path. <!-- cond: cond-2609051353405457 -->
 
 ## Acceptance Criteria
 
@@ -135,31 +150,57 @@ contains.
   Then a `::: {.video}` block appears at the drop point with a single
   `- local:` entry naming the copied file relative to the chapter, and no
   `site` or `gated` entry is invented.
+- Given a video URL, When Alice drags it onto the chapter text or pastes
+  it there, Then a `::: {.video}` block appears at that point naming that
+  address as its source, nothing is downloaded, no file is copied into
+  the document folder, and no request is made to that address.
+- Given a spreadsheet or any other file that is neither an image nor a
+  video, When Alice drops it on the chapter text, Then it is copied
+  beside the chapter under the same threshold rule and an ordinary
+  Markdown link to it appears at the drop point, with the cursor in the
+  link text ready for a label.
+- Given a photograph in a phone-native format, of any size and on either
+  side of the threshold, When Alice drops it, Then the reference written
+  into the chapter points at a web-format conversion, the phone-native
+  original is not left anywhere in the document folder, and the record
+  keeps the format it was converted from.
 - Given any number of drops of any kind, When the document folder is
-  searched afterwards, Then no chapter file and no manifest entry contains
-  an absolute path, a home directory name, a user name, or a host name; and
-  with the machine offline every drop still succeeds and issues no network
-  request.
+  searched afterwards, Then no chapter file and no asset record names
+  Alice's machine — no absolute local path, no home directory name, no
+  user name, and no local host or volume name; and with the machine
+  offline every drop still succeeds and issues no network request.
 - Given a dropped image in an open chapter, When the editor window is
-  narrowed to iPad width, Then the preview shows the image within the
-  measure with no horizontal scrolling and no pinch zoom.
-- Inherits: No machine in the document; Round-trip byte-fidelity; Degrade
-  gracefully in a plain tool; Network only on publish; One source, always;
-  Legible on three device classes.
+  narrowed to iPad width (820 CSS px), and again to iPhone width (390 CSS
+  px) and desktop width (1280 CSS px), Then the preview shows the image
+  within the measure at every one of the three widths with no horizontal
+  scrolling and no pinch zoom.
+- Inherits: no machine in the document (`itd-2609051336080960`);
+  round-trip byte-fidelity (`itd-2609051336074533`); degrade gracefully
+  in a plain tool (`itd-2609051336110536`); network only on publish
+  (`itd-2609051336158553`); one source, always (`itd-2609051336090390`);
+  legible on three device classes (`itd-2609051336128348`).
 
 ## Open Questions
 
 - The default size threshold between copied and referenced assets, which
-  decides whether a given drop is this moment at all (`03-evidence.md`,
-  open questions, Assets).
-- Whether the asset manifest is per document or per Part, which decides
+  decides which side of the line a given drop falls on before Alice has
+  set it herself (`03-evidence.md`, open questions, Assets; map #27,
+  `itd-2609051402126424`, owns setting it).
+- Whether the asset record is per document or per Part, which decides
   where a copied drop is recorded (`03-evidence.md`, open questions,
   Assets).
 - What happens when conversion of a phone-native image is unavailable — a
-  placeholder, a refusal, or the original left in place. It reaches this
-  moment because a phone photograph below the threshold is a copied asset
-  that still needs conversion (`03-evidence.md`, open questions, Assets).
+  placeholder, a refusal, or the original left in place (`03-evidence.md`,
+  open questions, Assets). Conversion belongs to this moment at any size,
+  so this is the moment the answer binds.
+- What a video URL dropped from a site that offers no direct media
+  address produces, since the block names an address rather than fetching
+  one and Editor never probes it.
 
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: copy-beside-the-chapter with content-hash de-duplication keeps documents portable; wrong if duplicate assets or broken relative links appear in real documents

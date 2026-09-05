@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335406422
 slug: edit-with-the-emacs-bindings-i-already-know
-spec_id: null
-kind: null
+spec_id: spc-2609051353381023
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -87,31 +87,33 @@ edit quickly, she needs her own keys.
 
 ## Scope Conditions
 
-- Platform: the desktop app only — a Tauri 2 shell around the macOS
+- Platform: the desktop app only — a Tauri 2 shell around the macOS <!-- cond: cond-2609051353386305 -->
   system web view, with Rust claiming the key combinations the platform
   would otherwise take (`02-constraints.md`; `05-internals.md` section 5).
-- Gate: this intent is gated by the spike in `06-delivery.md`, which
+- Gate: this intent is gated by the spike in `06-delivery.md`, which <!-- cond: cond-2609051353385085 -->
   produces the binding table. Every criterion below refers to that table
   rather than to a chord written here, and the intent claims no chord the
   table does not list.
-- Assumption: CodeMirror is the editing surface in both the app and the
+- Assumption: CodeMirror is the editing surface in both the app and the <!-- cond: cond-2609051353388604 -->
   single file, held until the spike confirms or replaces it
   (`01-product.md`).
-- Population: Alice, one author, one binding set. Alternative binding
+- Population: Alice, one author, one binding set. Alternative binding <!-- cond: cond-2609051353382930 -->
   sets are out of scope for the product (`06-delivery.md`); rebinding one
   action is a separate open question.
-- Boundary with map #18, `itd-2609051335586905` (Edit on the iPad and
+- Boundary with map #18, `itd-2609051335586905` (Edit on the iPad and <!-- cond: cond-2609051353385287 -->
   bring the text back): the boundary is the host. 2 owns the desktop app
   and the binding table itself; 18 owns which of those bindings survive
   in Safari on an iPad, where there is no shell to claim anything back.
-- Boundary with the reading views: which navigation chords the article,
-  the deck, and the single file share with the editor is an open question
-  in `03-evidence.md`; this intent owns the editing surface's vocabulary
-  and the panel that displays it, not its reuse elsewhere.
-- Bundle: member of the Editing surface bundle with map #1,
+- Boundary with the reading views and with map #26, <!-- cond: cond-2609051353383595 -->
+  `itd-2609051402083398` (Move through the article by keyboard): 26 owns
+  which entries of this table the article, the deck, and the single file
+  honour, and what each does to a page that cannot be edited. This intent
+  owns the editing surface's vocabulary, the table itself, and the panel
+  that displays it, not its reuse elsewhere.
+- Bundle: member of the Editing surface bundle with map #1, <!-- cond: cond-2609051353385499 -->
   `itd-2609051335399446`, and map #3, `itd-2609051335415528`. One spec —
   an editor with no bindings is not the editor the constraints describe.
-- Plumbing inherited, not owned: the editing component, key interception
+- Plumbing inherited, not owned: the editing component, key interception <!-- cond: cond-2609051353387424 -->
   in the shell, the key table's data shape, and atomic writes to disk.
 
 ## Acceptance Criteria
@@ -143,17 +145,33 @@ edit quickly, she needs her own keys.
   place changes the panel, the tooltip, and the test together.
 - Given Alice has typed a paragraph and has not pressed the save chord,
   When the chapter file is read from disk, Then it is byte for byte what
-  it was before she typed; and When she then saves, Then the file differs
-  only by the paragraph she typed.
+  it was before she typed, the modeline marks the buffer as unsaved, and
+  When she then switches to another chapter or closes the document, Then
+  Editor asks what to do with the unsaved changes rather than discarding
+  or writing them silently; and When she saves instead, Then the file
+  differs only by the paragraph she typed and the modeline no longer
+  marks it unsaved.
+- Given the cursor mid-paragraph, When Alice deletes a sentence, retypes
+  part of it, and presses the undo chord repeatedly, Then each press
+  reverses the previous change in order until the paragraph is what it
+  was when the chapter opened, and no undo step reaches past the state
+  the file was opened in.
+- Given a chord that appears nowhere in the binding table, When Alice
+  presses it in the editing surface, Then no editing action is performed,
+  the keys panel does not list it, and the chapter is byte for byte what
+  it was. (Negative case: a chord that acts without being in the table
+  makes the table an incomplete promise.)
 - Given a chapter carrying a 544-character line, a table, an HTML
   comment, and a fenced div, When Alice opens it, moves the cursor to the
   end of the buffer, and saves without typing, Then the file is byte for
   byte identical — no reflowed line, no re-escaped character, no
   realigned table, no dropped comment.
-- Given the desktop app window narrowed to iPad width, When Alice opens
-  the keys panel and enters a prefix state, Then the panel and the
-  modeline remain fully legible with no horizontal scrolling and no
-  pinch zoom, and the cancel chord still closes the panel.
+- Given the desktop app window narrowed to iPad width (820 CSS px), and
+  again at iPhone width (390 CSS px) and desktop width (1280 CSS px),
+  When Alice opens the keys panel and enters a prefix state, Then the
+  panel and the modeline remain fully legible at every one of the three
+  widths with no horizontal scrolling and no pinch zoom, and the cancel
+  chord still closes the panel.
 - Inherits: round-trip byte-fidelity (`itd-2609051336074533`); no machine
   in the document (`itd-2609051336080960`); one source, always
   (`itd-2609051336090390`); degrade gracefully in a plain tool
@@ -175,13 +193,20 @@ edit quickly, she needs her own keys.
   sees them, and which of those the shell can claim back — open in
   `03-evidence.md` and the first question the spike answers.
 - Which navigation chords the reading views share with the editor — open
-  in `03-evidence.md`, and the reason this intent stops at the editing
-  surface.
+  in `03-evidence.md`. The moment that answers it is map #26,
+  `itd-2609051402083398` (Move through the article by keyboard), which
+  reads its chords from this intent's table; this intent stops at the
+  editing surface.
 - How concurrent edits from two devices are detected so that
   last-write-wins can be reported rather than silently applied — open in
-  `03-evidence.md`, which decides what the editor does when a chapter it
-  holds unsaved changes underneath it.
+  `03-evidence.md`. The same question decides what the editor does when a
+  chapter it is holding with unsaved changes is rewritten underneath it
+  by another tool.
 
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: the Emacs keymap inside a system web view can be made to honour the binding table with precedence and a thirty-line extension; wrong if the manual checklist on macOS finds chords the shell cannot claim

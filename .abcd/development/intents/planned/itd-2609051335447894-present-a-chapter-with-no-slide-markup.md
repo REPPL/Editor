@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335447894
 slug: present-a-chapter-with-no-slide-markup
-spec_id: null
-kind: null
+spec_id: spc-2609051353412219
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -72,10 +72,10 @@ disagree with the chapter, because it is the chapter.
   two, and the author has to restore it by hand.
 - We expect the default to be tested hardest by depth rather than by
   breadth, because the acceptance project in `03-evidence.md` carries 177
-  headings at four levels with two thirds of them at the fourth. If a
-  chapter of that shape yields a main line nobody can follow, the default
-  is wrong and the fourth level must fold into speaker notes rather than
-  nest deeper.
+  headings at four levels with two thirds of them at the fourth. That is
+  why the fourth level folds into its Sub-section's speaker notes rather
+  than nesting deeper: a main line two thirds of which is a
+  Sub-sub-section is a main line nobody can follow.
 - We expect generated image slides to earn their place without being asked
   for because the slide prototype in `03-evidence.md` lists image-only
   slides among the forms an author actually reaches for, alongside
@@ -97,52 +97,52 @@ disagree with the chapter, because it is the chapter.
 
 ## Scope Conditions
 
-- **Bundle.** This intent is a member of the bundle *The deck*, whose
+- **Bundle.** This intent is a member of the bundle *The deck*, whose <!-- cond: cond-2609051353414168 -->
   other member is map #6 (`itd-2609051335458626`), "Shape the deck in the
   same text". One spec covers both: this intent is what the deck does when
   Alice says nothing, #6 is what it does when she says something. Neither
   ships alone, because a default mapping with no way to shape it is not a
   talk, and constructs with no default to shape are markup for its own
   sake.
-- **Platform.** The desktop app on macOS — Tauri 2 with the system web
+- **Platform.** The desktop app on macOS — Tauri 2 with the system web <!-- cond: cond-2609051353412397 -->
   view — and the deck as built for the presenter site. The deck inside the
   single HTML file is out: map #17 (`itd-2609051335570842`), "Carry the
   document as one file that reads anywhere", owns that host, in phase 5.
-- **Population.** Alice presenting her own chapter, and Bob and Carol as
+- **Population.** Alice presenting her own chapter, and Bob and Carol as <!-- cond: cond-2609051353415666 -->
   audience on a projector, an iPad and an iPhone. One author on one
   machine; collaboration and concurrent editing are out of scope for the
   product entirely (`06-delivery.md`).
-- **Phase.** Phase 1, the first usable slice. The chapter is presented in
+- **Phase.** Phase 1, the first usable slice. The chapter is presented in <!-- cond: cond-2609051353419859 -->
   the default variant, with copied assets only. Variants, citations, the
   article, the PDF, the single file, referenced assets and annotations are
   all excluded from this phase by `06-delivery.md`, so no criterion here
   depends on them.
-- **Assumption.** The chapter is already open in Editor and its hierarchy
+- **Assumption.** The chapter is already open in Editor and its hierarchy <!-- cond: cond-2609051353416905 -->
   already read from the folder. Map #1 (`itd-2609051335399446`), "Open a
   folder and see the book", owns opening the folder and building the tree;
   this intent begins at the moment Alice presses Present.
-- **Boundary with map #9 (`itd-2609051335489928`), "Read the document as a
+- **Boundary with map #9 (`itd-2609051335489928`), "Read the document as a <!-- cond: cond-2609051353414652 -->
   Tufte article".** In: what the Slides column of the mapping table in
   `05-internals.md` section 3 says for headings, images and rules. Out:
   what the Article column says for the same constructs — #9 owns that
   column. The table is the single home for both, and neither intent
   restates the other's row.
-- **Boundary with map #4 (`itd-2609051335420536`), "Drop an image and have
+- **Boundary with map #4 (`itd-2609051335420536`), "Drop an image and have <!-- cond: cond-2609051353416297 -->
   it just work".** In: an image reference already in the chapter becoming
   a slide of its own, in source order, with its caption and credit. Out:
   the drop gesture, the copy into the chapter's assets folder, and
   de-duplication of copied files — #4 owns those and stops at the
   reference in the text.
-- **Boundary with map #25 (`itd-2609051336055362`), "Rehearse from cards
+- **Boundary with map #25 (`itd-2609051336055362`), "Rehearse from cards <!-- cond: cond-2609051353419812 -->
   built out of the headings".** Both turn headings into something else. In:
   slides shown to an audience. Out: cards used to test recall, which live
   in an annotation sidecar and not in a deck — #25 owns those, in phase 7.
-- **Boundary with map #7 (`itd-2609051335468596`), "Publish and get a link
+- **Boundary with map #7 (`itd-2609051335468596`), "Publish and get a link <!-- cond: cond-2609051353412520 -->
   I can open from the lectern".** In: the deck as built, wherever it runs.
   Out: the publish action, the stable id, the version hash and the link —
   #7 owns those. The deck at the link must be this deck, but the link is
   not this intent's to mint.
-- **Boundary with map #11 (`itd-2609051335502171`), "Cite from a
+- **Boundary with map #11 (`itd-2609051335502171`), "Cite from a <!-- cond: cond-2609051353412029 -->
   bibliography file".** Out entirely in this phase: nothing here resolves
   a citation key or generates a reference list. #11 owns the key, the
   file and the resolution; where a resolved citation supplies the source
@@ -164,23 +164,41 @@ disagree with the chapter, because it is the chapter.
   showing its own headline with its own paragraph as its speaker notes,
   and moving right from Beginnings reaches `## Findings` rather than any
   Sub-section slide.
-- **Given** a Section containing two images written
+- **Given** a Section whose prose is followed by two paragraphs each
+  holding one image, written
   `![The lantern at dusk](assets/lantern.jpg "Photograph by Carol")` and
   `![The second winter](assets/winter.jpg "Photograph by Carol")`, **when**
   the deck is built, **then** each image is a full-bleed slide of its own
   at the position its reference occupies in the text, in source order,
   with the alt text shown as the caption and the title attribute shown as
   the credit.
+- **Given** a Section whose first block after the headline is a paragraph
+  holding one image, **when** the deck is built, **then** that image
+  shares the Section's headline slide rather than starting a slide of its
+  own, and a second image later in the same Section still starts its own
+  slide.
+- **Given** a Sub-section containing the Sub-sub-sections
+  `#### A note on dates` and `#### A note on counts`, **when** the deck is
+  built, **then** no slide is made for either of them, their headings and
+  their text appear in that Sub-section's speaker notes in source order,
+  and moving down from the Sub-section reaches the next Sub-section
+  rather than a Sub-sub-section slide.
 - **Given** a chapter that contains no slide-only construct at all,
   **when** Alice presses Present, moves through every slide, and closes the
   deck, **then** the chapter file on disk is byte for byte what it was
   before, no slide-only construct has been written into it, and no deck
   file has been created anywhere in the document folder.
-- **Given** the deck open at iPhone width (390 points) and again at iPad
-  width (820 points), **when** Bob moves through every slide of a chapter
-  that includes a headline slide, a Sub-section slide and an image slide,
-  **then** no slide scrolls horizontally or needs pinch zoom at either
-  width, and each slide's headline, caption and image are wholly visible.
+- **Given** the deck open at iPhone width (390 CSS px), at iPad width
+  (820 CSS px), and at desktop width (1280 CSS px), **when** Bob moves
+  through every slide of a chapter that includes a headline slide, a
+  Sub-section slide and an image slide, **then** no slide scrolls
+  horizontally or needs pinch zoom at any of the three widths, and each
+  slide's headline, caption and image are wholly visible.
+- **Given** the deck open at iPhone width (390 CSS px), **when** Bob
+  swipes left and right, taps the on-screen controls, and presses the
+  arrow keys with a keyboard attached, **then** each of the three moves
+  between slides — left and right along the Sections, up and down within
+  one — and none of them is offered without working.
 - **Given** a Section whose only content is one paragraph, with no image
   and no Sub-section, **when** the deck is built, **then** it yields
   exactly one slide, with no empty vertical slide beneath it and no blank
@@ -190,17 +208,17 @@ disagree with the chapter, because it is the chapter.
   **then** the deck shows the new headline and the new speaker notes, and
   the document folder holds no second copy of the deck or of its text from
   the first build.
-- Inherits: *One source, always*; *Round-trip byte-fidelity*; *Legible on
-  three device classes*; *Degrade gracefully in a plain tool*; *No machine
-  in the document*; *Network only on publish*.
+- Inherits: one source, always (`itd-2609051336090390`); round-trip
+  byte-fidelity (`itd-2609051336074533`); legible on three device classes
+  (`itd-2609051336128348`), at 390, 820, and 1280 CSS px; degrade
+  gracefully in a plain tool (`itd-2609051336110536`); no machine in the
+  document (`itd-2609051336080960`); network only on publish
+  (`itd-2609051336158553`); and, from phase 3 where it binds, variant
+  fidelity (`itd-2609051336107315`), which governs what a filtered deck
+  may show.
 
 ## Open Questions
 
-- Whether Sub-sub-sections become further vertical slides or fold into
-  their Sub-section's speaker notes (`03-evidence.md`, open questions,
-  "Article and slides"). The acceptance project puts two thirds of its
-  headings at that level, so the answer decides whether the default
-  mapping is usable on a real chapter.
 - The slide theme: one built-in theme, or the prototype's theme ported
   (`03-evidence.md`, open questions, "Article and slides"). The default
   mapping produces slides with no authored styling, so whatever theme
@@ -208,8 +226,17 @@ disagree with the chapter, because it is the chapter.
 - Which navigation chords the reading views share with the editor
   (`03-evidence.md`, open questions, "Editor"). The deck is a reading view
   that Alice drives from the lectern, so its movement chords come from
-  that answer.
+  that answer, which map #26, `itd-2609051402083398` (Move through the
+  article by keyboard), owns. Until it is settled, the deck's arrow keys,
+  swipe, and on-screen controls stand on their own.
+- Whether the deck opens with a chapter title slide before the first
+  Section, and what becomes of prose that sits between a chapter's
+  level-one heading and its first Section.
 
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: headline-as-slide and text-as-notes yields a usable first deck with no authoring; wrong if the maintainer's real talks need authored breaks on most sections
