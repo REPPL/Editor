@@ -1,8 +1,8 @@
 ---
 id: itd-2609051934109483
 slug: the-binding-table-lacks-the-prose-vocabulary-a-writer-reache
-spec_id: null
-kind: null
+spec_id: spc-2609051938278499
+kind: standalone
 suggested_kind: null
 reclassification_history: []
 builds_on: []
@@ -102,42 +102,42 @@ all, and that is the falsification.
 
 ## Scope Conditions
 
-- Platform: the desktop app, in the Tauri 2 system web view on macOS, with
+- Platform: the desktop app, in the Tauri 2 system web view on macOS, with <!-- cond: cond-2609051938271571 -->
   the shell claiming the combinations the platform would otherwise take.
   The same rows in the single HTML file on an iPad, where there is no
   shell to claim anything, belong to intent 18.
-- Population: Alice, the sole author, editing the Markdown of one chapter.
+- Population: Alice, the sole author, editing the Markdown of one chapter. <!-- cond: cond-2609051938270695 -->
   No moment here belongs to Bob or Carol; nothing these commands do
   reaches a rendering.
-- Assumption: the spike named in `06-delivery.md` has run and produced the
+- Assumption: the spike named in `06-delivery.md` has run and produced the <!-- cond: cond-2609051938279075 -->
   written binding table, and the editing surface is the one it chose.
   These rows are added to that table, not to a second one.
-- Scale: tier one of the research note only — seventeen commands. Tier
+- Scale: tier one of the research note only — seventeen commands. Tier <!-- cond: cond-2609051938271627 -->
   two, the document model as an outline (heading movement, folding,
   promotion and demotion, narrowing, occur, switching chapter by name),
   is a later intent of its own, together with the chord conflicts the note
   lists for the maintainer to decide. Tier three is not in scope at all.
-- Boundary with intent 2, `itd-2609051335406422` (Edit with the Emacs
+- Boundary with intent 2, `itd-2609051335406422` (Edit with the Emacs <!-- cond: cond-2609051938271592 -->
   bindings I already know): 2 owns the binding table's shape — the id, the
   label, the chords — the keys panel that renders it, the cancel contract,
   and the conformance sweep that checks the table. This intent adds rows
   to that table and passes under that sweep; it defines none of them. In:
   the seventeen commands and what each does to the text. Out: the table,
   the panel, the sweep.
-- Boundary with intent 3, `itd-2609051335415528` (Insert a construct I
+- Boundary with intent 3, `itd-2609051335415528` (Insert a construct I <!-- cond: cond-2609051938278797 -->
   cannot remember): 3 owns the insert palette on `C-c i` and the canonical
   form each entry writes at the cursor. In: that those same entries are
   listed by the `M-x` command palette and run from it. Out: what any of
   them inserts, and the palette's own chord, which is unchanged.
-- Boundary with intent 30, `itd-2609051921482691` (Move between the editor
+- Boundary with intent 30, `itd-2609051921482691` (Move between the editor <!-- cond: cond-2609051938279178 -->
   and the sidebar without the mouse): 30 owns focus between panes, the
   sidebar by keyboard, and the return. In: movement of the cursor inside
   the text of one chapter, `M-r` included, which moves the cursor within
   the view. Out: any movement of focus out of the text.
-- Assumption: the fill column is a document setting, defaulting to 80, so
+- Assumption: the fill column is a document setting, defaulting to 80, so <!-- cond: cond-2609051938272027 -->
   a document may state its own and a document that says nothing is filled
   at 80.
-- Out of scope: rebinding any of these chords, which `03-evidence.md`
+- Out of scope: rebinding any of these chords, which `03-evidence.md` <!-- cond: cond-2609051938277046 -->
   leaves open for the table as a whole, and alternative binding sets,
   which `06-delivery.md` puts out of scope entirely.
 
@@ -210,3 +210,7 @@ all, and that is the falsification.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: the thirteen tier-one chords are what an Emacs writer's hands already know, so adding them removes the last reason to leave the app; wrong if the maintainer keeps editing in Emacs anyway
