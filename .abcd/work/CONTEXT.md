@@ -11,10 +11,12 @@ public on GitHub under the maintainer's account and licensed MIT.
 
 ## Current phase
 
-Phase one, the deck, has shipped: eight intents under
-`../development/intents/shipped/`, each with its closed spec and an
-ingested fidelity audit; release 0.1.0 is cut in `CHANGELOG.md` and tagged
-locally. The app builds as a release bundle. What phase one has not had is a
+Phase one, the deck, has shipped: eleven intents under
+`../development/intents/shipped/` (eight from the first slice, three the
+maintainer asked for after using the app: keyboard movement between the
+panes, an export panel, and the prose vocabulary with M-x), each with its
+closed spec and an ingested fidelity audit; releases 0.1.0 and 0.2.0 are
+cut in `CHANGELOG.md` and tagged locally. The app builds as a release bundle. What phase one has not had is a
 human at the keyboard: the manual acceptance rows under
 `../.work.local/logs/acceptance/` are all unticked, and every audit records
 the three-width legibility criteria as inconclusive for that reason. Phase
