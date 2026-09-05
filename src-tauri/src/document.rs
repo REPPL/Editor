@@ -7,7 +7,9 @@
 //! The web view is a trust boundary: any script running inside it can invoke a
 //! command with any argument it likes. So every path that arrives from the
 //! frontend is resolved against the canonicalised root of the open document by
-//! [`confine_chapter`] and refused if it lands anywhere else.
+//! [`confine_path`] — or by [`confine_chapter`], [`confine_part`] or
+//! [`confine_asset`], the three wrappers that say what kind of thing they
+//! expect — and refused if it lands anywhere else.
 
 use std::cmp::Ordering;
 use std::fs;
@@ -253,7 +255,7 @@ fn read_part(folder: &Path, depth: usize, failures: &mut Vec<String>) -> Result<
 /// Resolve a folder the user chose into the canonical root of a document.
 ///
 /// Canonical means symlinks and `..` are already gone, so it is a prefix that
-/// [`confine_chapter`] can compare against without being fooled.
+/// [`confine_path`] can compare against without being fooled.
 pub fn canonical_root(folder: &str) -> Result<PathBuf, String> {
     let path = Path::new(folder);
     let resolved =
@@ -264,44 +266,111 @@ pub fn canonical_root(folder: &str) -> Result<PathBuf, String> {
     Ok(resolved)
 }
 
-/// Resolve a chapter path from the frontend against the open document's root.
+/// The file extensions [`confine_asset`] will resolve, lower-cased.
 ///
-/// The path must name a Markdown file and must resolve, symlinks and `..`
-/// resolved, to somewhere inside `root`. Everything else is refused, so a
-/// script in the web view cannot reach `~/.ssh/id_rsa` or write outside the
-/// document the author opened.
-pub fn confine_chapter(root: &Path, requested: &str) -> Result<PathBuf, String> {
+/// Phase 1 carries images and nothing else: a script in the web view can ask
+/// the shell to read a file inside the open document, so what it may name is
+/// an allow-list rather than a deny-list. Later phases widen it; they do not
+/// remove it.
+pub const ASSET_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "svg", "webp", "avif"];
+
+/// The name to put in a refusal, which is the file name where there is one.
+///
+/// The whole path is not used: it would put the author's machine into a
+/// message the frontend may show, and the name is what identifies the file to
+/// the person reading it.
+fn display_name(path: &Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+/// The lower-cased extension of a file name, if it has one.
+fn extension_of(name: &str) -> Option<String> {
+    Path::new(name)
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+}
+
+/// Resolve a path from the frontend against the open document's root.
+///
+/// This is the one primitive: [`confine_chapter`], [`confine_part`] and
+/// [`confine_asset`] are thin wrappers that add what kind of thing they expect
+/// to find, and every command that takes a path goes through one of them.
+///
+/// The path must resolve, symlinks and `..` resolved, to somewhere inside
+/// `root`. Everything else is refused, so a script in the web view cannot
+/// reach `~/.ssh/id_rsa` or write outside the document the author opened. A
+/// path that does not exist yet is resolved through its folder, which must
+/// exist and is canonicalised the same way, so a file about to be created is
+/// confined before it is written rather than after.
+pub fn confine_path(root: &Path, requested: &str) -> Result<PathBuf, String> {
     let requested = Path::new(requested);
     let candidate = if requested.is_absolute() {
         requested.to_path_buf()
     } else {
         root.join(requested)
     };
-    let name = candidate
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .ok_or_else(|| format!("{} does not name a file", candidate.display()))?;
-    if !is_chapter(&name) {
-        return Err(format!("{name} is not a Markdown chapter"));
-    }
-    // An existing chapter is canonicalised whole, so a symlink pointing out of
-    // the document is caught. One that does not exist yet is resolved through
-    // its folder, which must exist and is canonicalised the same way.
+    let name = display_name(&candidate);
     let resolved = match fs::canonicalize(&candidate) {
         Ok(path) => path,
         Err(_) => {
             let parent = candidate
                 .parent()
                 .ok_or_else(|| format!("{name} has no folder"))?;
+            let file_name = candidate
+                .file_name()
+                .ok_or_else(|| format!("{name} does not name a file"))?;
             fs::canonicalize(parent)
                 .map_err(|e| format!("cannot resolve {}: {e}", parent.display()))?
-                .join(&name)
+                .join(file_name)
         }
     };
     if !resolved.starts_with(root) {
         return Err(format!("{name} is outside the open document"));
     }
     Ok(resolved)
+}
+
+/// Resolve a chapter path: [`confine_path`], and it must name a Markdown file.
+pub fn confine_chapter(root: &Path, requested: &str) -> Result<PathBuf, String> {
+    let name = display_name(Path::new(requested));
+    if !is_chapter(&name) {
+        return Err(format!("{name} is not a Markdown chapter"));
+    }
+    confine_path(root, requested)
+}
+
+/// Resolve a Part path: [`confine_path`], and it must be a folder that exists.
+///
+/// A Part is a folder the author already has; nothing here creates one. So
+/// unlike a chapter about to be written, a Part that does not resolve to a
+/// directory is a refusal rather than a path to be prepared.
+pub fn confine_part(root: &Path, requested: &str) -> Result<PathBuf, String> {
+    let resolved = confine_path(root, requested)?;
+    if !resolved.is_dir() {
+        return Err(format!(
+            "{} is not a folder in the open document",
+            display_name(&resolved)
+        ));
+    }
+    Ok(resolved)
+}
+
+/// Resolve an asset path: [`confine_path`], and it must carry an extension in
+/// [`ASSET_EXTENSIONS`].
+///
+/// Size is the reader's business, not the path's: this says which file may be
+/// named, and the command that opens it says how much of it may be read.
+pub fn confine_asset(root: &Path, requested: &str) -> Result<PathBuf, String> {
+    let name = display_name(Path::new(requested));
+    let permitted = extension_of(&name)
+        .map(|extension| ASSET_EXTENSIONS.contains(&extension.as_str()))
+        .unwrap_or(false);
+    if !permitted {
+        return Err(format!("{name} is not an image this phase carries"));
+    }
+    confine_path(root, requested)
 }
 
 /// Walk a document folder into a `DocumentTree`.
@@ -623,6 +692,68 @@ mod tests {
             result.is_err(),
             "a link out of the document is not a chapter"
         );
+    }
+
+    #[test]
+    fn confines_any_path_to_the_open_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::create_dir(base.join("01-part")).expect("part");
+        fs::write(base.join("document.yaml"), "title: Alice\n").expect("metadata");
+
+        assert_eq!(
+            confine_path(&base, "document.yaml").expect("inside"),
+            base.join("document.yaml")
+        );
+        assert_eq!(
+            confine_path(&base, "01-part").expect("folder"),
+            base.join("01-part")
+        );
+        // A file that does not exist yet resolves through its folder.
+        assert_eq!(
+            confine_path(&base, "01-part/assets.json").expect("not yet written"),
+            base.join("01-part/assets.json")
+        );
+        assert!(confine_path(&base, "../secrets").is_err());
+        assert!(confine_path(&base, "/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn confines_a_part_to_a_folder_inside_the_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::create_dir(base.join("01-part")).expect("part");
+        fs::write(base.join("01-part/01-alice.md"), "# Alice\n").expect("chapter");
+
+        assert_eq!(
+            confine_part(&base, "01-part").expect("a Part"),
+            base.join("01-part")
+        );
+        let message = confine_part(&base, "01-part/01-alice.md").expect_err("not a folder");
+        assert!(message.contains("is not a folder in the open document"));
+        assert!(confine_part(&base, "02-missing").is_err());
+        assert!(confine_part(&base, "..").is_err());
+    }
+
+    #[test]
+    fn confines_an_asset_to_an_image_inside_the_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::create_dir(base.join("assets")).expect("assets");
+        fs::write(base.join("assets/lantern.JPG"), b"\xff\xd8").expect("image");
+        fs::write(base.join("assets/notes.txt"), "shh").expect("other file");
+
+        assert_eq!(
+            confine_asset(&base, "assets/lantern.JPG").expect("an image"),
+            base.join("assets/lantern.JPG")
+        );
+        let message = confine_asset(&base, "assets/notes.txt").expect_err("not an image");
+        assert!(message.contains("is not an image this phase carries"));
+        assert!(
+            confine_asset(&base, "assets").is_err(),
+            "a folder is not an asset"
+        );
+        assert!(confine_asset(&base, "../lantern.jpg").is_err());
     }
 
     #[test]

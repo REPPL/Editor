@@ -201,15 +201,17 @@ reference; renderings try them top to bottom:
 ::: {.video poster="assets/keynote-poster.jpg" caption="The second half"}
 - local: asset:b1946ac92492d234
 - site: keynote.mp4
+- remote: https://videos.example.org/keynote.mp4
 - gated: https://media.example.org/keynote.mp4
 :::
 ```
 
 `local` is a path relative to the chapter, or `asset:` followed by an
 entry's id in the asset manifest for a referenced file. `site` is a path
-under the published document. `gated` is a URL on a site that asks the
-viewer to sign in; Editor holds no credentials for it and never probes it
-at build time. Every source is tried in this order when a reader opens the
+under the published document. `remote` is a plain public URL, which is what
+a dropped or pasted video link writes. `gated` is a URL on a site that asks
+the viewer to sign in; Editor holds no credentials for it and never probes
+it at build time. Every source is tried in this order when a reader opens the
 page, and one that fails to load — or answers with a sign-in page rather
 than the video — falls through to the next. The poster is the `poster`
 attribute if the block carries one, otherwise the frame the manifest

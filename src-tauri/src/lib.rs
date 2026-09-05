@@ -11,7 +11,8 @@
 //! the author opened is canonicalised into [`DocumentRoot`], and every chapter
 //! path is resolved against it and refused if it lands anywhere else.
 
-mod document;
+pub mod document;
+pub mod metadata;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +22,7 @@ use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, WindowEvent};
 
 use document::DocumentTree;
+use metadata::DocumentMetadata;
 
 /// The event the frontend listens for when the Open Folder menu item fires.
 const OPEN_FOLDER_EVENT: &str = "menu://open-folder";
@@ -78,6 +80,25 @@ async fn open_folder(
     .map_err(|error| format!("cannot open the folder: {error}"))??;
     root.set(resolved)?;
     Ok(tree)
+}
+
+/// Read the open document's `document.yaml`.
+///
+/// The path is not the frontend's to give: there is one metadata file and it
+/// sits at the root, so the command takes no argument and still resolves the
+/// name through the confinement primitive, which is what keeps the rule "every
+/// path goes through `confine_path`" true of every command rather than of most
+/// of them.
+#[tauri::command]
+async fn read_document_metadata(
+    root: tauri::State<'_, DocumentRoot>,
+) -> Result<DocumentMetadata, String> {
+    let root = root.get()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        metadata::read_metadata(&document::confine_path(&root, metadata::METADATA_FILE)?)
+    })
+    .await
+    .map_err(|error| format!("cannot read the document metadata: {error}"))?
 }
 
 /// Read one Chapter's Markdown.
@@ -165,6 +186,7 @@ pub fn run() {
         .manage(Dirty::default())
         .invoke_handler(tauri::generate_handler![
             open_folder,
+            read_document_metadata,
             read_chapter,
             write_chapter,
             set_dirty

@@ -39,6 +39,31 @@ export interface DocumentTree {
   readonly failures: readonly string[];
 }
 
+/**
+ * What `document.yaml` says about the document as a whole.
+ *
+ * `05-internals.md` section 1: everything belonging to the whole document
+ * lives in that one file, so this is the one shape that carries it. The shell
+ * reads it; nothing in the frontend parses YAML.
+ */
+export interface DocumentMetadata {
+  readonly id: string | null;
+  readonly title: string | null;
+  readonly subtitle: string | null;
+  readonly author: string | null;
+  readonly affiliation: string | null;
+  readonly abstract: string | null;
+  readonly theme: string | null;
+  readonly variants: readonly string[];
+  readonly default_variant: string | null;
+  readonly variant_tokens: Readonly<Record<string, string>>;
+  readonly bibliography: string | null;
+  readonly citation_style: string | null;
+  readonly asset_threshold_bytes: number | null;
+  /** Whether the document folder carries a `document.yaml` at all. */
+  readonly present: boolean;
+}
+
 /** Whether the page is running inside the Tauri shell. */
 export function inShell(): boolean {
   return "__TAURI_INTERNALS__" in globalThis;
@@ -54,6 +79,12 @@ function requireShell(action: string): void {
 export async function openFolder(path: string): Promise<DocumentTree> {
   requireShell("Opening a folder");
   return invoke<DocumentTree>("open_folder", { path });
+}
+
+/** Read the open document's `document.yaml`. */
+export async function readDocumentMetadata(): Promise<DocumentMetadata> {
+  requireShell("Reading the document metadata");
+  return invoke<DocumentMetadata>("read_document_metadata");
 }
 
 /** Read one Chapter's Markdown. */

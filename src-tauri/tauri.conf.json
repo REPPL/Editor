@@ -15,7 +15,7 @@
         "title": "Editor",
         "width": 1100,
         "height": 760,
-        "minWidth": 640,
+        "minWidth": 390,
         "minHeight": 420,
         "resizable": true,
         "fullscreen": false,
