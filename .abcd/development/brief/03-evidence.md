@@ -88,8 +88,6 @@ Questions the constraints have settled are dropped. What remains:
 ### Assets
 
 - The default size threshold between copied and referenced assets.
-- What happens when conversion of a phone-native image is unavailable: a
-  placeholder, a refusal, or the original left in place.
 
 ### Article and slides
 

@@ -1,0 +1,419 @@
+//! Present: the deck the shell holds, and the pictures it will hand over.
+//!
+//! The deck itself is built in the web view, from the text of the buffer, and
+//! is never written anywhere: this module holds the text between the moment
+//! Present is pressed and the moment the second window asks for it, and reads
+//! the images that text refers to.
+//!
+//! Reading an image is the one thing the deck needs the shell for, and it is
+//! the one place a script in either web view could reach for a file. So a
+//! reference is resolved against the chapter's own folder, confined to the
+//! open document by [`crate::document::confine_asset`], held to the image
+//! extensions this phase carries, and refused above the copied-asset
+//! threshold `document.yaml` declares. What comes back is bytes, not a path.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+use serde::Serialize;
+
+use crate::document;
+use crate::metadata;
+
+/// The threshold when `document.yaml` names none: 8 MiB, the brief's figure.
+pub const DEFAULT_ASSET_THRESHOLD_BYTES: u64 = 8 * 1024 * 1024;
+
+/// The chapter the author asked to present, as the buffer had it.
+///
+/// The buffer's text, not the file's: an unsaved edit presents.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeckSource {
+    pub text: String,
+    /// The chapter's path, which is what an image reference is relative to.
+    pub chapter_path: String,
+    /// What the present window puts in its title bar.
+    pub chapter_title: String,
+}
+
+/// The one deck waiting to be collected.
+///
+/// A second Present replaces the first: there is one present window, and the
+/// deck it shows is the newest text. Nothing accumulates, and nothing is
+/// written, so pressing Present twice leaves no second copy of anything.
+#[derive(Default)]
+pub struct PendingDeck(Mutex<Option<DeckSource>>);
+
+impl PendingDeck {
+    /// Hold a deck for the present window to collect.
+    pub fn set(&self, source: DeckSource) -> Result<(), String> {
+        let mut held = self
+            .0
+            .lock()
+            .map_err(|_| "the pending deck is unreadable".to_string())?;
+        *held = Some(source);
+        Ok(())
+    }
+
+    /// The deck waiting, or a refusal when Present has not been pressed.
+    pub fn get(&self) -> Result<DeckSource, String> {
+        self.0
+            .lock()
+            .map_err(|_| "the pending deck is unreadable".to_string())?
+            .clone()
+            .ok_or_else(|| "nothing to present".to_string())
+    }
+}
+
+/// One image, as the web view can use it without a path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AssetBytes {
+    pub mime: String,
+    pub base64: String,
+}
+
+/// The media type for an image extension this phase carries.
+///
+/// The list is [`crate::document::ASSET_EXTENSIONS`]; a name that reaches here
+/// has already been held to it, and an extension with no type is a
+/// programming error rather than an author's mistake.
+pub fn mime_for(name: &str) -> Option<&'static str> {
+    let extension = Path::new(name)
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())?;
+    Some(match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        _ => return None,
+    })
+}
+
+/// The standard base64 alphabet, padded.
+///
+/// Hand-written rather than taken as a dependency: it is twenty lines, and a
+/// new crate in the tree costs a sign-off and a supply chain.
+pub fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(ALPHABET[(triple >> 18) as usize & 63] as char);
+        out.push(ALPHABET[(triple >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(triple >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[triple as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// The chapter's own folder, which is what an image reference is relative to.
+fn folder_of(chapter: &Path) -> Result<&Path, String> {
+    chapter
+        .parent()
+        .ok_or_else(|| "the chapter is not inside a folder".to_string())
+}
+
+/// Resolve one image reference written in a chapter.
+///
+/// Relative to the chapter's folder, and then through the asset confinement:
+/// inside the open document, and carrying an extension this phase reads.
+pub fn resolve_asset(root: &Path, chapter_path: &str, reference: &str) -> Result<PathBuf, String> {
+    let chapter = document::confine_chapter(root, chapter_path)?;
+    let candidate = folder_of(&chapter)?.join(reference);
+    document::confine_asset(root, &candidate.to_string_lossy())
+}
+
+/// The copied-asset threshold the document declares, or the brief's default.
+///
+/// One reader: `metadata.rs`. Nothing else parses `document.yaml`.
+pub fn asset_threshold(root: &Path) -> Result<u64, String> {
+    let path = document::confine_path(root, metadata::METADATA_FILE)?;
+    Ok(metadata::read_metadata(&path)?
+        .asset_threshold_bytes
+        .unwrap_or(DEFAULT_ASSET_THRESHOLD_BYTES))
+}
+
+/// Read one image, refusing anything above the threshold.
+///
+/// The threshold is the copied-asset rule: a file larger than it is a
+/// referenced asset, which map #4 owns and which no rendering inlines.
+pub fn read_asset_bytes(path: &Path, threshold: u64) -> Result<AssetBytes, String> {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned());
+    let metadata = fs::metadata(path).map_err(|error| format!("cannot read {name}: {error}"))?;
+    if metadata.len() > threshold {
+        return Err(format!("{name} is larger than the copied-asset threshold"));
+    }
+    let mime =
+        mime_for(&name).ok_or_else(|| format!("{name} is not an image this phase carries"))?;
+    let bytes = fs::read(path).map_err(|error| format!("cannot read {name}: {error}"))?;
+    Ok(AssetBytes {
+        mime: mime.to_string(),
+        base64: base64(&bytes),
+    })
+}
+
+/// The title the present window shows: the chapter's own heading if it has one.
+///
+/// The first level-one heading is the chapter's title, per the canon. A
+/// chapter with none falls back to its file name, which is what the sidebar
+/// shows for it.
+pub fn deck_title(text: &str, chapter_path: &str) -> String {
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("# ") {
+            let heading = rest.trim().trim_end_matches('#').trim();
+            // A heading attribute is the author's markup, not their title.
+            let heading = match heading.rfind('{') {
+                Some(brace) if heading.ends_with('}') => heading[..brace].trim(),
+                _ => heading,
+            };
+            if !heading.is_empty() {
+                return heading.to_string();
+            }
+        }
+    }
+    Path::new(chapter_path)
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| chapter_path.to_string())
+}
+
+/// The window label the deck runs in.
+pub const PRESENT_WINDOW: &str = "present";
+
+/// The page the present window loads, from the bundle rather than from a
+/// string.
+///
+/// `tauri.conf.json` sets `script-src 'self'`, which a `srcdoc` iframe
+/// inherits, so an inline-script deck inside the editor's own window could not
+/// run. A second window loading a page from the same bundle runs under that
+/// policy with no relaxation — and it is also the window Alice projects.
+const PRESENT_PAGE: &str = "present.html";
+
+/// The event the present window listens for when a new deck is waiting.
+pub const DECK_EVENT: &str = "present://deck";
+
+/// Present the chapter as the buffer has it.
+///
+/// The text, not the file: an unsaved edit presents. Nothing is written, and
+/// the deck exists only as a string in memory until the present window asks
+/// for it.
+#[tauri::command]
+pub async fn present_chapter<R: tauri::Runtime>(
+    text: String,
+    chapter_path: String,
+    app: tauri::AppHandle<R>,
+    root: tauri::State<'_, crate::DocumentRoot>,
+    pending: tauri::State<'_, PendingDeck>,
+) -> Result<(), String> {
+    let root = root.get()?;
+    // The path is confined before it is stored, so the present window can only
+    // ever be handed a chapter of the open document.
+    let chapter = document::confine_chapter(&root, &chapter_path)?;
+    let _ = chapter;
+    pending.set(DeckSource {
+        chapter_title: deck_title(&text, &chapter_path),
+        text,
+        chapter_path,
+    })?;
+
+    use tauri::{Emitter, Manager};
+    if let Some(window) = app.get_webview_window(PRESENT_WINDOW) {
+        window
+            .emit(DECK_EVENT, ())
+            .map_err(|error| format!("cannot open the present window: {error}"))?;
+        return window
+            .set_focus()
+            .map_err(|error| format!("cannot open the present window: {error}"));
+    }
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        PRESENT_WINDOW,
+        tauri::WebviewUrl::App(PRESENT_PAGE.into()),
+    )
+    .title("Present")
+    .inner_size(1100.0, 760.0)
+    .min_inner_size(390.0, 420.0)
+    .resizable(true)
+    .build()
+    .map(|_| ())
+    .map_err(|error| format!("cannot open the present window: {error}"))
+}
+
+/// The deck the present window is waiting for.
+#[tauri::command]
+pub fn pending_deck(pending: tauri::State<'_, PendingDeck>) -> Result<DeckSource, String> {
+    pending.get()
+}
+
+/// Read one image a chapter refers to, as bytes the deck can show.
+///
+/// The reference is the author's, relative to their chapter; the path is
+/// never the web view's to give.
+#[tauri::command]
+pub async fn read_asset(
+    chapter_path: String,
+    path: String,
+    root: tauri::State<'_, crate::DocumentRoot>,
+) -> Result<AssetBytes, String> {
+    let root = root.get()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let resolved = resolve_asset(&root, &chapter_path, &path)?;
+        read_asset_bytes(&resolved, asset_threshold(&root)?)
+    })
+    .await
+    .map_err(|error| format!("cannot read the image: {error}"))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A document folder with one Part, one chapter, and one picture.
+    fn document() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = fs::canonicalize(dir.path()).expect("canonical");
+        fs::create_dir_all(root.join("01-part/assets")).expect("part");
+        fs::write(root.join("01-part/01-alice.md"), "# Alice\n").expect("chapter");
+        fs::write(root.join("01-part/assets/lantern.png"), b"not really a png").expect("image");
+        fs::write(root.join("secrets.png"), b"outside the part").expect("outside");
+        (dir, root)
+    }
+
+    #[test]
+    fn encodes_base64_as_the_standard_alphabet_does() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foob"), "Zm9vYg==");
+        assert_eq!(base64(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64(&[0xff, 0xfe, 0xfd]), "//79");
+    }
+
+    #[test]
+    fn resolves_an_image_beside_the_chapter() {
+        let (_dir, root) = document();
+        let resolved = resolve_asset(&root, "01-part/01-alice.md", "assets/lantern.png")
+            .expect("beside the chapter");
+        assert_eq!(resolved, root.join("01-part/assets/lantern.png"));
+    }
+
+    #[test]
+    fn refuses_an_asset_outside_the_document() {
+        let (_dir, root) = document();
+        let message =
+            resolve_asset(&root, "01-part/01-alice.md", "../../secrets.png").expect_err("outside");
+        assert!(message.contains("outside the open document"), "{message}");
+        assert!(
+            resolve_asset(&root, "01-part/01-alice.md", "/etc/hosts").is_err(),
+            "an absolute path is refused"
+        );
+    }
+
+    #[test]
+    fn refuses_a_file_that_is_not_an_image_this_phase_carries() {
+        let (_dir, root) = document();
+        fs::write(root.join("01-part/assets/notes.txt"), b"text").expect("text file");
+        let message = resolve_asset(&root, "01-part/01-alice.md", "assets/notes.txt")
+            .expect_err("not an image");
+        assert!(
+            message.contains("not an image this phase carries"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn reads_an_image_as_bytes_and_names_its_type() {
+        let (_dir, root) = document();
+        let path = root.join("01-part/assets/lantern.png");
+        let asset = read_asset_bytes(&path, DEFAULT_ASSET_THRESHOLD_BYTES).expect("readable");
+        assert_eq!(asset.mime, "image/png");
+        assert_eq!(asset.base64, base64(b"not really a png"));
+    }
+
+    #[test]
+    fn refuses_a_file_larger_than_the_threshold() {
+        let (_dir, root) = document();
+        let path = root.join("01-part/assets/lantern.png");
+        let message = read_asset_bytes(&path, 4).expect_err("too large");
+        assert!(
+            message.contains("larger than the copied-asset threshold"),
+            "{message}"
+        );
+        // And the refusal names the file, not the author's machine.
+        assert!(
+            !message.contains(root.to_string_lossy().as_ref()),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn takes_the_threshold_from_the_document_metadata() {
+        let (_dir, root) = document();
+        assert_eq!(
+            asset_threshold(&root).expect("no metadata is fine"),
+            DEFAULT_ASSET_THRESHOLD_BYTES
+        );
+        fs::write(root.join("document.yaml"), "asset_threshold_bytes: 1024\n").expect("yaml");
+        assert_eq!(asset_threshold(&root).expect("declared"), 1024);
+    }
+
+    #[test]
+    fn holds_one_deck_and_refuses_before_the_first_present() {
+        let pending = PendingDeck::default();
+        assert_eq!(
+            pending.get().expect_err("nothing yet"),
+            "nothing to present"
+        );
+        let first = DeckSource {
+            text: "# One\n".to_string(),
+            chapter_path: "01-part/01-alice.md".to_string(),
+            chapter_title: "One".to_string(),
+        };
+        pending.set(first.clone()).expect("held");
+        assert_eq!(pending.get().expect("held"), first);
+        // A second Present replaces the first rather than adding to it.
+        let second = DeckSource {
+            text: "# Two\n".to_string(),
+            ..first
+        };
+        pending.set(second.clone()).expect("held");
+        assert_eq!(pending.get().expect("held"), second);
+    }
+
+    #[test]
+    fn titles_a_deck_from_its_first_heading() {
+        assert_eq!(
+            deck_title("# The Lantern Papers\n\nA.\n", "x.md"),
+            "The Lantern Papers"
+        );
+        assert_eq!(
+            deck_title("# Where I'm coming from {.divider}\n", "x.md"),
+            "Where I'm coming from"
+        );
+        assert_eq!(
+            deck_title("No heading here.\n", "01-part/02-method.md"),
+            "02-method"
+        );
+    }
+}

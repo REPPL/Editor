@@ -63,7 +63,10 @@ bibliography: references.bib
 citation_style: numeric
 theme: default
 asset_threshold_bytes: 8388608
-id: 7f3a91c2e4d85b06        # minted on first publish
+id: qyk6kiuzjsmfrhpsa4bg5fijxu     # minted on first publish
+variant_tokens:                   # one per variant, minted with the id
+  full: gdplb4oupvmji7zcbu3vtu2onq
+  talk: yrcun2bzqokpbjfyzeccgakjtm
 ```
 
 Everything belonging to the whole document lives here and nowhere else. A
@@ -368,7 +371,7 @@ tablet.
       "root": "media",
       "path": "talks/keynote.mp4",
       "store": "object",
-      "published": "https://media.magnumesque.com/7f3a91c2e4d85b06/b1946ac92492d234.mp4",
+      "published": "https://media.magnumesque.com/qyk6kiuzjsmfrhpsa4bg5fijxu/b1946ac92492d234.mp4",
       "poster": "assets/b1946ac92492d234-poster.jpg"
     },
     {
@@ -543,8 +546,10 @@ site's build step.
   paths, and its stored assets, after which its links resolve to that same
   empty shell.
 
-**Open:** the length of the stable id, of a variant token, and of the
-version hash.
+The stable id, a variant token, and the version hash are each sixteen
+bytes written as RFC 4648 base32, lower-cased and unpadded: twenty-six
+characters over `[a-z2-7]`, validated by `^[a-z2-7]{26}$`. One shape, so
+one validator serves every segment the presenter routes on.
 
 ## 10. The publish log
 
