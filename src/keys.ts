@@ -737,6 +737,18 @@ export const BINDINGS: readonly Binding[] = [
     owner: "app",
   },
   {
+    // `C-x o` is `other-window` in Emacs, and `C-x C-o` sits beside it because
+    // the Control key is already down from the `C-x`: an author cycling
+    // between panes need not lift it to reach the second step. The row exists
+    // so both chords are spoken for and the uniqueness check holds; the
+    // sidebar-navigation spec wires the pane cycle behind them.
+    id: "other-window",
+    label: "Move to the other pane",
+    chords: ["C-x o", "C-x C-o"],
+    group: "document",
+    owner: "app",
+  },
+  {
     id: "open-settings",
     label: "Open settings",
     chords: ["C-c C-,"],

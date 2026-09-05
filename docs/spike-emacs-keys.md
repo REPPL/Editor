@@ -76,8 +76,31 @@ dead key is the letter's chord exactly as if nothing were composing:
 `key: "Dead", code: "KeyU"` is `M-u` and reaches upcase-word. The same rule
 covers the shifted digits and punctuation the table names — `M-%` arrives
 with `key` of `ﬁ` and `code` of `Digit5`, `M-@` with `€` on `Digit2`, `M-<`
-with `¯` on `Comma` — and it is the same rule that already reads Shift-`/`
-as `S-/` rather than `?`.
+with `¯` on `Comma`, `M->` with `˘` on `Period` — and it is the same rule
+that already reads Shift-`/` as `S-/` rather than `?`, which is how `C-/`
+undoes and `C-S-/`, arriving as `key: "?"` on `Slash`, redoes.
+
+The package's own key reader does the same thing, and this matters because it
+is where the chord is actually decided:
+
+```js
+static getKey(e) {
+    var code = e.code;
+    var key = e.key;
+    if (ignoredKeys[key])
+        return ['', '', ''];
+    if (code.length > 1) {
+        if (code[0] == "N") code = code.replace(/^Numpad/, "");
+        if (code[0] == "K") code = code.replace(/^Key/, "");
+    }
+    code = specialKey[code] || code;
+```
+
+So `ƒ` on `KeyF` with Option down is `M-f` to the package as well, and the
+composed character is never looked at. Every Option chord the tests dispatch
+carries the character macOS really composes — `ƒ`, `∫`, `∂`, `∑`, `¥`, `≈`,
+`ﬁ`, `¯`, `˘`, or `Dead` — precisely so that a reader which ever started
+trusting `key` would fail them.
 
 An editor that reads Option as Meta cannot also let Option type, so
 `src/editor.ts` installs one handler that claims any Option keydown which
@@ -100,6 +123,55 @@ composition, and only a real WebView can say. It matters more than one stray
 character: CodeMirror ignores every key event while a composition is running,
 so a composition that starts anyway takes the chord after it as well. That is
 what row 1 of the checklist watches for.
+
+## Why the keymap was inert in the running app
+
+`M-f` did nothing in the built application while `C-f` moved by a character,
+and the tests were green throughout. The Option key had nothing to do with
+it. `@replit/codemirror-emacs` installs itself in two module-level calls, and
+annotates both as pure:
+
+```js
+for (let i in emacsKeys) {
+    /*@__PURE__*/EmacsHandler.bindKey(i, emacsKeys[i]);
+}
+/*@__PURE__*/EmacsHandler.addCommands({ … });
+```
+
+`/*@__PURE__*/` tells a bundler that dropping the call changes nothing. Both
+calls write into module-level tables, so both promises are false, and every
+bundler in the chain took them. The dev server's dependency pre-bundle
+reduced the loop to `for (let i in emacsKeys) emacsKeys[i];` and dropped the
+command table entirely; the release build did the same. What ran in the
+window was an Emacs handler with no bindings and no commands.
+
+That explains the whole shape of the report. Chords CodeMirror's own macOS
+keymap binds as well — `C-f`, `C-b`, `C-a`, `C-e`, `C-k`, `C-d`, `C-n`,
+`C-p` — went on working from the lower-precedence keymap, so the surface felt
+alive. Every chord only the Emacs layer answers — `M-f`, `M-b`, `M-d`,
+`M-w`, `C-/`, `C-Space` — reached a handler that knew nothing, and an Option
+chord that matches nothing is then claimed by the guard above, which is why
+`M-f` did not even type an `ƒ`. Editor's own chords kept working because
+`src/emacs.ts` binds them itself, in a call no one annotated.
+
+The fix is one setting, in `vite.config.ts`, applied to both halves of the
+toolchain — `optimizeDeps.rolldownOptions.treeshake` for the pre-bundle and
+`build.rollupOptions.treeshake` for the build: `annotations: false`. This
+project does not honour pure annotations. It costs about 4% of the main
+chunk and can only ever keep code that would otherwise have been removed.
+`src/emacs.ts` also checks at run time that the package's commands are
+present and writes to the console if they are not, because the failure is
+otherwise indistinguishable from a keyboard problem.
+
+**A test suite cannot see this.** Vitest loads a dependency as it lies on
+disk, unbundled and untree-shaken, so every chord in this file passed while
+none of them worked in the window. Two tests stand in for what cannot be
+observed: one asserts the package's commands are registered once the module
+is loaded, and one asserts the annotations are still there in
+`node_modules`, so that a future release which fixes them fails loudly rather
+than leaving a setting behind that no longer has a reason. Neither is a
+substitute for the manual checklist below, which is the only place a chord is
+pressed in the real build.
 
 ## What the unit test proves
 
@@ -197,6 +269,10 @@ jsdom is not a browser and a test runner is not a Mac.
   a secure context by default, is row 11 of the checklist.
 - **Nothing about the iPad.** The tablet path is Safari with a hardware
   keyboard and no shell to claim anything back. It is untested here.
+- **Nothing about the bundle.** Vitest loads dependencies unbundled, so no
+  test here runs the code the window runs. That is how a keymap with no
+  bindings shipped past a green suite; see "Why the keymap was inert in the
+  running app" above.
 
 ## The shell's part
 

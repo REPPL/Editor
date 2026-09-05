@@ -10,10 +10,13 @@
  * The manual half is written down in `docs/spike-emacs-keys.md`.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { defaultKeymap, historyKeymap } from "@codemirror/commands";
 import { searchKeymap, searchPanelOpen } from "@codemirror/search";
 import { EditorSelection } from "@codemirror/state";
-import { emacsKeys } from "@replit/codemirror-emacs";
+import { EmacsHandler, emacsKeys } from "@replit/codemirror-emacs";
 import type { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -25,7 +28,12 @@ import {
   documentText,
   lineSeparatorOf,
 } from "./editor";
-import { emacsAnsweredChords, emacsStatus, toPackageChord } from "./emacs";
+import {
+  emacsAnsweredChords,
+  emacsStatus,
+  packageKeymapInstalled,
+  toPackageChord,
+} from "./emacs";
 import {
   BINDINGS,
   SUPPRESSED,
@@ -57,13 +65,6 @@ interface Chord {
   shiftKey?: boolean;
 }
 
-/**
- * Turn a chord string from the binding table into a keydown event.
- *
- * The Emacs handler identifies keys by `KeyboardEvent.code`, so the physical
- * key is what matters, not the character the platform would produce. That is
- * exactly why Option-f can be `M-f` and not `ƒ`.
- */
 /** The physical key each punctuation and digit chord name sits on. */
 const CODES: Readonly<Record<string, string>> = {
   "/": "Slash",
@@ -105,12 +106,77 @@ const SHIFTED: Readonly<Record<string, string>> = {
 };
 
 /**
+ * What macOS puts in `key` when Option is held, by physical key.
+ *
+ * The pair is Option and Option-Shift on a US layout: Option-f is `ƒ` and
+ * Option-Shift-F is `Ï`. Five of them are dead keys — Option-e, -i, -n, -u
+ * and Option-`` ` `` — where no character has been decided yet and the keydown
+ * carries `"Dead"` instead. This is what WebKit really sends, and it is what
+ * every Option chord in this file is dispatched as: a test that sent `key: "f"`
+ * for Option-f would be testing a shape no Mac produces.
+ */
+const OPTION_CHARACTERS: Readonly<Record<string, readonly [string, string]>> = {
+  a: ["å", "Å"],
+  b: ["∫", "ı"],
+  c: ["ç", "Ç"],
+  d: ["∂", "Î"],
+  e: ["Dead", "´"],
+  f: ["ƒ", "Ï"],
+  g: ["©", "˝"],
+  h: ["˙", "Ó"],
+  i: ["Dead", "ˆ"],
+  j: ["∆", "Ô"],
+  // Option-Shift-K is the Apple logo, in a private-use code point.
+  k: ["˚", ""],
+  l: ["¬", "Ò"],
+  m: ["µ", "Â"],
+  n: ["Dead", "˜"],
+  o: ["ø", "Ø"],
+  p: ["π", "∏"],
+  q: ["œ", "Œ"],
+  r: ["®", "‰"],
+  s: ["ß", "Í"],
+  t: ["†", "ˇ"],
+  u: ["Dead", "¨"],
+  v: ["√", "◊"],
+  w: ["∑", "„"],
+  x: ["≈", "˛"],
+  y: ["¥", "Á"],
+  z: ["Ω", "¸"],
+  "0": ["º", "‚"],
+  "1": ["¡", "⁄"],
+  "2": ["™", "€"],
+  "3": ["£", "‹"],
+  "4": ["¢", "›"],
+  "5": ["∞", "ﬁ"],
+  "6": ["§", "ﬂ"],
+  "7": ["¶", "‡"],
+  "8": ["•", "°"],
+  "9": ["ª", "·"],
+  "`": ["Dead", "`"],
+  "-": ["–", "—"],
+  "=": ["≠", "±"],
+  "[": ["“", "”"],
+  "]": ["‘", "’"],
+  "\\": ["«", "»"],
+  ";": ["…", "Ú"],
+  "'": ["æ", "Æ"],
+  ",": ["≤", "¯"],
+  ".": ["≥", "˘"],
+  "/": ["÷", "¿"],
+};
+
+/**
  * Turn a chord string from the binding table into a keydown event.
  *
  * The Emacs handler identifies keys by `KeyboardEvent.code`, so the physical
  * key is what matters, not the character the platform would produce. That is
  * exactly why Option-f can be `M-f` and not `ƒ`, and why `M-%` is built as
  * Alt-Shift on `Digit5`.
+ *
+ * `key` is filled in with what the platform really sends, which for an Option
+ * chord is the composed character or `"Dead"`. Nothing in the surface may read
+ * it to decide a chord; building it faithfully is how this file proves that.
  */
 function chordToEvent(chord: string): Chord {
   const modifiers = new Set<string>();
@@ -146,6 +212,14 @@ function chordToEvent(chord: string): Chord {
   } else if (["Left", "Right", "Up", "Down"].includes(name)) {
     event.code = `Arrow${name}`;
     event.key = `Arrow${name}`;
+  }
+
+  // Option composes, so what arrives in `key` is the character macOS was about
+  // to type, or `Dead`. Named keys — `M-Up`, `M-Backspace` — compose nothing
+  // and keep the name they already have.
+  const composed = OPTION_CHARACTERS[name];
+  if (modifiers.has("M") && composed) {
+    event.key = (shifted ? composed[1] : composed[0]) || event.key;
   }
 
   if (modifiers.has("C")) event.ctrlKey = true;
@@ -282,6 +356,18 @@ describe("the binding table", () => {
     expect(publish?.chords).toEqual(["C-c C-l"]);
     expect(present?.owner).toBe("app");
     expect(publish?.owner).toBe("app");
+  });
+
+  it("reserves both other-window chords, and answers neither yet", () => {
+    // `C-x C-o` sits beside `C-x o` so the Control key need not be lifted
+    // between the two steps. The sidebar-navigation spec wires them; until it
+    // does, the row exists so the chords are spoken for and no second row can
+    // claim them.
+    const other = bindingById("other-window");
+    expect(other?.chords).toEqual(["C-x o", "C-x C-o"]);
+    expect(other?.owner).toBe("app");
+    expect(emacsAnsweredChords().has("C-x o")).toBe(false);
+    expect(emacsAnsweredChords().has("C-x C-o")).toBe(false);
   });
 
   it("answers no chord the table does not list", () => {
@@ -475,6 +561,30 @@ describe("the Emacs keymap inside CodeMirror", () => {
     expect(view.state.doc.line(1).text).toBe("# Alice and Bob");
     expect(press(view, "S-C-/")).toBe(true);
     expect(view.state.doc.line(1).text).toBe("");
+  });
+
+  it("undoes and redoes from the slash key as WebKit reports it", () => {
+    // Control-slash arrives as `key: "/"` and Control-Shift-slash as `key: "?"`
+    // — the character the key would have typed — on the one physical `Slash`.
+    // Both rows are read from the code, so the shifted character never reaches
+    // the lookup.
+    place(view, 0);
+    press(view, "C-k");
+    expect(view.state.doc.line(1).text).toBe("");
+    expect(pressRaw(view, { key: "/", code: "Slash", ctrlKey: true })).toBe(
+      true,
+    );
+    expect(view.state.doc.line(1).text).toBe("# Alice and Bob");
+    expect(
+      pressRaw(view, {
+        key: "?",
+        code: "Slash",
+        ctrlKey: true,
+        shiftKey: true,
+      }),
+    ).toBe(true);
+    expect(view.state.doc.line(1).text).toBe("");
+    expect(documentText(view)).not.toContain("?");
   });
 
   it("selects the whole document with the C-x h prefix chord", () => {
@@ -1294,6 +1404,69 @@ describe("Option as Meta", () => {
     expect(documentText(view)).toBe(SAMPLE);
   });
 
+  it("runs the word commands from the characters macOS composes", () => {
+    // The heart of it. Every one of these arrives with a character in `key`
+    // that no binding names — `ƒ`, `∫`, `∂` — and the command still runs,
+    // because the chord is read from the physical key.
+    // `# Alice and Bob`: from just before the A, one word forward is the end
+    // of `Alice`, and one word back is where it started.
+    place(view, 2);
+    expect(pressRaw(view, { key: "ƒ", code: "KeyF", altKey: true })).toBe(true);
+    expect(view.state.selection.main.head).toBe(2 + "Alice".length);
+
+    expect(pressRaw(view, { key: "∫", code: "KeyB", altKey: true })).toBe(true);
+    expect(view.state.selection.main.head).toBe(2);
+
+    expect(pressRaw(view, { key: "∂", code: "KeyD", altKey: true })).toBe(true);
+    expect(view.state.doc.line(1).text).not.toContain("Alice");
+    expect(documentText(view)).not.toContain("∂");
+  });
+
+  it("copies and rotates the kill ring from composed characters", () => {
+    place(view, 0);
+    press(view, "C-Space");
+    press(view, "C-e");
+    // Option-w is `∑`; the region is copied and the document is untouched.
+    expect(pressRaw(view, { key: "∑", code: "KeyW", altKey: true })).toBe(true);
+    expect(documentText(view)).toBe(SAMPLE);
+
+    press(view, "C-k");
+    press(view, "C-y");
+    expect(view.state.doc.line(1).text).toBe("# Alice and Bob");
+    // Option-y is `¥`: yank-rotate, which puts the previous kill in its place.
+    expect(pressRaw(view, { key: "¥", code: "KeyY", altKey: true })).toBe(true);
+    expect(documentText(view)).not.toContain("¥");
+  });
+
+  it("moves to the ends of the document on the Option-Shift chords", () => {
+    // `M-<` and `M->` are Option-Shift on the comma and full-stop keys, and
+    // macOS composes `¯` and `˘` out of them.
+    place(view, 5);
+    expect(
+      pressRaw(view, {
+        key: "˘",
+        code: "Period",
+        altKey: true,
+        shiftKey: true,
+      }),
+    ).toBe(true);
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    expect(
+      pressRaw(view, { key: "¯", code: "Comma", altKey: true, shiftKey: true }),
+    ).toBe(true);
+    expect(view.state.selection.main.head).toBe(0);
+    expect(documentText(view)).toBe(SAMPLE);
+  });
+
+  it("opens the command line on Option-x", () => {
+    // `M-x` arrives as `≈`. The package answers it with a prefix of its own,
+    // which is enough to say the chord reached the handler rather than the
+    // guard; `C-g` puts the handler back.
+    expect(pressRaw(view, { key: "≈", code: "KeyX", altKey: true })).toBe(true);
+    expect(documentText(view)).toBe(SAMPLE);
+    press(view, "C-g");
+  });
+
   it("reads the other Option-Shift chords from the physical key too", () => {
     const shifted: readonly (readonly [string, string, string])[] = [
       ["€", "Digit2", "M-S-2"],
@@ -1398,6 +1571,40 @@ describe("the key log", () => {
     press(view, "C-a");
     await new Promise((resolve) => setTimeout(resolve, 1));
     expect(log.observations).toHaveLength(0);
+  });
+});
+
+/**
+ * The bundler, which is the one thing no test here runs.
+ *
+ * Vitest loads a dependency as it lies on disk. The application loads it
+ * through Rolldown — twice, once for the dev server's pre-bundle and once for
+ * the release build — and Rolldown honours the `/*@__PURE__*\/` annotations
+ * this package puts on the two calls that install it. Both were dropped, so
+ * the running application had a keymap with no bindings and no commands while
+ * every test in this file passed. `vite.config.ts` turns the annotations off;
+ * these two tests are what says the hazard is still there to be turned off,
+ * and that nothing else has to be done about it here.
+ */
+describe("the package's own installation", () => {
+  it("is present once the module is loaded", () => {
+    expect(packageKeymapInstalled()).toBe(true);
+    // Not just any command: one the package registers in the call a bundler
+    // was told it may drop.
+    expect(typeof EmacsHandler.commands["killLine"]).not.toBe("undefined");
+  });
+
+  it("still carries the annotations vite.config.ts refuses to honour", () => {
+    // Relative to the project root, which is where Vitest runs.
+    const source = readFileSync(
+      join(process.cwd(), "node_modules/@replit/codemirror-emacs/dist/index.js"),
+      "utf8",
+    );
+    // If either of these fails, the package has stopped claiming its own
+    // installation is a pure call, and the `treeshake` setting in
+    // `vite.config.ts` can go with it.
+    expect(source).toContain("/*@__PURE__*/EmacsHandler.bindKey(i, emacsKeys[i])");
+    expect(source).toContain("/*@__PURE__*/EmacsHandler.addCommands(");
   });
 });
 

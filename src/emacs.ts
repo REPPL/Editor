@@ -187,11 +187,39 @@ function queryReplace(view: EditorView): void {
   field?.select();
 }
 
+/**
+ * A command every version of the package registers for itself.
+ *
+ * The package installs itself in two module-level calls — the loop that binds
+ * `emacsKeys` and one `addCommands` — and both carry a `/*@__PURE__*\/`
+ * annotation, which tells a bundler the call may be dropped. It may not: they
+ * are the whole keymap. `vite.config.ts` stops both bundlers believing it, and
+ * this is how the running application says so if one ever does again: with the
+ * annotation honoured, `EmacsHandler.commands` is empty, every chord the
+ * package owns matches nothing, and the surface goes quiet in a way that looks
+ * like a keyboard problem rather than a build one.
+ */
+const PACKAGE_COMMAND = "killLine";
+
+/** Whether the package's own installation survived the bundler. */
+export function packageKeymapInstalled(): boolean {
+  return Boolean(EmacsHandler.commands[PACKAGE_COMMAND]);
+}
+
 /** Register Editor's own chords with the shared Emacs handler. */
 let registered = false;
 function registerEditorChords(): void {
   if (registered) return;
   registered = true;
+
+  if (!packageKeymapInstalled()) {
+    console.error(
+      "the Emacs keymap installed no commands: the bundler took " +
+        "@replit/codemirror-emacs's own key bindings for pure calls, and " +
+        "every chord the package owns will do nothing (see the treeshake " +
+        "note in vite.config.ts)",
+    );
+  }
 
   EmacsHandler.addCommands({
     // The keymap binds `M-g`, `M-C-s`, `M-C-r`, and `S-M-5` to these names but
