@@ -33,8 +33,8 @@ ones graduates to ADRs under `../decisions/adrs/`.
   Part. A single-chapter document is a Part folder with one file.
 - **Document metadata lives in `document.yaml`** at the document root: the
   title, subtitle, abstract, affiliation, author, variants, default
-  variant, bibliography, citation style, theme, asset threshold, and the
-  stable id minted on first publish. A chapter's own front matter carries
+  variant, bibliography, citation style, theme, asset threshold, fill
+  column, and the stable id minted on first publish. A chapter's own front matter carries
   chapter-level metadata and nothing else.
 - **Markdown canon: Pandoc-compatible plus fenced divs.** Every extension
   is written in one of five forms — a fenced div with attributes, a
