@@ -138,7 +138,7 @@ describe("the asset plan", () => {
       [
         "# A chapter",
         "",
-        "![One](/Users/alice/lantern.jpg)",
+        "![One](/Users/alice/lantern.jpg)", // abcd-lint:allow illustrative refusal path
         "",
         "![Two](https://example.invalid/lantern.jpg)",
         "",

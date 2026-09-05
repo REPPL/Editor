@@ -133,8 +133,8 @@ describe("the fragment", () => {
   });
 
   it("reports an image reference that may not resolve, and keeps its caption", () => {
-    const html = markup("![A lantern](/Users/someone/lantern.jpg)\n");
-    expect(html).not.toContain("/Users/someone");
+    const html = markup("![A lantern](/Users/someone/lantern.jpg)\n"); // abcd-lint:allow illustrative refusal path
+    expect(html).not.toContain("/Users/someone"); // abcd-lint:allow illustrative refusal path
     expect(html).toContain('class="missing-image"');
     expect(html).toContain("A lantern");
   });

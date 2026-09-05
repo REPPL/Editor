@@ -203,8 +203,8 @@ describe("one source", () => {
     expect(article("![A lantern](assets/lantern.jpg)\n")).toContain(
       'src="assets/lantern.jpg"',
     );
-    const absolute = article("![A lantern](/Users/someone/lantern.jpg)\n");
-    expect(absolute).not.toContain("/Users/someone");
+    const absolute = article("![A lantern](/Users/someone/lantern.jpg)\n"); // abcd-lint:allow illustrative refusal path
+    expect(absolute).not.toContain("/Users/someone"); // abcd-lint:allow illustrative refusal path
     expect(absolute).toContain('class="missing-image"');
   });
 });

@@ -22,9 +22,9 @@ describe("classifying a reference", () => {
   });
 
   it("reads an absolute path as absolute, whichever platform wrote it", () => {
-    expect(classify("/Users/someone/lantern.jpg").kind).toBe("absolute");
+    expect(classify("/Users/someone/lantern.jpg").kind).toBe("absolute"); // abcd-lint:allow illustrative refusal path
     expect(classify("C:\\Users\\someone\\lantern.jpg").kind).toBe("absolute");
-    expect(classify("file:///Users/someone/lantern.jpg").kind).toBe("absolute");
+    expect(classify("file:///Users/someone/lantern.jpg").kind).toBe("absolute"); // abcd-lint:allow illustrative refusal path
   });
 
   it("reads a path that climbs above the chapter as climbing", () => {
@@ -47,7 +47,7 @@ describe("classifying a reference", () => {
 describe("resolving", () => {
   it("reports an absolute or climbing reference and resolves nothing", () => {
     const resolve = pathResolver();
-    const absolute = resolve("/Users/someone/lantern.jpg");
+    const absolute = resolve("/Users/someone/lantern.jpg"); // abcd-lint:allow illustrative refusal path
     expect(absolute.url).toBeNull();
     expect(absolute.problem).toMatch(/absolute path/);
     const climbing = resolve("../secrets/lantern.jpg");
