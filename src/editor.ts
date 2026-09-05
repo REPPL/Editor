@@ -83,6 +83,110 @@ const markdownReturn = EditorView.domEventHandlers({
 });
 
 /**
+ * How long after an Option keydown a composition still counts as its doing.
+ *
+ * Short, because the window also blocks ordinary typing: a character typed
+ * inside it is either the accent macOS was about to compose or a keystroke the
+ * author will not notice losing at that speed.
+ */
+const META_COMPOSE_WINDOW_MS = 250;
+
+/** The Option keydowns the guard below claimed, so the key log can say so. */
+const guarded = new WeakSet<KeyboardEvent>();
+
+/**
+ * Whether a keydown reached the bottom of the editor unanswered and was
+ * claimed only to stop Option composing a character.
+ *
+ * `defaultPrevented` alone cannot tell the two apart, and the spike's whole
+ * verdict is "did the editor act on it", not "did anything stop the browser".
+ */
+export function metaGuarded(event: KeyboardEvent): boolean {
+  return guarded.has(event);
+}
+
+/**
+ * When the last Option keydown that could compose was seen, or `-Infinity`.
+ *
+ * It is set by an observer rather than by the guard below, because an observer
+ * runs on every keydown whether or not a command claimed it. That is what makes
+ * the window shut on the next ordinary key: an author who types a letter
+ * straight after `M-f` gets the letter, because by then the composition events
+ * can only belong to the letter.
+ */
+let lastMetaKeydown = -Infinity;
+
+/**
+ * Whether this keydown is one macOS would turn into text.
+ *
+ * A one-character `key` is the character itself; `Dead` is the accent keys —
+ * Option-e, Option-u, Option-i, Option-n, Option-` — which fire a keydown with
+ * a real `code` and no character yet, and start composing on the next key.
+ * Everything longer is a named key (`ArrowUp`, `Backspace`) that produces no
+ * text and must be left to the keymaps that bind it with Option.
+ */
+function producesText(event: KeyboardEvent): boolean {
+  return (
+    event.key === "Dead" ||
+    event.key === "Unidentified" ||
+    [...event.key].length === 1
+  );
+}
+
+/**
+ * Option is Meta, so an Option chord never becomes text.
+ *
+ * On macOS Option is also the character-composition key: Option-f is `ƒ`,
+ * Option-d is `∂`, and Option-e, -u, -i, -n and -` are dead keys that start an
+ * accent. An editor that reads Option as Meta cannot also let it type, so this
+ * handler claims any Option keydown that would produce a character or begin a
+ * composition, and cancels the composition events that follow if the engine
+ * starts one anyway.
+ *
+ * It sits at the lowest precedence on purpose. CodeMirror's dispatch stops at
+ * the first handler that claims the event, and it stops early on an event whose
+ * default is already prevented, so a guard above the Emacs plugin would take
+ * every Option chord away from the commands it belongs to. At the bottom it
+ * sees only what nothing else answered.
+ */
+const metaKeys = [
+  EditorView.domEventObservers({
+    keydown(event) {
+      lastMetaKeydown =
+        event.altKey && producesText(event) ? Date.now() : -Infinity;
+    },
+  }),
+  Prec.lowest(
+    EditorView.domEventHandlers({
+      keydown(event) {
+        if (!event.altKey || !producesText(event)) return false;
+        guarded.add(event);
+        event.preventDefault();
+        return true;
+      },
+      compositionstart(event) {
+        if (!composingForMeta()) return false;
+        event.preventDefault();
+        return true;
+      },
+      beforeinput(event) {
+        if (!composingForMeta()) return false;
+        if (!/^insert(Text|.*Composition.*)$/i.test(event.inputType)) {
+          return false;
+        }
+        event.preventDefault();
+        return true;
+      },
+    }),
+  ),
+];
+
+/** Whether an input event still belongs to the Option keydown just seen. */
+function composingForMeta(): boolean {
+  return Date.now() - lastMetaKeydown <= META_COMPOSE_WINDOW_MS;
+}
+
+/**
  * Where the cursor sat when the search panel opened.
  *
  * Emacs returns the point to where an incremental search began when the search
@@ -179,6 +283,8 @@ function editorExtensions(hooks: EditorHooks = {}): Extension[] {
       ...withoutSuppressed(historyKeymap),
       ...withoutSuppressed(searchKeymap),
     ]),
+    // Last of all: whatever no keymap answered, Option still must not type.
+    ...metaKeys,
     theme,
     EditorView.updateListener.of((update) => {
       if (update.docChanged || update.selectionSet) {

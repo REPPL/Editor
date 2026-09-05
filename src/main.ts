@@ -12,6 +12,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 
 import { createApp, type AppServices } from "./app";
+import { startDevHarness } from "./devharness";
 import { createDropTarget } from "./drop-target";
 import { documentText } from "./editor";
 import {
@@ -148,4 +149,8 @@ if (inShell()) {
       await getCurrentWindow().destroy();
     })();
   });
+
+  // The development harness. Both of its switches are environment variables,
+  // so an ordinary launch reaches this line and does nothing.
+  void startDevHarness(app);
 }

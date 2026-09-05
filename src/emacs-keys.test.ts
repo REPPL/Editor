@@ -166,6 +166,25 @@ function press(view: EditorView, chord: string): boolean {
   return event.defaultPrevented;
 }
 
+/**
+ * Dispatch a keydown built by hand, as a real Mac would send it.
+ *
+ * `press` builds the event from the table's own notation, which is the right
+ * thing everywhere the question is "does this chord reach its command". It is
+ * the wrong thing for the Option key, where the whole question is what macOS
+ * puts in `key` — `ƒ` for Option-f, `Dead` for Option-e, `ﬁ` for Option-Shift-5
+ * — while `code` stays the physical key.
+ */
+function pressRaw(view: EditorView, init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", {
+    ...init,
+    bubbles: true,
+    cancelable: true,
+  });
+  view.contentDOM.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 /** Dispatch every step of a possibly multi-step chord. */
 function pressSequence(view: EditorView, chord: string): boolean {
   let handled = false;
@@ -1132,6 +1151,167 @@ describe("Editor's own chords", () => {
   });
 });
 
+/**
+ * Option as Meta, with the events macOS actually sends.
+ *
+ * This is the half of row 1 of the manual checklist a test can reach. It
+ * cannot say whether macOS lets the keydown through, but it can say that once
+ * it arrives — carrying the character or the accent macOS was about to compose
+ * — the chord is read from the physical key, the command runs, and nothing is
+ * typed into the buffer.
+ */
+describe("Option as Meta", () => {
+  let host: HTMLElement;
+  let view: EditorView;
+
+  /** The dead keys macOS composes an accent on, by physical key. */
+  const DEAD_KEYS: readonly (readonly [string, string])[] = [
+    ["KeyE", "M-e"],
+    ["KeyU", "M-u"],
+    ["KeyI", "M-i"],
+    ["KeyN", "M-n"],
+    ["Backquote", "M-`"],
+  ];
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    view = createEditor(host, SAMPLE);
+  });
+
+  afterEach(() => {
+    view.destroy();
+    host.remove();
+  });
+
+  it("reads a dead key as the letter's chord", () => {
+    for (const [code, chord] of DEAD_KEYS) {
+      const event = new KeyboardEvent("keydown", {
+        key: "Dead",
+        code,
+        altKey: true,
+      });
+      expect(chordFromEvent(event)).toBe(canonicalChord(chord));
+    }
+  });
+
+  it("runs the command a dead key's chord names", () => {
+    // Option-u is both an accent key and `M-u`, upcase-word. The table wins.
+    place(view, 2);
+    expect(pressRaw(view, { key: "Dead", code: "KeyU", altKey: true })).toBe(
+      true,
+    );
+    expect(view.state.doc.line(1).text).toContain("ALICE");
+  });
+
+  it("claims a dead key no command answers, and types nothing", () => {
+    const before = documentText(view);
+    for (const [code] of DEAD_KEYS) {
+      if (code === "KeyU") continue;
+      expect(pressRaw(view, { key: "Dead", code, altKey: true })).toBe(true);
+    }
+    expect(documentText(view)).toBe(before);
+  });
+
+  it("claims an Option chord that would have typed a character", () => {
+    // Option-8 is `•` on a US layout, and no row of the table names it. The
+    // chord is claimed all the same: Option is Meta, so it never types.
+    const before = documentText(view);
+    expect(pressRaw(view, { key: "•", code: "Digit8", altKey: true })).toBe(
+      true,
+    );
+    expect(documentText(view)).toBe(before);
+  });
+
+  it("cancels the composition an Option keydown would have started", () => {
+    pressRaw(view, { key: "Dead", code: "KeyE", altKey: true });
+    const started = new CompositionEvent("compositionstart", {
+      bubbles: true,
+      cancelable: true,
+    });
+    view.contentDOM.dispatchEvent(started);
+    expect(started.defaultPrevented).toBe(true);
+
+    const input = new InputEvent("beforeinput", {
+      inputType: "insertCompositionText",
+      data: "´",
+      bubbles: true,
+      cancelable: true,
+    });
+    view.contentDOM.dispatchEvent(input);
+    expect(input.defaultPrevented).toBe(true);
+    expect(documentText(view)).toBe(SAMPLE);
+  });
+
+  it("lets the next ordinary key type, however fast it follows", () => {
+    // The composition window shuts on the next keydown, so an author who
+    // types a letter straight after an Option chord gets the letter rather
+    // than losing it to a guard still watching for an accent.
+    pressRaw(view, { key: "Dead", code: "KeyE", altKey: true });
+    pressRaw(view, { key: "a", code: "KeyA" });
+    const input = new InputEvent("beforeinput", {
+      inputType: "insertText",
+      data: "a",
+      bubbles: true,
+      cancelable: true,
+    });
+    view.contentDOM.dispatchEvent(input);
+    expect(input.defaultPrevented).toBe(false);
+  });
+
+  it("leaves Option on a named key to the keymap that binds it", () => {
+    // `M-Up` moves the line and produces no character, so the guard has to
+    // keep its hands off it. The line at the cursor swaps with the one above.
+    place(view, view.state.doc.line(3).from);
+    expect(press(view, "M-Up")).toBe(true);
+    expect(view.state.doc.line(2).text).toBe("Carol reads the second line.");
+  });
+
+  it("reads Option-Shift-5 as the query-replace chord", () => {
+    // macOS puts `ﬁ` in `key` for Option-Shift-5; the physical key is Digit5.
+    const event = new KeyboardEvent("keydown", {
+      key: "ﬁ",
+      code: "Digit5",
+      altKey: true,
+      shiftKey: true,
+    });
+    expect(chordFromEvent(event)).toBe(canonicalChord("M-S-5"));
+    expect(bindingById("query-replace")?.chords.map(canonicalChord)).toContain(
+      chordFromEvent(event),
+    );
+  });
+
+  it("opens the replacement field on Option-Shift-5 as macOS sends it", () => {
+    expect(
+      pressRaw(view, {
+        key: "ﬁ",
+        code: "Digit5",
+        altKey: true,
+        shiftKey: true,
+      }),
+    ).toBe(true);
+    expect(searchPanelOpen(view.state)).toBe(true);
+    expect(documentText(view)).toBe(SAMPLE);
+  });
+
+  it("reads the other Option-Shift chords from the physical key too", () => {
+    const shifted: readonly (readonly [string, string, string])[] = [
+      ["€", "Digit2", "M-S-2"],
+      ["¯", "Comma", "M-S-,"],
+      ["˘", "Period", "M-S-."],
+    ];
+    for (const [key, code, chord] of shifted) {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        code,
+        altKey: true,
+        shiftKey: true,
+      });
+      expect(chordFromEvent(event)).toBe(canonicalChord(chord));
+    }
+  });
+});
+
 describe("the key log", () => {
   let host: HTMLElement;
   let view: EditorView;
@@ -1164,12 +1344,36 @@ describe("the key log", () => {
     expect(log.observations[0]).toMatchObject({
       chord: "C-a",
       known: true,
+      claimed: true,
       handled: true,
       target: "div",
     });
     expect(log.observations[1]).toMatchObject({
       chord: "q",
       known: false,
+      claimed: false,
+      handled: false,
+    });
+  });
+
+  it("tells a chord a command answered from one Option merely claimed", async () => {
+    // Both are dead keys and both are claimed, so `defaultPrevented` says the
+    // same thing about each. Only one reached a command, and the spike's whole
+    // verdict is which chords do.
+    pressRaw(view, { key: "Dead", code: "KeyU", altKey: true });
+    pressRaw(view, { key: "Dead", code: "KeyE", altKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 1));
+
+    expect(log.observations[0]).toMatchObject({
+      chord: "M-u",
+      known: true,
+      claimed: true,
+      handled: true,
+    });
+    expect(log.observations[1]).toMatchObject({
+      chord: "M-e",
+      known: false,
+      claimed: true,
       handled: false,
     });
   });

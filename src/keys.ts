@@ -911,6 +911,12 @@ export function canonicalChord(chord: string): string {
  * table stays data. Letters, digits, and punctuation are all reported by their
  * physical key so that Option-f reads as `M-f` and not as the character macOS
  * would otherwise insert, and Shift-`/` reads as `S-/` and not as `?`.
+ *
+ * The same rule is what makes the accent keys work. Option-e, Option-u,
+ * Option-i, Option-n and Option-` are dead keys on macOS: the keydown carries
+ * `key` of `"Dead"` because no character has been decided yet, and a real
+ * `code`. Reading the code means such an event is the letter's chord, exactly
+ * as if nothing were composing.
  */
 export function chordFromEvent(event: KeyboardEvent): string {
   const modifiers = new Set<string>();
@@ -925,7 +931,14 @@ export function chordFromEvent(event: KeyboardEvent): string {
   } else if (/^Digit[0-9]$/.test(event.code)) {
     name = event.code.slice(5);
   } else {
-    name = CODE_NAMES[event.code] ?? KEY_NAMES[event.key] ?? event.key;
+    name =
+      CODE_NAMES[event.code] ??
+      KEY_NAMES[event.key] ??
+      // A dead key that is not one of the named codes has no character to
+      // fall back on, so the physical key is the only honest name for it.
+      (event.key === "Dead" || event.key === "Unidentified"
+        ? event.code
+        : event.key);
   }
   // A modifier pressed on its own is not a chord; report the modifier itself
   // so the key log shows that the key reached the page.

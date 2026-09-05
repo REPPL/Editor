@@ -51,9 +51,55 @@ Shift turns the slash key's `/` into `?`.
 `src/keyspike.ts` installs the key log: a listener on the window in the
 capture phase, which is the earliest point at which the page sees a key.
 Every chord that arrives is logged with its raw `key` and `code`, whether
-the table knows it, and whether the editing surface claimed it. A chord that
-macOS or the engine swallows never appears in the log at all, and that
-absence is the finding. `C-x k` shows and hides the panel.
+the table knows it, whether the page claimed it, and whether a command
+answered it. A chord that macOS or the engine swallows never appears in the
+log at all, and that absence is the finding. `C-x k` shows and hides the
+panel.
+
+The last two are different questions and the spike needs both. *Claimed*
+means the page called `preventDefault`, so the browser does nothing further
+with the key. *Handled* means a command ran. They part company on the Option
+key, for the reason the next section gives.
+
+## Option is Meta, so Option never types
+
+On macOS the Option key is also the character-composition key. Option-f is
+`ƒ`, Option-d is `∂`, Option-8 is `•`, and Option-e, Option-u, Option-i,
+Option-n and Option-`` ` `` are *dead keys*: the keydown carries `key` of
+`"Dead"` because no character has been decided yet, and the accent is
+composed onto whatever is typed next.
+
+Two things follow, and `src/keys.ts` and `src/editor.ts` do one each.
+
+The chord is read from `KeyboardEvent.code`, never from `event.key`, so a
+dead key is the letter's chord exactly as if nothing were composing:
+`key: "Dead", code: "KeyU"` is `M-u` and reaches upcase-word. The same rule
+covers the shifted digits and punctuation the table names — `M-%` arrives
+with `key` of `ﬁ` and `code` of `Digit5`, `M-@` with `€` on `Digit2`, `M-<`
+with `¯` on `Comma` — and it is the same rule that already reads Shift-`/`
+as `S-/` rather than `?`.
+
+An editor that reads Option as Meta cannot also let Option type, so
+`src/editor.ts` installs one handler that claims any Option keydown which
+would produce a character or begin a composition, and cancels the
+`compositionstart` and `beforeinput` events that follow if the engine starts
+one anyway. It sits at the *lowest* precedence on purpose: CodeMirror's
+dispatch stops at the first handler that claims an event and stops early on
+an event whose default is already prevented, so a guard above the Emacs
+plugin would take every Option chord away from the command it belongs to. At
+the bottom it sees only what nothing else answered. Keys that produce no text
+— `M-Up`, `M-Backspace` — are left alone, because the keymaps bind them.
+
+So an unbound Option chord such as Option-i is *claimed* and not *handled*:
+nothing acts on it, and no `ˆ` lands in the buffer. That is the trade the
+platform offers, and it is the one an Emacs user on macOS already makes when
+they set Option as Meta.
+
+What decides it is whether cancelling the keydown is enough to stop the
+composition, and only a real WebView can say. It matters more than one stray
+character: CodeMirror ignores every key event while a composition is running,
+so a composition that starts anyway takes the chord after it as well. That is
+what row 1 of the checklist watches for.
 
 ## What the unit test proves
 
@@ -89,11 +135,19 @@ Taken together they prove:
   finds no application mounted warns rather than doing nothing quietly.
 - **The modeline follows.** It shows the chapter, whether it is dirty, the
   cursor as line and column, the prefix in progress, and the mark.
+- **Option is Meta even when macOS says otherwise.** A separate group builds
+  the events a Mac sends rather than the events the table describes — `ƒ` on
+  `KeyF`, `Dead` on `KeyU` and `KeyE`, `ﬁ` on `Digit5`, `•` on `Digit8` — and
+  asserts that the chord is the physical key's, that `M-u` upper-cases and
+  `M-%` opens the replacement field, that an Option chord no command answers
+  is claimed and types nothing, that the composition events which follow are
+  cancelled, and that `M-Up` still reaches the keymap that binds it.
 - **The key log reports what reached the page.** Chords dispatched at the
   editing surface are recorded through the same window listener the
   application installs, with the verdict read from `defaultPrevented` on a
-  later task, and a redo pressed as Shift-Control-slash is reported as a
-  chord the table knows.
+  later task; a redo pressed as Shift-Control-slash is reported as a chord the
+  table knows, and an Option chord claimed only to stop a composition is
+  reported as claimed and not handled.
 
 Three findings came out of writing it, and all three are fixed in the code:
 
@@ -126,10 +180,12 @@ jsdom is not a browser and a test runner is not a Mac.
 - **Nothing about interception.** A dispatched `KeyboardEvent` starts inside
   the page. It says nothing about whether macOS, the menu bar, or WebKit
   would have let a real keypress get that far.
-- **Nothing about Option as Meta.** In the test the event carries
-  `altKey: true` and `code: "KeyF"` because that is what the test builds. On
-  a real Mac keyboard Option-f may instead produce the character `ƒ`, and
-  whether the event still carries a usable `code` is a WebKit question.
+- **Nothing about whether Option reaches the page at all.** A named test does
+  build the events macOS sends — `key: "ƒ"` on `KeyF`, `key: "Dead"` on
+  `KeyU`, `key: "ﬁ"` on `Digit5` — and asserts the chord, the command, and an
+  unchanged buffer. What it cannot say is whether WebKit reports the physical
+  `code` on a dead key the way the test assumes, or whether cancelling the
+  keydown really stops the accent composing. Those are row 1 of the checklist.
 - **Nothing about layout.** jsdom has no layout engine, so `src/test-setup.ts`
   fakes a monospace grid to give the geometric commands coordinates. Real
   line wrapping, bidirectional text, and scrolling are outside its reach.
@@ -169,7 +225,7 @@ appear in the log at all was taken above the page: note where.
 
 | # | Chord | Expect | Notes |
 |---|---|---|---|
-| 1 | `M-f`, `M-b`, `M-d`, `M-w`, `M-u`, `M-l`, `M-v` | The log shows `M-f` and the word command runs | This is the Option-as-Meta question. If the log shows `ƒ` rather than `M-f`, Option is composing characters and the keymap needs the physical `code`, not the character |
+| 1 | `M-f`, `M-b`, `M-d`, `M-w`, `M-y`, `M-u`, `M-l`, `M-v`, and the dead keys Option-e, Option-i, Option-n, Option-`` ` `` | The log shows `M-f` and the word command runs; the dead keys are claimed and type nothing | This is the Option-as-Meta question. A log line reading `ƒ` rather than `M-f` means WebKit is not reporting the physical `code`; a `´` or `ˆ` in the buffer means cancelling the keydown did not stop the composition |
 | 2 | `C-Space` | The mark is set and the modeline shows `Mark` | macOS may claim Control-Space for the input-source switcher. Check System Settings › Keyboard › Keyboard Shortcuts › Input Sources if it never arrives |
 | 3 | `C-x C-s` | The modeline reports the chapter written | Open a chapter first |
 | 4 | `C-x C-f` and `Cmd-O` | The folder chooser opens | Both routes must work: the chord through the page, `Cmd-O` through the menu |
@@ -190,3 +246,50 @@ Record the result of each row against the binding table. A row that fails on
 the desktop is a decision: claim the combination in the shell, rebind the
 action, or accept the loss. A row that fails only on the iPad is a note
 against the tablet path, not against the desktop editor.
+
+## Driving the checklist from a script
+
+A person working down the table cannot say afterwards which chord the page
+saw, so two environment variables let a script do it instead. Both are unset
+on every ordinary launch, and the application does nothing with either until
+one is set.
+
+| Variable | Effect |
+|---|---|
+| `EDITOR_OPEN_FOLDER` | A document folder the window opens on start, along with its first chapter, so a run begins with text in the buffer and no dialog in the way |
+| `EDITOR_KEY_LOG` | A file every key-log observation is appended to, one JSON object per line |
+
+The shell reads both once at start (`src-tauri/src/devharness.rs`) and the
+page asks it what they said (`src/devharness.ts`). The log path is the one
+that needs guarding, because the web view is a trust boundary and a script
+running in it can call any command: the path is resolved from the environment
+the process was started with, never from the page, and it is refused unless it
+lands inside the application's cache directory or the system's temporary
+directory. The page is told only whether a log is being written, not where.
+
+Each line carries the chord, the raw `key` and `code`, whether the table knows
+it, whether the page claimed it, whether a command handled it, the open
+chapter, the buffer's first line, and `strays` — which of the characters
+Option composes on a US layout the buffer now holds. A chapter may already
+carry one, so a stray is a character that appears while `chapter` stays the
+same. The first line the page writes is `{"event":"ready"}`, once the folder
+and its chapter are loaded, which is what a script polls for before it starts
+pressing keys.
+
+Real keystrokes come from macOS itself:
+
+```sh
+osascript -e 'tell application "System Events" to set frontmost of process "editor" to true' \
+          -e 'tell application "System Events" to keystroke "f" using option down'
+```
+
+Chords whose character depends on the layout are sent by physical key
+instead — `key code 23 using {option down, shift down}` is `M-%` — and 300 ms
+between chords is enough for the page to record each one. `C-x C-s` is never
+sent: the run reads the buffer, and nothing is written to the copied folder.
+
+Sending keys this way needs Accessibility permission for whichever
+application runs `osascript`. Without it System Events answers `osascript is
+not allowed to send keystrokes. (1002)` and the run stops there; granting it
+is a decision for the person at the machine, in System Settings › Privacy &
+Security › Accessibility.

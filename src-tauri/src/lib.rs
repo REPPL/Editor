@@ -13,6 +13,7 @@
 
 pub mod assets;
 pub mod convert;
+pub mod devharness;
 pub mod document;
 pub mod metadata;
 pub mod present;
@@ -268,6 +269,7 @@ pub fn run() {
         .manage(watch::CurrentWatch::default())
         .manage(present::PendingDeck::default())
         .manage(publish::PublishInProgress::default())
+        .manage(devharness::DevHarness::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_folder,
@@ -290,7 +292,9 @@ pub fn run() {
             publish::publish_dry_run,
             publish::check_deploy,
             publish::read_publish_log,
-            publish::open_published_link
+            publish::open_published_link,
+            devharness::dev_harness,
+            devharness::dev_log_key
         ])
         .setup(|app| {
             // A release build fails as readily as a debug one, and a failure
@@ -305,6 +309,9 @@ pub fn run() {
             app.handle()
                 .plugin(tauri_plugin_log::Builder::default().level(level).build())?;
             install_menu(app.handle())?;
+            // Off unless the environment names a folder or a log file; see
+            // `devharness` for what each switch does and what it refuses.
+            devharness::configure(app.handle());
             // The spike needs the window to own the keyboard the moment it
             // appears, so that the first chord typed is a fair test.
             if let Some(window) = app.get_webview_window("main") {
