@@ -9,6 +9,14 @@ found_during: "three-reviewer-code-review"
 origin: researcher-authored
 production_mode: dictated-and-formatted
 found_at: "src/focus.ts"
+resolution: "Overlays are closed on cycle-away; registered panels keep stays-open"
+impact: fix
+resolved_by:
+  commit: "c0a856f"
 ---
 
 An overlay cycled away from with C-x o keeps its document-level key listener: with the quit confirmation open, C-x o then Return in the editor quits and discards the edit (reproduced by a reviewer); the same holds for M-x, the insert palette, the prompts, and the export panel
+
+## Grounds
+
+- pursued: an overlay that has lost the keyboard has no business answering keys; wrong if an author expects a palette to survive a detour to the sidebar
