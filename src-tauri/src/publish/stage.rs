@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::assets::decode_reference;
 use crate::document::{confine_asset, confine_path, ASSET_EXTENSIONS};
 use crate::publish::identity::{is_identifier, listing_of, version_hash};
 
@@ -43,6 +44,10 @@ pub struct BuiltFile {
 }
 
 /// An asset to copy, from the document folder into the version folder.
+///
+/// `from` is the author's reference, percent escapes and all, relative to the
+/// document root; `to` is a name inside the version folder that needs no
+/// escaping, which is what the built page points at.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetCopy {
     pub from: String,
@@ -209,7 +214,10 @@ pub fn stage_version(
         // the extension is held to the ones a published version carries at both
         // ends: a sidecar, a key or a configuration file beside a picture is
         // not something a publish may put on a public site.
-        let source = confine_asset(&document_root, &copy.from)?;
+        // The build names a source the way the author's text does, escapes and
+        // all, and this is where they are read back: one decode, at the moment
+        // the file is opened, shared with the deck's image reader.
+        let source = confine_asset(&document_root, &decode_reference(&copy.from)?)?;
         if !is_publishable_asset(&copy.to) {
             return Err(format!(
                 "{} is not a file a published version carries",
@@ -493,6 +501,52 @@ mod tests {
             b"not really a jpeg"
         );
         assert!(is_identifier(&staged.hash));
+    }
+
+    #[test]
+    fn stage_copies_an_asset_whose_name_carries_a_space() {
+        // The build names the source the way the text does — escaped — and the
+        // version folder carries it under a name that needs no escaping.
+        let fixture = fixture();
+        fs::create_dir_all(fixture.document.path().join("01-part/assets")).expect("folders");
+        fs::write(
+            fixture.document.path().join("01-part/assets/a lantern.jpg"),
+            b"not really a jpeg",
+        )
+        .expect("write");
+        let staged = stage_version(
+            &fixture.staging,
+            fixture.document.path(),
+            &files("one"),
+            &[AssetCopy {
+                from: "01-part/assets/a%20lantern.jpg".to_string(),
+                to: "assets/01-part/a-lantern.jpg".to_string(),
+            }],
+        )
+        .expect("staged");
+        assert_eq!(
+            fs::read(fixture.staging.join("assets/01-part/a-lantern.jpg")).expect("read"),
+            b"not really a jpeg"
+        );
+        assert!(is_identifier(&staged.hash));
+    }
+
+    #[test]
+    fn stage_refuses_a_source_whose_escapes_decode_to_a_climb() {
+        let fixture = fixture();
+        let outside = tempfile::tempdir().expect("temp dir");
+        fs::write(outside.path().join("secret.png"), b"secret").expect("write");
+        let message = stage_version(
+            &fixture.staging,
+            fixture.document.path(),
+            &files("one"),
+            &[AssetCopy {
+                from: "01-part/%2e%2e/%2e%2e/secret.png".to_string(),
+                to: "assets/01-part/secret.png".to_string(),
+            }],
+        )
+        .expect_err("refused");
+        assert!(message.contains("outside the open document"), "{message}");
     }
 
     #[test]

@@ -32,6 +32,14 @@ Part that carries its own pictures can be moved, and its chapters still read.
 Drop the same file twice into the same Part and Editor writes one copy and
 points both references at it.
 
+The copy keeps the name you gave the file. Where that name carries a space or
+a bracket, the reference spells it in escapes — `a lantern.jpg` is written
+`assets/a%20lantern.jpg` — so the Markdown destination reads it unquoted.
+Present and a publish both read those escapes back, so the picture shows at
+the lectern and reaches the site; a published copy is renamed to the plain
+characters a web address reads without escaping (`a-lantern.jpg`), and the
+page points at that name.
+
 ### What Editor takes out of a picture
 
 Every copied picture loses its metadata before it reaches the document folder:

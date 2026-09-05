@@ -12,6 +12,14 @@
  * nothing and is reported: those are the two shapes that name the author's
  * machine rather than the document, and a rendering that silently followed one
  * would publish it.
+ *
+ * And it is where a reference's percent escapes are read back. A drop writes a
+ * reference a Markdown destination reads unquoted — `assets/a%20lantern.jpg`
+ * for a file whose name carries a space — while the copy on disk keeps the
+ * space, so something has to decode, and [`decodeReference`] is the one thing
+ * that does. Every host resolves the decoded name, and so does the publish
+ * build's copy list; the shell has one decode of its own at the moment it
+ * opens the file, and nothing else in the app decodes anything.
  */
 
 import { walkChapterBlocks, walkInlines, type Chapter } from "./tree";
@@ -85,6 +93,32 @@ export function classify(written: string): Reference {
   return { written, kind: "relative", path: segments.join("/") };
 }
 
+/**
+ * A reference with its percent escapes read back: the name on disk.
+ *
+ * `assets/a%20lantern.jpg` names the file `a lantern.jpg`, because that is
+ * what the drop wrote and what the file is called. Null where the escapes do
+ * not name a file the reference could have named in plain text: a malformed
+ * escape, an escape that decodes to a path separator, or one that decodes to
+ * `..`. A segment written `..` is left alone — a climb in plain sight is the
+ * classifier's business, and this refuses only a climb in disguise.
+ */
+export function decodeReference(reference: string): string | null {
+  const decoded: string[] = [];
+  for (const segment of reference.split(/[\\/]/)) {
+    let read: string;
+    try {
+      read = decodeURIComponent(segment);
+    } catch {
+      return null; // a malformed escape names nothing
+    }
+    if (read.includes("/") || read.includes("\\")) return null;
+    if (read === ".." && segment !== "..") return null;
+    decoded.push(read);
+  }
+  return decoded.join("/");
+}
+
 /** The refusal a kind earns, or null when it resolves. */
 function problemOf(kind: ReferenceKind): string | null {
   switch (kind) {
@@ -99,17 +133,32 @@ function problemOf(kind: ReferenceKind): string | null {
   }
 }
 
-/** Refuse what must be refused; hand everything else to `resolve`. */
+/**
+ * Refuse what must be refused; hand everything else to `resolve`.
+ *
+ * `resolve` is handed the reference and the name it decodes to, so a host
+ * looks a file up by what it is called rather than by how it was written.
+ */
 function guarded(
   written: string,
-  resolve: (reference: Reference) => string | null,
+  resolve: (reference: Reference, decoded: string) => string | null,
 ): Resolution {
   const reference = classify(written);
   const problem = problemOf(reference.kind);
   if (problem !== null) {
     return { reference: written, kind: reference.kind, url: null, problem };
   }
-  const url = resolve(reference);
+  const decoded =
+    reference.kind === "relative" ? decodeReference(reference.path) : "";
+  if (decoded === null) {
+    return {
+      reference: written,
+      kind: reference.kind,
+      url: null,
+      problem: "the reference's escapes name something outside the chapter's folder",
+    };
+  }
+  const url = resolve(reference, decoded);
   return {
     reference: written,
     kind: reference.kind,
@@ -127,8 +176,8 @@ function guarded(
  */
 export function pathResolver(prefix = ""): Resolver {
   return (written) =>
-    guarded(written, (reference) =>
-      reference.kind === "remote" ? reference.written.trim() : prefix + reference.path,
+    guarded(written, (reference, decoded) =>
+      reference.kind === "remote" ? reference.written.trim() : prefix + decoded,
     );
 }
 
@@ -138,14 +187,24 @@ export function pathResolver(prefix = ""): Resolver {
  * A reference the map has no entry for resolves to nothing and is reported,
  * which is what a picture the shell refused — too large, or not an image this
  * phase carries — looks like to a renderer.
+ *
+ * The map may be keyed by the reference as written or by the name it decodes
+ * to, because the shell is asked for a picture by the author's reference and
+ * answers about a file on disk: `assets/a%20lantern.jpg` finds an entry under
+ * either it or `assets/a lantern.jpg`.
  */
 export function dataResolver(
   byReference: ReadonlyMap<string, string>,
 ): Resolver {
   return (written) =>
-    guarded(written, (reference) => {
+    guarded(written, (reference, decoded) => {
       if (reference.kind === "remote") return reference.written.trim();
-      return byReference.get(reference.path) ?? byReference.get(written) ?? null;
+      return (
+        byReference.get(reference.path) ??
+        byReference.get(decoded) ??
+        byReference.get(written) ??
+        null
+      );
     });
 }
 

@@ -9,7 +9,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { classify, dataResolver, pathResolver, referencesOf } from "./assets";
+import {
+  classify,
+  dataResolver,
+  decodeReference,
+  pathResolver,
+  referencesOf,
+} from "./assets";
 import { parseChapter } from "./parse";
 
 describe("classifying a reference", () => {
@@ -44,6 +50,26 @@ describe("classifying a reference", () => {
   });
 });
 
+describe("reading a reference's escapes back", () => {
+  it("reads an escaped name as the name on disk", () => {
+    expect(decodeReference("assets/a%20lantern.jpg")).toBe("assets/a lantern.jpg");
+    expect(decodeReference("assets/a%20lantern%20%281%29.jpg")).toBe(
+      "assets/a lantern (1).jpg",
+    );
+    expect(decodeReference("assets/lantern.jpg")).toBe("assets/lantern.jpg");
+  });
+
+  it("refuses an escape that decodes to a climb or to a separator", () => {
+    expect(decodeReference("%2e%2e/secrets.jpg")).toBeNull();
+    expect(decodeReference("assets/%2E%2E/secrets.jpg")).toBeNull();
+    expect(decodeReference("assets/one%2Ftwo.jpg")).toBeNull();
+    expect(decodeReference("assets/one%5Ctwo.jpg")).toBeNull();
+    expect(decodeReference("assets/%zz.jpg")).toBeNull();
+    // A climb in plain sight is the classifier's to refuse, not this.
+    expect(decodeReference("../secrets.jpg")).toBe("../secrets.jpg");
+  });
+});
+
 describe("resolving", () => {
   it("reports an absolute or climbing reference and resolves nothing", () => {
     const resolve = pathResolver();
@@ -69,6 +95,22 @@ describe("resolving", () => {
     const missing = resolve("assets/winter.jpg");
     expect(missing.url).toBeNull();
     expect(missing.problem).toMatch(/no copy/);
+  });
+
+  it("resolves an escaped reference to the file the name belongs to", () => {
+    // The drop wrote `assets/a%20lantern.jpg`; the copy on disk is called
+    // `a lantern.jpg`, and that is what the shell reads and answers about.
+    const resolve = dataResolver(
+      new Map([["assets/a lantern.jpg", "data:image/jpeg;base64,BBBB"]]),
+    );
+    expect(resolve("assets/a%20lantern.jpg").url).toBe("data:image/jpeg;base64,BBBB");
+    expect(pathResolver()("assets/a%20lantern.jpg").url).toBe("assets/a lantern.jpg");
+  });
+
+  it("refuses a reference whose escapes decode to a climb", () => {
+    const refused = dataResolver(new Map())("%2e%2e/x.jpg");
+    expect(refused.url).toBeNull();
+    expect(refused.problem).toMatch(/escapes/);
   });
 
   it("leaves a URL as the author wrote it", () => {

@@ -133,11 +133,15 @@ fn folder_of(chapter: &Path) -> Result<&Path, String> {
 
 /// Resolve one image reference written in a chapter.
 ///
-/// Relative to the chapter's folder, and then through the asset confinement:
-/// inside the open document, and carrying an extension this phase reads.
+/// The reference's percent escapes are read back first — a drop writes
+/// `assets/a%20lantern.jpg` for a file the disk calls `a lantern.jpg` — and
+/// the name that comes out is taken relative to the chapter's folder and then
+/// through the asset confinement: inside the open document, and carrying an
+/// extension this phase reads.
 pub fn resolve_asset(root: &Path, chapter_path: &str, reference: &str) -> Result<PathBuf, String> {
     let chapter = document::confine_chapter(root, chapter_path)?;
-    let candidate = folder_of(&chapter)?.join(reference);
+    let name = crate::assets::decode_reference(reference)?;
+    let candidate = folder_of(&chapter)?.join(name);
     document::confine_asset(root, &candidate.to_string_lossy())
 }
 
@@ -352,6 +356,33 @@ mod tests {
         let resolved = resolve_asset(&root, "01-part/01-alice.md", "assets/lantern.png")
             .expect("beside the chapter");
         assert_eq!(resolved, root.join("01-part/assets/lantern.png"));
+    }
+
+    #[test]
+    fn resolves_and_reads_an_escaped_name_the_drop_wrote() {
+        // The drop copies `a lantern.jpg` and writes `assets/a%20lantern.jpg`
+        // into the text, so the read path has to read those escapes back or
+        // the picture the author just dropped cannot be presented.
+        let (_dir, root) = document();
+        fs::write(
+            root.join("01-part/assets/a lantern.jpg"),
+            b"not really a jpeg",
+        )
+        .expect("image");
+        let resolved = resolve_asset(&root, "01-part/01-alice.md", "assets/a%20lantern.jpg")
+            .expect("beside the chapter");
+        assert_eq!(resolved, root.join("01-part/assets/a lantern.jpg"));
+        let asset = read_asset_bytes(&resolved, DEFAULT_ASSET_THRESHOLD_BYTES).expect("readable");
+        assert_eq!(asset.mime, "image/jpeg");
+        assert_eq!(asset.base64, base64(b"not really a jpeg"));
+    }
+
+    #[test]
+    fn refuses_an_escape_that_decodes_to_a_climb() {
+        let (_dir, root) = document();
+        let message = resolve_asset(&root, "01-part/01-alice.md", "%2e%2e/%2e%2e/secrets.png")
+            .expect_err("outside");
+        assert!(message.contains("outside the open document"), "{message}");
     }
 
     #[test]

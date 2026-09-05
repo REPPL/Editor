@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
+use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -924,6 +924,34 @@ pub fn relative_from(base: &Path, target: &Path) -> Option<String> {
 /// A reference the Markdown destination reads unquoted.
 pub fn encode_reference(path: &str) -> String {
     utf8_percent_encode(path, REFERENCE_SET).to_string()
+}
+
+/// The name a reference points at, with its percent escapes read back.
+///
+/// The inverse of [`encode_reference`], and the shell's one decode: the deck's
+/// image reader and the publish stage both open a file named by a reference
+/// the author's text carries, and this is what turns `assets/a%20lantern.jpg`
+/// back into the `a lantern.jpg` the drop wrote to disk. Everything else in
+/// the shell handles a reference without reading its escapes, so a name is
+/// never decoded twice.
+///
+/// An escape that decodes to a path separator or to `..` is refused: what a
+/// reference may name is what it names in plain text, and an escape must not
+/// be able to widen that. A segment written `..` is passed through for
+/// [`crate::document::confine_path`] to refuse on the resolved path, so a
+/// climb is reported the same way whether or not it was spelt out.
+pub fn decode_reference(reference: &str) -> Result<String, String> {
+    let mut decoded = Vec::new();
+    for segment in reference.split(['/', '\\']) {
+        let read = percent_decode_str(segment)
+            .decode_utf8()
+            .map_err(|_| format!("{reference} is not a name this document can read"))?;
+        if read.contains('/') || read.contains('\\') || (read == ".." && segment != "..") {
+            return Err(format!("{reference} is outside the open document"));
+        }
+        decoded.push(read.into_owned());
+    }
+    Ok(decoded.join("/"))
 }
 
 /// Write bytes where a half-written file can never be seen.
@@ -1873,6 +1901,42 @@ mod tests {
             "assets/a%20lantern%20%281%29.jpg"
         );
         assert_eq!(encode_reference("assets/lantern.jpg"), "assets/lantern.jpg");
+    }
+
+    #[test]
+    fn reads_a_reference_back_to_the_name_on_disk() {
+        assert_eq!(
+            decode_reference("assets/a%20lantern%20%281%29.jpg").expect("a name"),
+            "assets/a lantern (1).jpg"
+        );
+        assert_eq!(
+            decode_reference(&encode_reference("assets/a lantern.jpg")).expect("a name"),
+            "assets/a lantern.jpg",
+            "what the drop wrote is what the read path opens"
+        );
+        assert_eq!(
+            decode_reference("assets/lantern.jpg").expect("a name"),
+            "assets/lantern.jpg"
+        );
+    }
+
+    #[test]
+    fn refuses_an_escape_that_decodes_to_a_climb_or_a_separator() {
+        for reference in [
+            "%2e%2e/secrets.jpg",
+            "assets/%2E%2E/secrets.jpg",
+            "assets/one%2Ftwo.jpg",
+            "assets/one%5Ctwo.jpg",
+        ] {
+            let message = decode_reference(reference).expect_err(reference);
+            assert!(message.contains("outside the open document"), "{message}");
+        }
+        // A climb in plain sight is the confinement's to refuse on the path it
+        // resolves to, so it passes through here unchanged.
+        assert_eq!(
+            decode_reference("../secrets.jpg").expect("passed through"),
+            "../secrets.jpg"
+        );
     }
 
     #[test]

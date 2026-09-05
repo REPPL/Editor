@@ -15,7 +15,13 @@
  * the shell moves the bytes disk to disk.
  */
 
-import { classify, pathResolver, type Resolution, type Resolver } from "../core/assets";
+import {
+  classify,
+  decodeReference,
+  pathResolver,
+  type Resolution,
+  type Resolver,
+} from "../core/assets";
 import { buildChapterDecks } from "../core/deck";
 import { renderArticle, renderDocumentContents } from "../core/render/article";
 import { renderSlides } from "../core/render/slides";
@@ -31,9 +37,16 @@ export interface BuiltFile {
 
 /** An asset to copy into the version folder. */
 export interface AssetCopy {
-  /** The path relative to the document root. */
+  /**
+   * The path relative to the document root, as the author's reference wrote
+   * it: percent escapes and all. The shell reads those back once, at the
+   * moment it opens the file, so no name is decoded twice.
+   */
   readonly from: string;
-  /** The path relative to the version folder. */
+  /**
+   * The path relative to the version folder, under a name that needs no
+   * escaping: see [`publishedName`].
+   */
   readonly to: string;
 }
 
@@ -120,7 +133,7 @@ export function assetPlan(
 ): { copies: AssetCopy[]; refusals: BuildRefusal[] } {
   const copies: AssetCopy[] = [];
   const refusals: BuildRefusal[] = [];
-  const seen = new Set<string>();
+  const claimed = new Map<string, string>();
   for (const input of tree.chapters) {
     for (const reference of chapterReferences(input.chapter, variant)) {
       const resolved = resolveReference(input.path, reference);
@@ -132,10 +145,21 @@ export function assetPlan(
         });
         continue;
       }
-      if (seen.has(resolved.to)) {
+      const claim = claimed.get(resolved.to);
+      if (claim !== undefined) {
+        // The same file, referenced from two chapters of one Part: one copy.
+        // Two different files under one published name is a different thing,
+        // and reported rather than resolved by whichever was copied first.
+        if (claim !== resolved.from) {
+          refusals.push({
+            chapter: input.path,
+            reference,
+            reason: `another file is already published as ${resolved.to}`,
+          });
+        }
         continue;
       }
-      seen.add(resolved.to);
+      claimed.set(resolved.to, resolved.from);
       copies.push(resolved);
     }
   }
@@ -160,7 +184,7 @@ export function resolveReference(
   const from = normalisePath(
     partFolder === "" ? reference : `${partFolder}/${reference}`,
   );
-  if (from === null) {
+  if (from === null || from.startsWith("../")) {
     return null;
   }
   // A reference that climbs out of the chapter's own folder resolves to
@@ -168,11 +192,38 @@ export function resolveReference(
   if (partFolder !== "" && !from.startsWith(`${partFolder}/`)) {
     return null;
   }
+  const name = publishedName(from);
+  if (name === null) {
+    return null;
+  }
   const to =
     partFolder === ""
-      ? `${ASSETS_FOLDER}/${basename(from)}`
-      : `${ASSETS_FOLDER}/${partFolder}/${basename(from)}`;
+      ? `${ASSETS_FOLDER}/${name}`
+      : `${ASSETS_FOLDER}/${partFolder}/${name}`;
   return { from, to };
+}
+
+/**
+ * The name a copied file carries inside the version folder.
+ *
+ * The document folder keeps the name the author gave the file — a space and
+ * all — and the reference in the text carries that name percent-escaped. A
+ * published version keeps neither: the copy is named in the characters a URL
+ * path reads plainly, so the page's `src` and the file beside it are the same
+ * characters and nothing on the way to a reader has to agree with us about
+ * what `%20` means. `a lantern.jpg` publishes as `a-lantern.jpg`.
+ *
+ * Null where the reference's escapes name something it could not have named
+ * in plain text, which is [`decodeReference`]'s refusal, and null where
+ * nothing is left of the name.
+ */
+function publishedName(reference: string): string | null {
+  const decoded = decodeReference(reference);
+  if (decoded === null) {
+    return null;
+  }
+  const name = basename(decoded).replace(/[^A-Za-z0-9._~-]/g, "-");
+  return name === "" ? null : name;
 }
 
 /**
@@ -300,9 +351,14 @@ export const ASSET_EXTENSIONS: readonly string[] = [
   "avif",
 ];
 
-/** Whether a name carries an extension a published version carries. */
+/**
+ * Whether a name carries an extension a published version carries.
+ *
+ * The name is the decoded one, so a reference is held to what the file is
+ * called rather than to how the reference spells it.
+ */
 function isPublishableAsset(reference: string): boolean {
-  const name = basename(reference.split(/[?#]/)[0] ?? "");
+  const name = basename((decodeReference(reference) ?? reference).split(/[?#]/)[0] ?? "");
   const cut = name.lastIndexOf(".");
   if (cut <= 0) {
     return false;
@@ -321,6 +377,9 @@ function isCopyable(reference: string): boolean {
   if (reference.startsWith("/") || /^[a-z]:[\\/]/i.test(reference)) {
     return false; // absolute: no machine in the document
   }
+  if (decodeReference(reference) === null) {
+    return false; // an escape naming a folder the reference does not name
+  }
   return isPublishableAsset(reference);
 }
 
@@ -330,6 +389,9 @@ function refusalReason(reference: string): string {
   }
   if (reference.startsWith("/")) {
     return "the reference is absolute";
+  }
+  if (decodeReference(reference) === null) {
+    return "the reference's escapes name something outside the document folder";
   }
   if (!isPublishableAsset(reference)) {
     return "a published version carries only the picture formats the app reads";

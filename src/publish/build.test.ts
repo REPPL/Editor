@@ -173,6 +173,58 @@ describe("the asset plan", () => {
     });
   });
 
+  it("copies an escaped name from the file on disk to a name needing no escaping", () => {
+    // The drop wrote `assets/a%20lantern.jpg` for a file the disk calls
+    // `a lantern.jpg`. The copy is named from the file, and the published
+    // name is one a URL path reads plainly.
+    expect(
+      resolveReference("01-beginnings/01-opening.md", "assets/a%20lantern.jpg"),
+    ).toEqual({
+      from: "01-beginnings/assets/a%20lantern.jpg",
+      to: "assets/01-beginnings/a-lantern.jpg",
+    });
+  });
+
+  it("puts the published name in both renderings and copies the file once", () => {
+    const chapter = parseChapter(
+      ["# A chapter", "", "![A lantern](assets/a%20lantern.jpg)", ""].join("\n"),
+    );
+    const tree = { chapters: [{ path: "01-part/01-chapter.md", chapter }] };
+    const built = buildVersion(tree, "talk", {
+      rendered: renderVariant(tree, "talk", { title: "A document" }),
+    });
+    expect(built.copies).toEqual([
+      {
+        from: "01-part/assets/a%20lantern.jpg",
+        to: "assets/01-part/a-lantern.jpg",
+      },
+    ]);
+    expect(built.refusals).toEqual([]);
+    const article = built.files.find((file) => file.path === ARTICLE_PATH);
+    const deck = built.files.find((file) => file.path === DECK_PATH);
+    expect(article?.text).toContain('src="assets/01-part/a-lantern.jpg"');
+    expect(deck?.text).toContain('src="../assets/01-part/a-lantern.jpg"');
+    for (const file of built.files) {
+      expect(file.text).not.toContain("%20");
+    }
+  });
+
+  it("refuses a reference whose escapes decode to a climb", () => {
+    const chapter = parseChapter(
+      ["# A chapter", "", "![Away](%2e%2e/x.jpg)", ""].join("\n"),
+    );
+    const { copies, refusals } = assetPlan(
+      { chapters: [{ path: "01-part/01-chapter.md", chapter }] },
+      "talk",
+    );
+    expect(copies).toEqual([]);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]?.reason).toMatch(/escapes/);
+    expect(resolveReference("01-part/01-chapter.md", "%2e%2e/x.jpg")).toBeNull();
+    // And a chapter at the document root cannot climb out of it either.
+    expect(resolveReference("01-chapter.md", "../x.jpg")).toBeNull();
+  });
+
   it("keeps two Parts' lanterns apart", () => {
     const first = resolveReference("01-beginnings/a.md", "assets/lantern.jpg");
     const second = resolveReference("02-findings/b.md", "assets/lantern.jpg");
