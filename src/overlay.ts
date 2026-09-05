@@ -45,6 +45,38 @@ export interface Overlay {
 /** The overlay that currently holds the keyboard, if any. */
 let current: Overlay | null = null;
 
+/** Someone who needs to know which overlay holds the keyboard. */
+export type OverlayObserver = (overlay: Overlay | null) => void;
+
+const observers = new Set<OverlayObserver>();
+
+/**
+ * Watch the overlay that holds the keyboard.
+ *
+ * The focus model is one of the panes in the cycle, and an overlay opening or
+ * closing is what makes that pane appear and disappear. Observing is all this
+ * adds: the cancel contract above is unchanged, so "focus returns to the text
+ * on cancel" stays one rule with one implementation.
+ *
+ * Returns the call that stops watching.
+ */
+export function onOverlayChange(observer: OverlayObserver): () => void {
+  observers.add(observer);
+  return () => {
+    observers.delete(observer);
+  };
+}
+
+function announceOverlay(): void {
+  for (const observer of [...observers]) {
+    try {
+      observer(current);
+    } catch (error) {
+      console.warn(`overlay observer: ${String(error)}`);
+    }
+  }
+}
+
 /** The overlay that currently holds the keyboard, if any. */
 export function currentOverlay(): Overlay | null {
   return current;
@@ -53,6 +85,16 @@ export function currentOverlay(): Overlay | null {
 /** Close whatever overlay is open. Safe when none is. */
 export function closeOverlay(): void {
   current?.close(false);
+}
+
+/**
+ * Put the keyboard back into the open overlay.
+ *
+ * The same rule `openOverlay` uses, so a pane cycled back to lands where it
+ * landed when it opened rather than in a second, disagreeing place.
+ */
+export function focusOverlay(overlay: Overlay): void {
+  focusTarget(overlay.element).focus();
 }
 
 /**
@@ -114,11 +156,15 @@ export function openOverlay(hooks: OverlayHooks): Overlay {
       open = false;
       document.removeEventListener("keydown", onKeydown, true);
       hooks.element.remove();
-      if (current === overlay) current = null;
+      const wasCurrent = current === overlay;
+      if (wasCurrent) current = null;
       // The surface gets the keyboard back, and with it the selection it had:
       // nothing here dispatched a transaction, so there is nothing to restore.
       returnFocusTo?.focus();
       hooks.onClose?.(chosen);
+      // Last, so that an observer moving the keyboard has the final say over
+      // where it lands.
+      if (wasCurrent) announceOverlay();
     },
   };
 
@@ -162,6 +208,7 @@ export function openOverlay(hooks: OverlayHooks): Overlay {
 
   document.addEventListener("keydown", onKeydown, true);
   current = overlay;
+  announceOverlay();
   focusTarget(hooks.element).focus();
   hooks.onMove?.(0);
   return overlay;

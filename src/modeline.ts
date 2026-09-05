@@ -16,6 +16,21 @@ import { describeChord } from "./keyspanel";
 
 /** What the modeline shows besides the cursor position. */
 export interface ModelineContext {
+  /**
+   * The pane holding the keyboard, by name: `Editor`, `Sidebar`, `Keys`.
+   *
+   * Alice never has to press a key to find out where she is, because the line
+   * she already reads for the unsaved mark and her position says so.
+   */
+  pane?: string;
+  /**
+   * A prefix chord half-typed outside the editing surface.
+   *
+   * A `C-x` typed in the sidebar is the same half-typed chord as one typed in
+   * the text, so it shows in the same cell. Absent or null means ask the
+   * editing surface's own handler instead.
+   */
+  prefix?: string | null;
   /** The chapter's display name, or null when nothing is open. */
   chapter: string | null;
   /** Whether the open chapter has unsaved edits. */
@@ -51,6 +66,10 @@ export function createModeline(): Modeline {
   const element = document.createElement("footer");
   element.className = "modeline";
 
+  const paneCell = cell(
+    "modeline-pane",
+    describeChord("other-window", "The pane holding the keyboard; change it"),
+  );
   const chapterCell = cell(
     "modeline-chapter",
     describeChord("save-chapter", "The open chapter; save it"),
@@ -68,11 +87,22 @@ export function createModeline(): Modeline {
     describeChord("set-mark", "Whether the mark is set"),
   );
   const messageCell = cell("modeline-message");
-  element.append(chapterCell, positionCell, prefixCell, markCell, messageCell);
+  element.append(
+    paneCell,
+    chapterCell,
+    positionCell,
+    prefixCell,
+    markCell,
+    messageCell,
+  );
 
   return {
     element,
     update(view, context) {
+      const pane = context.pane ?? "Editor";
+      paneCell.textContent = `[${pane}]`;
+      paneCell.dataset["pane"] = pane;
+
       if (context.chapter) {
         // `!!` is louder than `**` on purpose: the file is gone, and the next
         // save will refuse rather than write.
@@ -84,16 +114,27 @@ export function createModeline(): Modeline {
         chapterCell.dataset["detached"] = "no";
       }
 
+      // One prefix cell, two readers. The editing surface's own handler
+      // cannot hear a key while another pane holds the keyboard, so a prefix
+      // half-typed there is fed in instead; a disagreement between the two
+      // would show here, which is where it should.
+      const outside =
+        context.prefix !== undefined &&
+        context.prefix !== null &&
+        context.prefix !== "";
+
       if (view) {
         const { line, column } = cursorPosition(view);
         positionCell.textContent = `L${line}:C${column}`;
         const status = emacsStatus(view);
-        prefixCell.textContent = status.prefix ? `${status.prefix}-` : "";
-        prefixCell.dataset["active"] = status.prefix ? "yes" : "no";
+        const prefix = outside ? context.prefix : status.prefix;
+        prefixCell.textContent = prefix ? `${prefix}-` : "";
+        prefixCell.dataset["active"] = prefix ? "yes" : "no";
         markCell.textContent = status.markActive ? "Mark" : "";
       } else {
         positionCell.textContent = "L1:C1";
-        prefixCell.textContent = "";
+        prefixCell.textContent = outside ? `${context.prefix ?? ""}-` : "";
+        prefixCell.dataset["active"] = outside ? "yes" : "no";
         markCell.textContent = "";
       }
 

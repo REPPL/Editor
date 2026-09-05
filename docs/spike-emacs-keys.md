@@ -317,6 +317,7 @@ appear in the log at all was taken above the page: note where.
 | 14 | `C-c i` | The insert palette opens; three letters filter it; Return puts the form at the cursor | `C-c` is unbound in the shipped keymap and Control-c is not copy on macOS, but no real window has pressed it yet |
 | 15 | `M-%` | The search panel opens with the cursor in the replacement field | Alt-Shift on the `5` key. The package spells this binding in a notation its own key reader never produces, so Editor rebinds it; this row is what proves the rebinding reaches a real keyboard |
 | 16 | `C-x C-b`, then `C-x C-r` | The sidebar hides and shows; the document redraws from disk | Both are Editor's own chords on the `C-x` prefix |
+| 17 | `C-x o` from the text, then `C-x o` again from the sidebar, and `C-x C-o` for both | The log shows both steps of each chord and claims both; the keyboard moves to the sidebar and back, and the modeline names the pane each time | Two readers, one prefix state: the first press is read by the editing surface, the second by the page's own reader, and a silent `o` after a live `C-x` is the reader failing rather than the platform |
 
 Record the result of each row against the binding table. A row that fails on
 the desktop is a decision: claim the combination in the shell, rebind the

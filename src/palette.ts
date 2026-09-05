@@ -120,6 +120,8 @@ export function openPalette(view: EditorView, hooks: PaletteHooks = {}): Overlay
   element.className = "palette";
   element.setAttribute("role", "dialog");
   element.setAttribute("aria-label", "Insert a construct");
+  // What the modeline calls this pane while it holds the keyboard.
+  element.dataset["paneLabel"] = "Insert";
 
   const field = document.createElement("input");
   field.type = "text";

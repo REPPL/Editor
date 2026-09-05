@@ -41,8 +41,10 @@ import {
   canonicalChord,
   chordFromEvent,
   chordIndex,
+  chordIndexIn,
   fromKeymapSpec,
   keymapChords,
+  scopeOf,
 } from "./keys";
 import { installKeyLog } from "./keyspike";
 
@@ -332,13 +334,22 @@ describe("the binding table", () => {
   });
 
   it("gives no two rows the same chord", () => {
+    // Once per scope. Focus is single and exclusive, so the editing surface
+    // and the sidebar may each claim `C-n`; two rows claiming it inside one
+    // scope would be the ambiguity this invariant exists to forbid.
     const shared: string[] = [];
-    for (const [chord, rows] of chordIndex()) {
-      if (rows.length > 1) {
-        shared.push(`${chord}: ${rows.map((row) => row.id).join(", ")}`);
+    for (const scope of ["editor", "sidebar"] as const) {
+      for (const [chord, rows] of chordIndexIn(scope)) {
+        if (rows.length > 1) {
+          shared.push(`${scope} ${chord}: ${rows.map((row) => row.id).join(", ")}`);
+        }
       }
     }
     expect(shared).toEqual([]);
+    // The scopes are not empty, and the sweep above is worth something.
+    expect(chordIndexIn("sidebar").size).toBeGreaterThan(0);
+    expect(chordIndexIn("editor").has("C-n")).toBe(true);
+    expect(chordIndexIn("sidebar").has("C-n")).toBe(true);
   });
 
   it("suppresses a chord instead of listing it, never both", () => {
@@ -358,16 +369,35 @@ describe("the binding table", () => {
     expect(publish?.owner).toBe("app");
   });
 
-  it("reserves both other-window chords, and answers neither yet", () => {
+  it("answers both other-window chords from the text", () => {
     // `C-x C-o` sits beside `C-x o` so the Control key need not be lifted
-    // between the two steps. The sidebar-navigation spec wires them; until it
-    // does, the row exists so the chords are spoken for and no second row can
-    // claim them.
+    // between the two steps. Both reach the pane cycle: the editing surface
+    // hears them through the Emacs handler's own prefix machinery, and a pane
+    // the surface cannot hear reads the same row through `src/focus.ts`.
     const other = bindingById("other-window");
     expect(other?.chords).toEqual(["C-x o", "C-x C-o"]);
-    expect(other?.owner).toBe("app");
-    expect(emacsAnsweredChords().has("C-x o")).toBe(false);
-    expect(emacsAnsweredChords().has("C-x C-o")).toBe(false);
+    expect(other?.owner).toBe("editor");
+    expect(emacsAnsweredChords().has("C-x o")).toBe(true);
+    expect(emacsAnsweredChords().has("C-x C-o")).toBe(true);
+  });
+
+  it("gives the sidebar's rows their own scope, and answers none of them here", () => {
+    // The six rows the tree answers. They are the table's, so the keys panel
+    // lists them; they are not the editing surface's, so the Emacs handler
+    // must not bind a single one of them.
+    const sidebar = BINDINGS.filter((binding) => scopeOf(binding) === "sidebar");
+    expect(sidebar.map((binding) => binding.id)).toEqual([
+      "sidebar-next-node",
+      "sidebar-previous-node",
+      "sidebar-expand-node",
+      "sidebar-collapse-node",
+      "sidebar-open-node",
+      "sidebar-quit",
+    ]);
+    for (const binding of sidebar) {
+      expect(binding.owner).toBe("sidebar");
+      expect(binding.group).toBe("panes");
+    }
   });
 
   it("answers no chord the table does not list", () => {
@@ -622,6 +652,9 @@ describe("the Emacs keymap inside CodeMirror", () => {
       // `C-u` starts a numeric argument, so it changes how the next chord is
       // read. It is checked on its own below rather than in the sweep.
       if (binding.id === "universal-argument") continue;
+      // A row of another scope is not the editing surface's to claim: the
+      // sidebar answers it, and only while the tree holds the keyboard.
+      if (scopeOf(binding) !== "editor") continue;
       for (const chord of binding.chords) {
         // Plain arrow and navigation keys belong to the browser, and the
         // spike is about the modified chords.

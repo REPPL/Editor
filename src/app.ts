@@ -18,6 +18,7 @@ import { outlineOf, type Outline, type OutlineNode } from "./core/outline";
 import { parseChapter } from "./core/parse";
 import { createDropRouter, type DropRouter, type DropTargets } from "./drop";
 import { createEditor, documentText, revealLine, setDocument } from "./editor";
+import { createFocusModel, type FocusModel, type PanelFocus } from "./focus";
 import { releaseEditorCommands, setEditorCommands, type EditorCommands } from "./emacs";
 import type {
   Chapter,
@@ -69,6 +70,8 @@ export interface App {
   readonly sidebar: Sidebar;
   readonly modeline: Modeline;
   readonly keyLog: KeyLog;
+  /** Which pane holds the keyboard, and the chord that moves it. */
+  readonly focus: FocusModel;
   readonly drop: DropRouter;
   /** Whether the open chapter has unsaved edits. */
   readonly dirty: boolean;
@@ -100,8 +103,13 @@ export interface App {
 
   /** Bind a row of the binding table to an action. */
   registerCommand(bindingId: string, run: () => void): void;
-  /** Mount a surface of the application's own, such as an overlay host. */
-  registerPanel(name: string, element: HTMLElement): void;
+  /**
+   * Mount a surface of the application's own, such as an overlay host.
+   *
+   * A panel that hands over a focus contract joins the pane cycle, so
+   * `other-window` reaches it and the modeline names it.
+   */
+  registerPanel(name: string, element: HTMLElement, focus?: PanelFocus): void;
   /** Fill in a branch of the one drop router. */
   onDropTarget(target: "text", handler: (payload: DropPayload) => void): void;
 
@@ -151,7 +159,14 @@ export function createApp(root: HTMLElement, services: AppServices): App {
 
   const sidebar = createSidebar({
     onOpenChapter: (chapter, node) => {
-      void app.openChapter(chapter, node);
+      // Return in the tree and a click on a row are the same hook. Where the
+      // tree held the keyboard, opening hands it back to the text once the
+      // chapter has loaded, with the cursor already on the heading.
+      const handBack = focus.pane === "sidebar";
+      void (async () => {
+        await app.openChapter(chapter, node);
+        if (handBack) focus.toEditor();
+      })();
     },
     onOpenFolder: () => {
       void app.promptForFolder();
@@ -172,6 +187,23 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   /** Where overlays are mounted, so they sit over the surface and not the page. */
   const overlayHost = document.createElement("div");
   overlayHost.className = "overlay-host";
+
+  /**
+   * The pane cycle.
+   *
+   * Built after the surface it moves between and before anything registers a
+   * panel, so every pane that can hold the keyboard is registered in one
+   * place.
+   */
+  const focus: FocusModel = createFocusModel({
+    sidebar,
+    focusEditor: () => {
+      view.focus();
+    },
+    onChange: () => {
+      refresh();
+    },
+  });
 
   const layout = document.createElement("div");
   layout.className = "layout";
@@ -194,6 +226,8 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   function refresh(): void {
     const dirty = isDirty();
     modeline.update(view, {
+      pane: focus.label,
+      prefix: focus.prefix,
       chapter: openChapterTitle,
       dirty,
       detached,
@@ -317,6 +351,11 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     "reload-document": () => {
       void app.reload();
     },
+    // From the text. A pane the editing surface cannot hear reads the same
+    // row for itself, in `src/focus.ts`, and both reach this one cycle.
+    "other-window": () => {
+      focus.cycle();
+    },
   };
 
   const dropTargets: DropTargets = {
@@ -362,6 +401,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     modeline,
     keyLog,
     drop,
+    focus,
 
     get dirty(): boolean {
       return isDirty();
@@ -563,9 +603,10 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       commands[bindingId] = run;
     },
 
-    registerPanel(name: string, element: HTMLElement): void {
+    registerPanel(name: string, element: HTMLElement, panelFocus?: PanelFocus): void {
       element.dataset["panel"] = name;
       overlayHost.append(element);
+      if (panelFocus) focus.registerPanel(panelFocus);
     },
 
     onDropTarget(target, handler): void {
@@ -574,6 +615,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
 
     destroy(): void {
       closeOverlay();
+      focus.destroy();
       drop.dispose();
       releaseEditorCommands(commands);
       keyLog.dispose();

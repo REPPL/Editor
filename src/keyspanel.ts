@@ -25,6 +25,8 @@ import { openOverlay, type Overlay } from "./overlay";
 const OWNER_NOTES: Readonly<Record<string, string>> = {
   shell: "menu",
   codemirror: "editor",
+  // Which pane answers the row, for the six that answer in one pane only.
+  sidebar: "sidebar",
 };
 
 /** Build the panel's element and the list of rows it can move between. */

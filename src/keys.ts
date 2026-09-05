@@ -40,7 +40,16 @@ export type BindingOwner =
    * The row exists so the chord is spoken for and the uniqueness check holds
    * before the command lands. Nothing answers it yet.
    */
-  | "app";
+  | "app"
+  /**
+   * Answered by the sidebar, and only while the sidebar holds the keyboard.
+   *
+   * Focus is single and exclusive, so a chord a `sidebar` row carries may be
+   * carried by an `editor` row as well: `C-n` is next line in the text and
+   * next node in the tree, and never both. That is why the table's
+   * no-two-rows-one-chord invariant is stated per scope — see `scopeOf`.
+   */
+  | "sidebar";
 
 /** The grouping a binding appears under in the keys panel. */
 export type BindingGroup =
@@ -50,7 +59,8 @@ export type BindingGroup =
   | "mark"
   | "search"
   | "document"
-  | "control";
+  | "control"
+  | "panes";
 
 /** The groups in the order the keys panel shows them. */
 export const BINDING_GROUPS: readonly BindingGroup[] = [
@@ -61,6 +71,7 @@ export const BINDING_GROUPS: readonly BindingGroup[] = [
   "search",
   "document",
   "control",
+  "panes",
 ];
 
 /** The human heading each group carries in the keys panel. */
@@ -72,6 +83,9 @@ export const GROUP_LABELS: Readonly<Record<BindingGroup, string>> = {
   search: "Search",
   document: "Document",
   control: "Control",
+  // The whole window-switching flow reads together, rather than a second
+  // "Next line" sitting beside the first in Movement.
+  panes: "Panes",
 };
 
 /** One action and the chords that reach it. */
@@ -741,12 +755,13 @@ export const BINDINGS: readonly Binding[] = [
     // the Control key is already down from the `C-x`: an author cycling
     // between panes need not lift it to reach the second step. The row exists
     // so both chords are spoken for and the uniqueness check holds; the
-    // sidebar-navigation spec wires the pane cycle behind them.
+    // sidebar-navigation spec wires the pane cycle behind them, which is why
+    // the row is answered by the application rather than reserved by it.
     id: "other-window",
     label: "Move to the other pane",
     chords: ["C-x o", "C-x C-o"],
     group: "document",
-    owner: "app",
+    owner: "editor",
   },
   {
     id: "open-settings",
@@ -754,6 +769,59 @@ export const BINDINGS: readonly Binding[] = [
     chords: ["C-c C-,"],
     group: "document",
     owner: "app",
+  },
+  {
+    id: "export-open",
+    label: "Export to a folder",
+    chords: ["C-c C-e"],
+    group: "document",
+    owner: "app",
+  },
+
+  // The sidebar's own rows. Every chord here is carried by an editor row as
+  // well; which one answers is decided by the pane that holds the keyboard,
+  // never by the chord. See `scopeOf`.
+  {
+    id: "sidebar-next-node",
+    label: "Next node",
+    chords: ["C-n", "Down"],
+    group: "panes",
+    owner: "sidebar",
+  },
+  {
+    id: "sidebar-previous-node",
+    label: "Previous node",
+    chords: ["C-p", "Up"],
+    group: "panes",
+    owner: "sidebar",
+  },
+  {
+    id: "sidebar-expand-node",
+    label: "Expand the node",
+    chords: ["C-f", "Right"],
+    group: "panes",
+    owner: "sidebar",
+  },
+  {
+    id: "sidebar-collapse-node",
+    label: "Collapse the node",
+    chords: ["C-b", "Left"],
+    group: "panes",
+    owner: "sidebar",
+  },
+  {
+    id: "sidebar-open-node",
+    label: "Open the chapter here",
+    chords: ["Return"],
+    group: "panes",
+    owner: "sidebar",
+  },
+  {
+    id: "sidebar-quit",
+    label: "Back to the editor",
+    chords: ["C-g", "Escape"],
+    group: "panes",
+    owner: "sidebar",
   },
 ];
 
@@ -1103,6 +1171,41 @@ export function withoutSuppressed<T extends KeymapSpec>(
     }
     return true;
   });
+}
+
+/**
+ * Which pane answers a row.
+ *
+ * Focus is single and exclusive, so the table has two scopes rather than one
+ * flat list: the editing surface answers a chord while the cursor is in the
+ * text, and the sidebar answers one while the tree holds the keyboard. The
+ * invariant that no two rows share a chord is stated inside a scope, which is
+ * what lets `C-n` be next line and next node without either being ambiguous.
+ *
+ * `other-window` is an editor row that every pane answers, because it is the
+ * chord that leaves a pane; it is the one row whose scope is not the whole
+ * story, and it collides with nothing in either.
+ */
+export type BindingScope = "editor" | "sidebar";
+
+/** The scope a row answers in. */
+export function scopeOf(binding: Binding): BindingScope {
+  return binding.owner === "sidebar" ? "sidebar" : "editor";
+}
+
+/** Every chord of one scope, canonicalised, with the rows that claim it. */
+export function chordIndexIn(scope: BindingScope): Map<string, Binding[]> {
+  const index = new Map<string, Binding[]>();
+  for (const binding of BINDINGS) {
+    if (scopeOf(binding) !== scope) continue;
+    for (const chord of binding.chords) {
+      const key = canonicalChord(chord);
+      const rows = index.get(key);
+      if (rows) rows.push(binding);
+      else index.set(key, [binding]);
+    }
+  }
+  return index;
 }
 
 /** Every chord in the table, canonicalised, with the rows that claim it. */

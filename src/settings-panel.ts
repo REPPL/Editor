@@ -11,6 +11,8 @@
  * Nothing here is ever written into a document folder.
  */
 
+import { focusFirstControl, type PanelFocus } from "./focus";
+
 /** The chord that opens the panel. */
 export const SETTINGS_OPEN_CHORD = "C-c C-,";
 
@@ -58,7 +60,7 @@ export interface SettingsPanel {
 
 /** What a panel needs from the application to be reachable. */
 export interface SettingsHost {
-  registerPanel(name: string, element: HTMLElement): void;
+  registerPanel(name: string, element: HTMLElement, focus?: PanelFocus): void;
   registerCommand(bindingId: string, run: () => void): void;
 }
 
@@ -328,7 +330,15 @@ export function createSettingsPanel(services: SettingsServices): SettingsPanel {
 
 /** Mount the panel into the application and give it its chord. */
 export function mountSettingsPanel(host: SettingsHost, panel: SettingsPanel): void {
-  host.registerPanel("settings", panel.element);
+  // The focus contract puts the panel in the pane cycle; see `src/focus.ts`.
+  host.registerPanel("settings", panel.element, {
+    label: "Settings",
+    element: panel.element,
+    isOpen: () => panel.isOpen,
+    focus: () => {
+      focusFirstControl(panel.element);
+    },
+  });
   host.registerCommand(SETTINGS_OPEN_ACTION, () => {
     void panel.open();
   });

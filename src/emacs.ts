@@ -75,6 +75,11 @@ export const APP_COMMAND_IDS: readonly string[] = [
   // Owned by the publish bundle, and by the shell's settings store.
   "publish-open",
   "open-settings",
+  // Owned by the export panel; the chord is the table's row.
+  "export-open",
+  // The pane cycle. This is the route from the text; a pane the editing
+  // surface cannot hear reads the same row through `src/focus.ts`.
+  "other-window",
 ];
 
 const handlerByView = new WeakMap<EditorView, EmacsHandler>();

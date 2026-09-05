@@ -10,6 +10,8 @@
  * unlisted means is stated at every publish and cannot be turned off.
  */
 
+import { focusFirstControl, type PanelFocus } from "./focus";
+
 /** The chord that opens the panel. */
 export const PUBLISH_OPEN_CHORD = "C-c C-l";
 
@@ -531,13 +533,22 @@ export function createPublishPanel(
  * binding table's `publish-open` row like every other chord.
  */
 export interface PanelHost {
-  registerPanel(name: string, element: HTMLElement): void;
+  registerPanel(name: string, element: HTMLElement, focus?: PanelFocus): void;
   registerCommand(bindingId: string, run: () => void): void;
 }
 
 /** Mount the panel into the application and give it its chord. */
 export function mountPublishPanel(host: PanelHost, panel: PublishPanel): void {
-  host.registerPanel("publish", panel.element);
+  // The focus contract is what puts the panel in the pane cycle: `C-x o`
+  // reaches it while it is open, and the modeline names it.
+  host.registerPanel("publish", panel.element, {
+    label: "Publish",
+    element: panel.element,
+    isOpen: () => panel.isOpen,
+    focus: () => {
+      focusFirstControl(panel.element);
+    },
+  });
   host.registerCommand(PUBLISH_OPEN_ACTION, () => {
     void panel.open();
   });

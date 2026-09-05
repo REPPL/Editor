@@ -185,6 +185,34 @@ body {
 }
 
 /*
+ * The keyboard cursor.
+ *
+ * A ring rather than a fill, because the fill already means "this is the open
+ * chapter": where Alice is looking and what is open are two facts, and the
+ * row under the cursor is often neither the first nor the second.
+ */
+.tree-row[data-cursor="yes"] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.sidebar[data-focused="yes"] .tree-row[data-cursor="yes"] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* The pane holding the keyboard is marked where it is, as well as named in
+   the modeline: a glance at the window answers it without reading. */
+.sidebar[data-focused="yes"] {
+  border-right-color: var(--accent);
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+.sidebar:focus {
+  outline: none;
+}
+
+/*
  * The drawer.
  *
  * At 820 CSS pixels and below the sidebar is a drawer over the surface rather
@@ -395,6 +423,14 @@ body {
   color: var(--ink);
   background: var(--shell);
   border-top: 1px solid var(--rule);
+}
+
+/* The pane holding the keyboard, named first in the line, so the answer to
+   "where am I typing" is in the place the author already looks. */
+.modeline-pane {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: var(--accent);
 }
 
 .modeline-chapter {
@@ -652,6 +688,78 @@ body {
 
 @media (prefers-color-scheme: dark) {
   .settings-status[data-state="failed"] {
+    color: #e8836f;
+  }
+}
+
+/* The export panel's rows. No width of its own: it is a `.panel`, which is
+   fluid, and every name in a row wraps rather than pushing the panel sideways.
+   A file name can be long and a folder name can be longer. */
+
+.export-rows,
+.export-writes,
+.export-refusals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.export-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-row {
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.export-row[data-current="yes"] {
+  border-color: var(--ink);
+}
+
+.export-row[data-available="no"] {
+  color: var(--muted);
+}
+
+.export-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.export-document,
+.export-destination,
+.export-unavailable,
+.export-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.export-writes {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.export-writes li {
+  overflow-wrap: anywhere;
+}
+
+.export-refusal {
+  font-size: 12px;
+  color: #a8321f;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-color-scheme: dark) {
+  .export-refusal {
     color: #e8836f;
   }
 }
