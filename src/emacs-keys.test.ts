@@ -1,0 +1,790 @@
+/**
+ * The automated half of the key spike.
+ *
+ * A unit test cannot press a key on a Mac, so it cannot prove that macOS lets
+ * a chord through. What it can prove is everything below that line: that each
+ * chord in the binding table, once it reaches the page as a keydown event,
+ * runs the command it names, and that the editing surface claims the event
+ * rather than letting the browser act on it.
+ *
+ * The manual half is written down in `docs/spike-emacs-keys.md`.
+ */
+
+import { EditorSelection } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { createApp, type App, type AppServices } from "./app";
+import type { Chapter, DocumentTree } from "./doctree";
+import {
+  createEditor,
+  cursorPosition,
+  documentText,
+  lineSeparatorOf,
+} from "./editor";
+import { emacsStatus } from "./emacs";
+import {
+  BINDINGS,
+  bindingById,
+  canonicalChord,
+  chordFromEvent,
+} from "./keys";
+import { installKeyLog } from "./keyspike";
+
+/** A document with enough shape for movement chords to be visible. */
+const SAMPLE = [
+  "# Alice and Bob",
+  "",
+  "Carol reads the second line.",
+  "",
+  "The fourth paragraph ends here.",
+].join("\n");
+
+/** The pieces of a keydown event a chord needs. */
+interface Chord {
+  key: string;
+  code: string;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+}
+
+/**
+ * Turn a chord string from the binding table into a keydown event.
+ *
+ * The Emacs handler identifies keys by `KeyboardEvent.code`, so the physical
+ * key is what matters, not the character the platform would produce. That is
+ * exactly why Option-f can be `M-f` and not `ƒ`.
+ */
+function chordToEvent(chord: string): Chord {
+  const parts = chord.split("-");
+  const name = parts.pop() ?? "";
+  const modifiers = new Set(parts);
+  const event: Chord = { key: name, code: name };
+
+  if (/^[a-z]$/.test(name)) {
+    event.code = `Key${name.toUpperCase()}`;
+    event.key = name;
+  } else if (name === "Space") {
+    event.code = "Space";
+    event.key = " ";
+  } else if (name === "/") {
+    event.code = "Slash";
+    // A browser reports the character the key would produce, so Shift turns
+    // `/` into `?`. The chord builder has to look past that.
+    event.key = modifiers.has("S") ? "?" : "/";
+  } else if (name === "Return") {
+    event.code = "Enter";
+    event.key = "Enter";
+  } else if (["Left", "Right", "Up", "Down"].includes(name)) {
+    event.code = `Arrow${name}`;
+    event.key = `Arrow${name}`;
+  } else if (name === "Home" || name === "End") {
+    event.code = name;
+    event.key = name;
+  }
+
+  if (modifiers.has("C")) event.ctrlKey = true;
+  if (modifiers.has("M")) event.altKey = true;
+  if (modifiers.has("s")) event.metaKey = true;
+  if (modifiers.has("S")) event.shiftKey = true;
+  return event;
+}
+
+/** Dispatch one chord at the editing surface and say whether it was claimed. */
+function press(view: EditorView, chord: string): boolean {
+  const event = new KeyboardEvent("keydown", {
+    ...chordToEvent(chord),
+    bubbles: true,
+    cancelable: true,
+  });
+  view.contentDOM.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+/** Dispatch every step of a possibly multi-step chord. */
+function pressSequence(view: EditorView, chord: string): boolean {
+  let handled = false;
+  for (const step of chord.split(" ")) {
+    handled = press(view, step);
+  }
+  return handled;
+}
+
+/** Put the cursor at an absolute offset. */
+function place(view: EditorView, at: number): void {
+  view.dispatch({ selection: EditorSelection.cursor(at) });
+}
+
+describe("the binding table", () => {
+  it("gives every action an id, a label, and at least one chord", () => {
+    for (const binding of BINDINGS) {
+      expect(binding.id, JSON.stringify(binding)).toMatch(/^[a-z][a-z-]*$/);
+      expect(binding.label.length).toBeGreaterThan(0);
+      expect(binding.chords.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("has no duplicate ids", () => {
+    const ids = BINDINGS.map((binding) => binding.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("builds chord strings from events in the table's own notation", () => {
+    const control = new KeyboardEvent("keydown", {
+      key: "a",
+      code: "KeyA",
+      ctrlKey: true,
+    });
+    expect(chordFromEvent(control)).toBe("C-a");
+
+    const meta = new KeyboardEvent("keydown", {
+      key: "ƒ",
+      code: "KeyF",
+      altKey: true,
+    });
+    expect(chordFromEvent(meta)).toBe("M-f");
+
+    const command = new KeyboardEvent("keydown", {
+      key: "o",
+      code: "KeyO",
+      metaKey: true,
+    });
+    expect(chordFromEvent(command)).toBe("s-o");
+  });
+
+  it("reads punctuation from the physical key, not the shifted character", () => {
+    const redo = new KeyboardEvent("keydown", {
+      // What a browser actually reports for Shift-Control on the slash key.
+      key: "?",
+      code: "Slash",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(chordFromEvent(redo)).toBe(canonicalChord("S-C-/"));
+    expect(chordFromEvent(redo)).not.toContain("?");
+  });
+
+  it("writes modifiers in one order, whichever order they were written in", () => {
+    expect(canonicalChord("S-C-/")).toBe(canonicalChord("C-S-/"));
+    expect(canonicalChord("M-C-s")).toBe(canonicalChord("C-M-s"));
+    expect(canonicalChord("C-x C-s")).toBe("C-x C-s");
+    expect(canonicalChord("C-Space")).toBe("C-Space");
+    expect(canonicalChord("s-o")).toBe("s-o");
+    expect(canonicalChord("Right")).toBe("Right");
+  });
+
+  it("matches every chord in the table against the event it would arrive as", () => {
+    const strangers: string[] = [];
+    for (const binding of BINDINGS) {
+      for (const chord of binding.chords) {
+        for (const step of chord.split(" ")) {
+          if (!/[CMSs]-/.test(step)) continue;
+          const event = new KeyboardEvent("keydown", chordToEvent(step));
+          if (chordFromEvent(event) !== canonicalChord(step)) {
+            strangers.push(`${step} arrives as ${chordFromEvent(event)}`);
+          }
+        }
+      }
+    }
+    expect(strangers).toEqual([]);
+  });
+});
+
+describe("the Emacs keymap inside CodeMirror", () => {
+  let host: HTMLElement;
+  let view: EditorView;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    view = createEditor(host, SAMPLE);
+  });
+
+  afterEach(() => {
+    view.destroy();
+    host.remove();
+  });
+
+  it("moves forward and backward by character", () => {
+    place(view, 0);
+    expect(press(view, "C-f")).toBe(true);
+    expect(view.state.selection.main.head).toBe(1);
+    expect(press(view, "C-b")).toBe(true);
+    expect(view.state.selection.main.head).toBe(0);
+  });
+
+  it("moves by line", () => {
+    place(view, 0);
+    expect(press(view, "C-n")).toBe(true);
+    expect(cursorPosition(view).line).toBe(2);
+    expect(press(view, "C-p")).toBe(true);
+    expect(cursorPosition(view).line).toBe(1);
+  });
+
+  it("moves by word with Meta", () => {
+    place(view, 0);
+    expect(press(view, "M-f")).toBe(true);
+    const afterForward = view.state.selection.main.head;
+    expect(afterForward).toBeGreaterThan(0);
+    expect(press(view, "M-b")).toBe(true);
+    expect(view.state.selection.main.head).toBeLessThan(afterForward);
+  });
+
+  it("moves to the beginning and the end of a line", () => {
+    place(view, 3);
+    expect(press(view, "C-e")).toBe(true);
+    expect(cursorPosition(view).column).toBe(16);
+    expect(press(view, "C-a")).toBe(true);
+    expect(cursorPosition(view).column).toBe(1);
+  });
+
+  it("kills to the end of the line", () => {
+    place(view, 0);
+    expect(press(view, "C-k")).toBe(true);
+    expect(view.state.doc.line(1).text).toBe("");
+    expect(view.state.doc.toString()).toContain("Carol reads");
+  });
+
+  it("kills a word forward", () => {
+    place(view, 2);
+    expect(press(view, "M-d")).toBe(true);
+    expect(view.state.doc.line(1).text).not.toContain("Alice");
+  });
+
+  it("deletes a character forward", () => {
+    place(view, 0);
+    expect(press(view, "C-d")).toBe(true);
+    expect(view.state.doc.line(1).text).toBe(" Alice and Bob");
+  });
+
+  it("transposes characters", () => {
+    place(view, 2);
+    expect(press(view, "C-t")).toBe(true);
+    // `# Alice…` with the point after the space: the two characters either
+    // side of the point swap, so the space and the `A` change places.
+    expect(view.state.doc.line(1).text).toBe("#A lice and Bob");
+  });
+
+  it("sets the mark, and the modeline can see it", () => {
+    place(view, 0);
+    expect(emacsStatus(view).markActive).toBe(false);
+    expect(press(view, "C-Space")).toBe(true);
+    expect(emacsStatus(view).markActive).toBe(true);
+  });
+
+  it("kills the region between the mark and the point", () => {
+    place(view, 0);
+    press(view, "C-Space");
+    press(view, "C-e");
+    expect(press(view, "C-w")).toBe(true);
+    expect(view.state.doc.line(1).text).toBe("");
+  });
+
+  it("yanks what was killed back", () => {
+    place(view, 0);
+    press(view, "C-Space");
+    press(view, "C-e");
+    press(view, "C-w");
+    expect(press(view, "C-y")).toBe(true);
+    expect(view.state.doc.line(1).text).toBe("# Alice and Bob");
+  });
+
+  it("copies the region without changing the document", () => {
+    place(view, 0);
+    press(view, "C-Space");
+    press(view, "C-e");
+    expect(press(view, "M-w")).toBe(true);
+    expect(view.state.doc.toString()).toBe(SAMPLE);
+  });
+
+  it("opens the search panel on C-s and on C-r", () => {
+    expect(host.querySelector(".cm-search")).toBeNull();
+    expect(press(view, "C-s")).toBe(true);
+    expect(host.querySelector(".cm-search")).not.toBeNull();
+    press(view, "C-g");
+  });
+
+  it("opens the search panel on C-r as well", () => {
+    expect(host.querySelector(".cm-search")).toBeNull();
+    expect(press(view, "C-r")).toBe(true);
+    expect(host.querySelector(".cm-search")).not.toBeNull();
+  });
+
+  it("undoes and redoes an edit", () => {
+    place(view, 0);
+    press(view, "C-k");
+    expect(view.state.doc.line(1).text).toBe("");
+    expect(press(view, "C-/")).toBe(true);
+    expect(view.state.doc.line(1).text).toBe("# Alice and Bob");
+    expect(press(view, "S-C-/")).toBe(true);
+    expect(view.state.doc.line(1).text).toBe("");
+  });
+
+  it("selects the whole document with the C-x h prefix chord", () => {
+    expect(pressSequence(view, "C-x h")).toBe(true);
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(view.state.doc.length);
+  });
+
+  it("shows a prefix in progress and cancels it with C-g", () => {
+    expect(press(view, "C-x")).toBe(true);
+    expect(emacsStatus(view).prefix).toBe("C-x");
+    expect(press(view, "C-g")).toBe(true);
+    expect(emacsStatus(view).prefix).toBe("");
+  });
+
+  it("upper-cases and lower-cases a word", () => {
+    place(view, 2);
+    expect(press(view, "M-u")).toBe(true);
+    expect(view.state.doc.line(1).text).toContain("ALICE");
+    place(view, 2);
+    expect(press(view, "M-l")).toBe(true);
+    expect(view.state.doc.line(1).text).toContain("alice");
+  });
+
+  it("claims every step of every modified chord the page owns", () => {
+    const unclaimed: string[] = [];
+    const swept: string[] = [];
+    for (const binding of BINDINGS) {
+      // `C-u` starts a numeric argument, so it changes how the next chord is
+      // read. It is checked on its own below rather than in the sweep.
+      if (binding.id === "universal-argument") continue;
+      // A `shell` chord is a menu accelerator: macOS resolves it before the
+      // web view is consulted, so the page never sees the keydown and has
+      // nothing to claim.
+      if (binding.owner === "shell") continue;
+      for (const chord of binding.chords) {
+        // Plain arrow and navigation keys belong to the browser, and the
+        // spike is about the modified chords.
+        if (!/(^|\s)[CMSs]-/.test(chord)) continue;
+        swept.push(chord);
+        // Every step, not just the last: a prefix that failed to open would
+        // otherwise be hidden by the completing chord being claimed anyway.
+        for (const step of chord.split(" ")) {
+          if (!press(view, step)) unclaimed.push(`${binding.id}: ${chord} at ${step}`);
+        }
+        press(view, "C-g");
+      }
+    }
+    expect(unclaimed).toEqual([]);
+    // The sweep is only worth anything if it actually swept: this is the
+    // count the documentation quotes.
+    expect(swept).toContain("C-x C-s");
+    expect(swept).toContain("S-C-/");
+    expect(swept).not.toContain("s-o");
+    expect(swept.length).toBe(43);
+  });
+
+  it("claims the numeric-argument chord", () => {
+    expect(press(view, "C-u")).toBe(true);
+    press(view, "C-g");
+  });
+
+  it("says so when a document chord finds no application mounted", () => {
+    // The chord is still claimed — that is what stops the browser acting on
+    // it — but a claim with nothing behind it must not be silent.
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]): void => {
+      warnings.push(args.join(" "));
+    };
+    try {
+      expect(pressSequence(view, "C-x C-s")).toBe(true);
+    } finally {
+      console.warn = warn;
+    }
+    expect(warnings).toEqual(["saveChapter: no application is mounted"]);
+  });
+
+  it("continues a Markdown list on Return", () => {
+    // The Emacs keymap binds `Return` to a plain newline and outranks
+    // everything, so without the exception in `editor.ts` this inserts a bare
+    // line and the list stops.
+    const list = createEditor(host, "- one");
+    place(list, 5);
+    press(list, "Return");
+    expect(documentText(list)).toBe("- one\n- ");
+    list.destroy();
+  });
+
+  it("still inserts a plain newline outside a list", () => {
+    const plain = createEditor(host, "Alice");
+    place(plain, 5);
+    press(plain, "Return");
+    expect(documentText(plain)).toBe("Alice\n");
+    plain.destroy();
+  });
+});
+
+describe("line endings", () => {
+  it("reads a document's separator off its first line break", () => {
+    expect(lineSeparatorOf("a\r\nb")).toBe("\r\n");
+    expect(lineSeparatorOf("a\nb")).toBe("\n");
+    expect(lineSeparatorOf("a")).toBe("\n");
+  });
+
+  it("hands a CRLF document back byte for byte", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const crlf = "# Alice\r\n\r\nA line.\r\n";
+    const view = createEditor(host, crlf);
+    // The buffer reads as four lines, and writing it out restores the bytes.
+    expect(view.state.doc.lines).toBe(4);
+    expect(documentText(view)).toBe(crlf);
+
+    place(view, view.state.doc.length);
+    press(view, "Return");
+    expect(documentText(view)).toBe(`${crlf}\r\n`);
+    view.destroy();
+    host.remove();
+  });
+});
+
+/** A chapter entry for a stub tree. */
+function chapter(name: string, title: string, path: string): Chapter {
+  return { name, title, path, order: 1 };
+}
+
+/** A one-Part document tree, as the shell would serialize it. */
+function documentTree(
+  title: string,
+  chapters: readonly Chapter[],
+  failures: readonly string[] = [],
+): DocumentTree {
+  return {
+    root: {
+      name: title,
+      title,
+      path: title,
+      order: null,
+      parts: [],
+      chapters: [...chapters],
+      truncated: false,
+    },
+    failures: [...failures],
+  };
+}
+
+describe("Editor's own chords", () => {
+  let host: HTMLElement;
+  let app: App;
+  let written: { path: string; text: string } | null;
+  let chooseCalls: number;
+  let discardAnswer: boolean;
+  let discardCalls: number;
+  let dirtyReports: boolean[];
+  let chapterText: Map<string, string>;
+  /** When set, reads park here until the test releases them, in any order. */
+  let heldReads: Map<string, () => void> | null;
+
+  const tree: DocumentTree = documentTree("document", [
+    chapter("01-alice.md", "alice", "document/01-alice.md"),
+    chapter("02-bob.md", "bob", "document/02-bob.md"),
+  ]);
+
+  const services: AppServices = {
+    chooseFolder: () => {
+      chooseCalls += 1;
+      return Promise.resolve("document");
+    },
+    openFolder: (path) =>
+      Promise.resolve(path === "document" ? tree : documentTree(path, [])),
+    readChapter: (path) => {
+      const text = chapterText.get(path) ?? SAMPLE;
+      if (!heldReads) return Promise.resolve(text);
+      const held = heldReads;
+      return new Promise<string>((resolve) => {
+        held.set(path, () => {
+          resolve(text);
+        });
+      });
+    },
+    writeChapter: (path, text) => {
+      written = { path, text };
+      return Promise.resolve();
+    },
+    confirmDiscard: () => {
+      discardCalls += 1;
+      return Promise.resolve(discardAnswer);
+    },
+    reportDirty: (dirty) => {
+      dirtyReports.push(dirty);
+    },
+  };
+
+  beforeEach(() => {
+    written = null;
+    chooseCalls = 0;
+    discardAnswer = true;
+    discardCalls = 0;
+    dirtyReports = [];
+    chapterText = new Map();
+    heldReads = null;
+    host = document.createElement("div");
+    document.body.append(host);
+    app = createApp(host, services);
+  });
+
+  afterEach(() => {
+    app.destroy();
+    host.remove();
+  });
+
+  it("lists parts and chapters in the sidebar and opens one on click", async () => {
+    await app.openFolder("document");
+    const button = host.querySelector<HTMLButtonElement>(".tree-button");
+    expect(button?.textContent).toBe("alice");
+    button?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(app.view.state.doc.toString()).toBe(SAMPLE);
+  });
+
+  it("saves the open chapter on C-x C-s", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    place(app.view, 0);
+    expect(pressSequence(app.view, "C-x C-s")).toBe(true);
+    await Promise.resolve();
+    expect(written).toEqual({ path: "document/01-alice.md", text: SAMPLE });
+  });
+
+  it("asks for a folder on C-x C-f", async () => {
+    expect(pressSequence(app.view, "C-x C-f")).toBe(true);
+    await Promise.resolve();
+    expect(chooseCalls).toBe(1);
+  });
+
+  it("toggles the key log on C-x k", () => {
+    expect(app.keyLog.element.hidden).toBe(true);
+    expect(pressSequence(app.view, "C-x k")).toBe(true);
+    expect(app.keyLog.element.hidden).toBe(false);
+  });
+
+  it("shows the chapter, the position, and the mark in the modeline", async () => {
+    await app.openChapter(tree.root.chapters[0]!);
+    press(app.view, "C-n");
+    press(app.view, "C-Space");
+    const text = app.modeline.element.textContent ?? "";
+    expect(text).toContain("alice");
+    expect(text).toContain("L2:C1");
+    expect(text).toContain("Mark");
+  });
+
+  it("shows a half-typed prefix in the modeline, and clears it on C-g", () => {
+    const prefixCell = app.modeline.element.querySelector(".modeline-prefix");
+    expect(prefixCell?.textContent).toBe("");
+    press(app.view, "C-x");
+    expect(prefixCell?.textContent).toBe("C-x-");
+    expect(prefixCell?.getAttribute("data-active")).toBe("yes");
+    press(app.view, "C-g");
+    expect(prefixCell?.textContent).toBe("");
+    expect(prefixCell?.getAttribute("data-active")).toBe("no");
+  });
+
+  it("keeps a chapter's undo history to itself", async () => {
+    chapterText.set("document/02-bob.md", "# Bob\n");
+    await app.openChapter(tree.root.chapters[0]!);
+    place(app.view, 0);
+    press(app.view, "C-k");
+    expect(app.view.state.doc.line(1).text).toBe("");
+
+    discardAnswer = true;
+    await app.openChapter(tree.root.chapters[1]!);
+    expect(documentText(app.view)).toBe("# Bob\n");
+
+    // Undo in Bob must not reach back into Alice: were the history shared,
+    // this would resurrect Alice's text and the next save would write it
+    // into Bob's file.
+    press(app.view, "C-/");
+    expect(documentText(app.view)).toBe("# Bob\n");
+
+    pressSequence(app.view, "C-x C-s");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(written).toEqual({ path: "document/02-bob.md", text: "# Bob\n" });
+  });
+
+  it("opens a CRLF chapter clean and saves it with its own endings", async () => {
+    const crlf = "# Alice\r\n\r\nA line.\r\n";
+    chapterText.set("document/01-alice.md", crlf);
+    await app.openChapter(tree.root.chapters[0]!);
+
+    expect(app.dirty).toBe(false);
+    expect(app.modeline.element.textContent).toContain("-- alice");
+    expect(documentText(app.view)).toBe(crlf);
+
+    pressSequence(app.view, "C-x C-s");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(written).toEqual({ path: "document/01-alice.md", text: crlf });
+  });
+
+  it("forgets the open chapter when another document is opened", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    expect(app.modeline.element.textContent).toContain("alice");
+
+    await app.openFolder("elsewhere");
+    // The old chapter is gone from the sidebar, so a save must not still be
+    // aimed at its file.
+    expect(app.modeline.element.textContent).toContain("no chapter");
+    pressSequence(app.view, "C-x C-s");
+    await Promise.resolve();
+    expect(written).toBeNull();
+    expect(app.modeline.element.textContent).toContain("No chapter to save");
+  });
+
+  it("drops a chapter read that a later one has overtaken", async () => {
+    chapterText.set("document/01-alice.md", "# Alice\n");
+    chapterText.set("document/02-bob.md", "# Bob\n");
+    heldReads = new Map();
+
+    const first = app.openChapter(tree.root.chapters[0]!);
+    const second = app.openChapter(tree.root.chapters[1]!);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Bob was clicked second but comes back first; Alice must not overwrite
+    // it when she finally arrives.
+    heldReads.get("document/02-bob.md")?.();
+    await second;
+    heldReads.get("document/01-alice.md")?.();
+    await first;
+
+    expect(documentText(app.view)).toBe("# Bob\n");
+    expect(app.modeline.element.textContent).toContain("bob");
+
+    heldReads = null;
+    pressSequence(app.view, "C-x C-s");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(written).toEqual({ path: "document/02-bob.md", text: "# Bob\n" });
+  });
+
+  it("asks before unsaved edits are lost, and keeps them on a refusal", async () => {
+    await app.openChapter(tree.root.chapters[0]!);
+    place(app.view, 0);
+    press(app.view, "C-k");
+    expect(app.dirty).toBe(true);
+
+    discardAnswer = false;
+    await app.openChapter(tree.root.chapters[1]!);
+    expect(discardCalls).toBe(1);
+    expect(app.modeline.element.textContent).toContain("Kept the open chapter");
+    expect(app.view.state.doc.line(1).text).toBe("");
+
+    await app.openFolder("elsewhere");
+    expect(discardCalls).toBe(2);
+    expect(app.view.state.doc.line(1).text).toBe("");
+  });
+
+  it("holds a close back while the chapter is dirty, and tells the shell", async () => {
+    await app.openChapter(tree.root.chapters[0]!);
+    expect(await app.confirmClose()).toBe(true);
+
+    place(app.view, 0);
+    press(app.view, "C-k");
+    expect(dirtyReports.at(-1)).toBe(true);
+
+    discardAnswer = false;
+    expect(await app.confirmClose()).toBe(false);
+    discardAnswer = true;
+    expect(await app.confirmClose()).toBe(true);
+  });
+
+  it("reports the entries a walk could not read", async () => {
+    const partial = documentTree("partial", [], ["cannot inspect 02-closed"]);
+    const failing: AppServices = {
+      ...services,
+      openFolder: () => Promise.resolve(partial),
+    };
+    const otherHost = document.createElement("div");
+    document.body.append(otherHost);
+    const other = createApp(otherHost, failing);
+    await other.openFolder("partial");
+    expect(other.modeline.element.textContent).toContain("1 entries unreadable");
+    other.destroy();
+    otherHost.remove();
+  });
+});
+
+describe("the key log", () => {
+  let host: HTMLElement;
+  let view: EditorView;
+  let log: ReturnType<typeof installKeyLog>;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    // The log listens on the window in the capture phase, and the chords it
+    // is meant to report are the ones the editing surface handles. Anything
+    // narrower — a bare EventTarget, a hand-called `preventDefault` — proves
+    // only that the recorder can be fed, not that the real path works.
+    log = installKeyLog(window);
+    view = createEditor(host, SAMPLE);
+  });
+
+  afterEach(() => {
+    log.dispose();
+    view.destroy();
+    host.remove();
+  });
+
+  it("records the chords that reach the page, and the verdict on each", async () => {
+    press(view, "C-a");
+    press(view, "q");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+
+    const seen = log.observations.map((observation) => observation.chord);
+    expect(seen).toEqual(["C-a", "q"]);
+    expect(log.observations[0]).toMatchObject({
+      chord: "C-a",
+      known: true,
+      handled: true,
+      target: "div",
+    });
+    expect(log.observations[1]).toMatchObject({
+      chord: "q",
+      known: false,
+      handled: false,
+    });
+  });
+
+  it("reports a redo pressed as Shift-Control-slash as a chord it knows", async () => {
+    // The row the modifier-order bug used to lie about: the browser hands over
+    // `?` rather than `/`, and the table writes the modifiers the other way
+    // round, so the log said "not in table" for a chord that works.
+    press(view, "S-C-/");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+
+    expect(log.observations).toHaveLength(1);
+    expect(log.observations[0]).toMatchObject({
+      chord: canonicalChord("S-C-/"),
+      known: true,
+      handled: true,
+    });
+  });
+
+  it("stops listening once it is disposed", async () => {
+    log.dispose();
+    press(view, "C-a");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    expect(log.observations).toHaveLength(0);
+  });
+});
+
+describe("the documented chords", () => {
+  it("names the save chord as C-x C-s", () => {
+    expect(bindingById("save-chapter")?.chords).toContain("C-x C-s");
+  });
+
+  it("names the open chord as C-x C-f, with Command-O owned by the shell", () => {
+    expect(bindingById("open-folder")?.chords).toEqual(["C-x C-f"]);
+    const menu = bindingById("open-folder-menu");
+    expect(menu?.chords).toEqual(["s-o"]);
+    expect(menu?.owner).toBe("shell");
+  });
+});
