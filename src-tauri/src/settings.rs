@@ -12,6 +12,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 
@@ -90,6 +91,28 @@ pub fn settings_path(config_dir: &Path) -> PathBuf {
     config_dir.join(SETTINGS_FILE)
 }
 
+/// One writer at a time, over the whole read-modify-write.
+///
+/// Every setter reads the file, changes one field of it and writes it back
+/// whole, and every one of them runs on the blocking pool: two commands in
+/// flight together read the same file, and the second write puts back what the
+/// first had just changed. The type scale is the one an author can send several
+/// of in a second — a chord held down — and the asset root is the one that
+/// quietly disappears when it loses. The file is small and a write is rare, so
+/// the whole sequence is taken under one lock rather than merged afterwards.
+///
+/// One process, one file: this serialises this application against itself, not
+/// against another program editing `settings.json` by hand.
+static WRITING: Mutex<()> = Mutex::new(());
+
+/// The write lock, taking a poisoned one for what it is: an unlocked one.
+///
+/// A panic inside a setter leaves the file whole — it is written through a
+/// temporary — so a poisoned lock is no reason to refuse every later write.
+fn writing() -> MutexGuard<'static, ()> {
+    WRITING.lock().unwrap_or_else(|held| held.into_inner())
+}
+
 /// Read the settings.
 ///
 /// A missing file is not a failure: a machine that has never published has
@@ -155,6 +178,7 @@ pub fn set_publish_target_at(
     check_argument("branch", branch)?;
     check_base_url(base_url)?;
 
+    let _writing = writing();
     let mut settings = read_settings(path)?;
     settings.publish = PublishTarget {
         repository: resolved.to_string_lossy().into_owned(),
@@ -173,6 +197,7 @@ pub fn set_asset_root_at(path: &Path, name: &str, root: &str) -> Result<Settings
     if name.is_empty() {
         return Err("an asset root needs a name".to_string());
     }
+    let _writing = writing();
     let mut settings = read_settings(path)?;
     if root.trim().is_empty() {
         settings.asset_roots.remove(name);
@@ -196,6 +221,7 @@ pub fn set_asset_root_at(path: &Path, name: &str, root: &str) -> Result<Settings
 /// second opinion that returned an error would leave the surface and the file
 /// disagreeing about a number neither of them can show the author.
 pub fn set_text_scale_at(path: &Path, steps: i32) -> Result<Settings, String> {
+    let _writing = writing();
     let mut settings = read_settings(path)?;
     settings.text_scale = clamp_text_scale(steps);
     write_settings(path, &settings)?;
@@ -428,6 +454,71 @@ mod tests {
         let scaled = set_text_scale_at(&path, 3).expect("stored");
         assert_eq!(scaled.publish, published.publish);
         assert_eq!(scaled.text_scale, 3);
+    }
+
+    #[test]
+    fn two_writers_at_once_both_survive() {
+        // The page can send a type-scale write per keypress while a settings
+        // panel is storing an asset root. Both are a read of the whole file,
+        // one changed field, and a write of the whole file back, and both run
+        // on the blocking pool: unserialised, the loser's field is read before
+        // the winner's write and put back afterwards, and disappears.
+        use std::thread;
+
+        let dir = temp();
+        let root = temp();
+        let path = settings_path(dir.path());
+        let named = root.path().to_str().expect("utf-8").to_string();
+        let resolved = fs::canonicalize(root.path()).expect("the root resolves");
+
+        let scaling = {
+            let path = path.clone();
+            thread::spawn(move || {
+                for _ in 0..40 {
+                    set_text_scale_at(&path, 4).expect("the scale is stored");
+                }
+            })
+        };
+        let rooting = thread::spawn(move || {
+            for _ in 0..40 {
+                set_asset_root_at(&path, "photos", &named).expect("the root is stored");
+            }
+        });
+        scaling.join().expect("the scale writer");
+        rooting.join().expect("the asset-root writer");
+
+        let settings = read_settings(&settings_path(dir.path())).expect("read back");
+        assert_eq!(settings.text_scale, 4);
+        assert_eq!(
+            settings.asset_roots.get("photos").map(String::as_str),
+            Some(resolved.to_string_lossy().as_ref()),
+            "one writer put back the file the other had just changed"
+        );
+
+        // And they survive because they are serialised, not because the timing
+        // happened to be kind: with the write lock held, a setter waits for it
+        // rather than reading the file underneath the writer holding it.
+        let (told, waiting) = std::sync::mpsc::channel();
+        let writing_now = writing();
+        let scale_path = settings_path(dir.path());
+        let queued = thread::spawn(move || {
+            let stored = set_text_scale_at(&scale_path, 1).expect("the scale is stored");
+            told.send(stored.text_scale).expect("the test is listening");
+        });
+        assert!(
+            waiting
+                .recv_timeout(std::time::Duration::from_millis(150))
+                .is_err(),
+            "a setter read and wrote the settings while another writer held them"
+        );
+        drop(writing_now);
+        assert_eq!(waiting.recv().expect("the queued write lands"), 1);
+        queued.join().expect("the queued writer");
+
+        // The asset root the first phase stored is still there afterwards.
+        let after = read_settings(&settings_path(dir.path())).expect("read back");
+        assert_eq!(after.text_scale, 1);
+        assert!(after.asset_roots.contains_key("photos"));
     }
 
     #[test]

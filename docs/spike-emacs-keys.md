@@ -335,19 +335,12 @@ until one is set.
 |---|---|
 | `EDITOR_OPEN_FOLDER` | A document folder the window opens on start, along with its first chapter, so a run begins with text in the buffer and no dialog in the way |
 | `EDITOR_KEY_LOG` | A file every key-log observation is appended to, one JSON object per line |
-| `EDITOR_PRESENT_ON_OPEN` | Presses Present on that first chapter as soon as it is open, because a script cannot press `C-c C-p`. Set it to anything but an empty value or `0`; it needs `EDITOR_OPEN_FOLDER`, since there is otherwise no chapter to present |
+| `EDITOR_PRESENT_ON_OPEN` | Presses Present on that first chapter as soon as it is open, because a script cannot press `C-c C-p`. Write `1`, `true`, `yes` or `on` to turn it on and `0`, `false`, `no` or `off` to turn it off; any other word is refused with a warning. It needs `EDITOR_OPEN_FOLDER`, since there is otherwise no chapter to present |
 
 `EDITOR_PRESENT_ON_OPEN` is what makes `EDITOR_PRESENT_LOG` (see
 `src-tauri/src/present.rs`) usable from a script at all: without it a run that
-asked for a present log gets an empty file, and an empty file cannot tell an
-engine that failed to start from a window that was never opened. That
-ambiguity is what `iss-2609061132369973` had to be settled through, and this
-is the line the release build wrote once it was:
-
-```json
-{"phase":"ready","slides":5,"indexh":0,"indexv":0,"engine":"initialize+sync+slide+ready","presentAt":0,
- "controls":{"navigate-left":true,"navigate-right":false,"navigate-up":true,"navigate-down":true}}
-```
+asks for a present log gets an empty file, and an empty file cannot tell an
+engine that fails to start from a window that was never opened.
 
 The shell reads all three once at start (`src-tauri/src/devharness.rs`) and the
 page asks it what they said (`src/devharness.ts`). The log path is the one

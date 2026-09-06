@@ -135,8 +135,20 @@ function trackHandlers(): void {
     handlerByView.set(this.view, this);
     const swallowed = swallowedChord(this, event);
     if (swallowed !== null) {
-      this.$data.keyChain = "";
-      EmacsHandler.execCommand(EmacsHandler.commands[swallowed], this, {}, 1);
+      // Resolved the way `findCommand` resolves a chord of its own: the chain
+      // closes *and* the numeric argument is spent. A count left behind is the
+      // count the *next* key is read with, so after `C-u 3 C-x C-0` the scale
+      // came back and the chord after it ran three times over.
+      const data = this.$data;
+      const argument = data.count ?? 0;
+      data.keyChain = "";
+      data.count = 0;
+      EmacsHandler.execCommand(
+        EmacsHandler.commands[swallowed],
+        this,
+        {},
+        argument === 0 ? 1 : argument,
+      );
       return { command: swallowed };
     }
     return inherited.call(this, event);
@@ -172,8 +184,12 @@ function swallowedChord(
   if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
     return null;
   }
-  if (!/^Digit[0-9]$/.test(event.code)) return null;
-  const name = ownChords.get(`${chain} C-${event.code}`);
+  const digit = /^(?:Digit|Numpad)([0-9])$/.exec(event.code);
+  if (digit === null) return null;
+  // The keypad reaches `findCommand` as a digit like any other — `getKey`
+  // strips the `Numpad` prefix — so the chord it swallows is the same chord,
+  // and it is answered here under the name the binding table spells.
+  const name = ownChords.get(`${chain} C-Digit${digit[1] ?? ""}`);
   if (name === undefined) return null;
   return EmacsHandler.commands[name] ? name : null;
 }

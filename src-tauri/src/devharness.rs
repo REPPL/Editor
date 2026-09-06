@@ -1,8 +1,8 @@
-//! The development harness: two environment variables, both unset by default.
+//! The development harness: three environment variables, all unset by default.
 //!
 //! The key spike's remaining questions need a real WebView and a real keyboard,
 //! and a person working down a checklist cannot say afterwards which chord the
-//! page saw. These two switches let a script do it instead:
+//! page saw. These three switches let a script do it instead:
 //!
 //! - `EDITOR_OPEN_FOLDER` names a document folder the window opens on start,
 //!   so the run begins with a chapter in the buffer and no dialog in the way.
@@ -13,9 +13,12 @@
 //!   Without it a run that wants to look at the deck — through
 //!   `EDITOR_PRESENT_LOG` — produces no line at all, since nothing ever opened
 //!   the window. It does nothing on its own: there is no chapter to present
-//!   until `EDITOR_OPEN_FOLDER` has opened one.
+//!   until `EDITOR_OPEN_FOLDER` has opened one. It is the one switch here
+//!   rather than a path, so it is read as one: `1`, `true`, `yes` or `on` for
+//!   on, `0`, `false`, `no` or `off` for off, and any other word refused with a
+//!   warning rather than read as either.
 //!
-//! Neither does anything when its variable is unset, which is every ordinary
+//! No switch does anything when its variable is unset, which is every ordinary
 //! launch. The log path is the one that needs guarding: the web view is a trust
 //! boundary, so a script running in it could call [`dev_log_key`] with a line
 //! of its choosing. It cannot choose the file — the path is resolved once here,
@@ -142,7 +145,10 @@ pub fn configure<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         }
     }
 
-    if asked_for(env::var_os(PRESENT_ON_OPEN_VAR).as_deref()) {
+    if asked_for(
+        PRESENT_ON_OPEN_VAR,
+        env::var_os(PRESENT_ON_OPEN_VAR).as_deref(),
+    ) {
         log::info!("{PRESENT_ON_OPEN_VAR}: presenting the chapter that opens");
         match state.present_on_open.lock() {
             Ok(mut held) => *held = true,
@@ -151,15 +157,53 @@ pub fn configure<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
-/// Whether a switch-shaped variable is on.
+/// The words a switch-shaped variable is read as on.
+const ON_WORDS: [&str; 4] = ["1", "true", "yes", "on"];
+
+/// The words it is read as off, an empty value among them.
 ///
-/// Set is on, with the two spellings of "no" that a shell script writes by
-/// accident taken as off: an empty value, which is what an unset variable
-/// expands to, and `0`.
-fn asked_for(raw: Option<&std::ffi::OsStr>) -> bool {
-    match raw {
-        None => false,
-        Some(value) => !matches!(value.to_string_lossy().trim(), "" | "0"),
+/// An empty value is what `EDITOR_PRESENT_ON_OPEN=` and an unset variable both
+/// expand to in a shell, so it is off rather than a mistake.
+const OFF_WORDS: [&str; 5] = ["", "0", "false", "no", "off"];
+
+/// What a switch-shaped variable says, or `None` when it is not a switch.
+///
+/// A script that writes `EDITOR_PRESENT_ON_OPEN=false` means off, and a rule
+/// that reads anything but empty or `0` as on answers it with the opposite of
+/// what it asked for. So the two vocabularies are named and nothing else is
+/// guessed at: a value in neither list is refused rather than read as either,
+/// because a harness that quietly does the opposite of what a run script asked
+/// for is worse than one that does nothing.
+///
+/// Case and surrounding space are not part of the answer: `True` and ` on `
+/// are what a hand-written script writes.
+fn switch_value(value: &std::ffi::OsStr) -> Option<bool> {
+    let word = value.to_string_lossy().trim().to_ascii_lowercase();
+    if ON_WORDS.contains(&word.as_str()) {
+        return Some(true);
+    }
+    if OFF_WORDS.contains(&word.as_str()) {
+        return Some(false);
+    }
+    None
+}
+
+/// Whether a switch-shaped variable is on, saying so when it is neither.
+///
+/// An unset variable is off and says nothing: that is every ordinary launch.
+fn asked_for(var: &str, raw: Option<&std::ffi::OsStr>) -> bool {
+    let Some(value) = raw else { return false };
+    match switch_value(value) {
+        Some(on) => on,
+        None => {
+            log::warn!(
+                "{var}: {} is neither on ({}) nor off ({}); taking it as off",
+                value.to_string_lossy(),
+                ON_WORDS.join(", "),
+                OFF_WORDS[1..].join(", ")
+            );
+            false
+        }
     }
 }
 
@@ -259,12 +303,39 @@ mod tests {
     #[test]
     fn the_present_switch_is_off_unless_it_is_asked_for() {
         use std::ffi::OsStr;
-        assert!(!asked_for(None));
-        assert!(!asked_for(Some(OsStr::new(""))));
-        assert!(!asked_for(Some(OsStr::new("0"))));
-        assert!(!asked_for(Some(OsStr::new("  "))));
-        assert!(asked_for(Some(OsStr::new("1"))));
-        assert!(asked_for(Some(OsStr::new("yes"))));
+        assert!(!asked_for(PRESENT_ON_OPEN_VAR, None));
+        for off in ["", "0", "false", "no", "off", "  ", "OFF", " False "] {
+            assert!(
+                !asked_for(PRESENT_ON_OPEN_VAR, Some(OsStr::new(off))),
+                "{off} should be off"
+            );
+        }
+        for on in ["1", "true", "yes", "on", "TRUE", " On "] {
+            assert!(
+                asked_for(PRESENT_ON_OPEN_VAR, Some(OsStr::new(on))),
+                "{on} should be on"
+            );
+        }
+    }
+
+    #[test]
+    fn a_word_that_is_neither_on_nor_off_is_refused_rather_than_guessed_at() {
+        use std::ffi::OsStr;
+        // `false` is how a run script turns the switch off, and a rule of
+        // "anything but empty or `0` is on" gives it the present window
+        // instead. Every value says on, says off, or says nothing — and
+        // saying nothing is a warning and an off switch, never a guess.
+        assert_eq!(switch_value(OsStr::new("false")), Some(false));
+        assert_eq!(switch_value(OsStr::new("true")), Some(true));
+        // An unset variable is the ordinary launch: off, and silent.
+        assert!(!asked_for(PRESENT_ON_OPEN_VAR, None));
+        for neither in ["maybe", "2", "-1", "yes please", "no thanks"] {
+            assert_eq!(switch_value(OsStr::new(neither)), None, "{neither}");
+            assert!(
+                !asked_for(PRESENT_ON_OPEN_VAR, Some(OsStr::new(neither))),
+                "{neither} should not turn the switch on"
+            );
+        }
     }
 
     #[test]

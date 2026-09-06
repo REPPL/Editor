@@ -54,10 +54,13 @@ const CODES: Readonly<Record<string, string>> = {
   "=": "Equal",
   "-": "Minus",
   "0": "Digit0",
+  "3": "Digit3",
   "/": "Slash",
   x: "KeyX",
   g: "KeyG",
   a: "KeyA",
+  n: "KeyN",
+  u: "KeyU",
 };
 
 /** Dispatch one chord step at the surface; true when the page claimed it. */
@@ -91,6 +94,17 @@ function pressSequence(view: EditorView, chord: string): boolean {
   let claimed = false;
   for (const step of chord.split(" ")) claimed = press(view, step);
   return claimed;
+}
+
+/**
+ * Let the settings write in flight, and the step queued behind it, land.
+ *
+ * The page writes the scale one file at a time — `rememberScale` in
+ * `src/app.ts` — so the second of two chords pressed together is written from
+ * a microtask rather than from the keypress.
+ */
+async function writesLand(): Promise<void> {
+  for (let at = 0; at < 8; at += 1) await Promise.resolve();
 }
 
 /** The size the browser would draw an element at. */
@@ -196,6 +210,8 @@ describe("scaling the editing surface", () => {
   let scaleWrites: number[];
   let storedScale: number;
   let chapterText: string;
+  /** When set, what a scale write waits on rather than resolving at once. */
+  let heldWrite: (() => Promise<void>) | null;
 
   const only = chapter("01-alice.md", "alice", "document/01-alice.md");
 
@@ -213,7 +229,7 @@ describe("scaling the editing surface", () => {
       readTextScale: () => Promise.resolve(storedScale),
       writeTextScale: (steps) => {
         scaleWrites.push(steps);
-        return Promise.resolve();
+        return heldWrite === null ? Promise.resolve() : heldWrite();
       },
     };
   }
@@ -221,6 +237,7 @@ describe("scaling the editing surface", () => {
   beforeEach(() => {
     written = null;
     scaleWrites = [];
+    heldWrite = null;
     storedScale = 0;
     chapterText = SAMPLE;
     host = document.createElement("div");
@@ -236,21 +253,34 @@ describe("scaling the editing surface", () => {
   });
 
   it("enlarges the surface by 1.2 and moves nothing else on the page", () => {
-    const before = {
-      surface: sizeOf(app.view.dom),
-      sidebar: sizeOf(app.sidebar.element),
-      modeline: sizeOf(app.modeline.element),
-      body: sizeOf(document.body),
-    };
-    expect(before.surface).toBe("14px");
+    // Every element the page has, not three of them: the claim is that the
+    // scale reaches the editing surface and nothing beside it, and a sample
+    // of three can only ever say that those three are unmoved.
+    const surface = app.view.dom;
+    const beside = Array.from(document.querySelectorAll("*")).filter(
+      (element) => element !== surface && !surface.contains(element),
+    );
+    const before = new Map(beside.map((element) => [element, sizeOf(element)]));
+    expect(before.size).toBeGreaterThan(10);
+    for (const element of [
+      document.documentElement,
+      document.body,
+      app.sidebar.element,
+      app.modeline.element,
+      host,
+    ]) {
+      expect(before.has(element), element.tagName).toBe(true);
+    }
+    const surfaceBefore = sizeOf(surface);
+    expect(surfaceBefore).toBe("14px");
 
     expect(pressSequence(app.view, "C-x C-=")).toBe(true);
 
-    expect(sizeOf(app.view.dom)).toBe("16.8px");
-    expect(parseFloat(sizeOf(app.view.dom)) / parseFloat(before.surface)).toBeCloseTo(1.2, 10);
-    expect(sizeOf(app.sidebar.element)).toBe(before.sidebar);
-    expect(sizeOf(app.modeline.element)).toBe(before.modeline);
-    expect(sizeOf(document.body)).toBe(before.body);
+    expect(sizeOf(surface)).toBe("16.8px");
+    expect(parseFloat(sizeOf(surface)) / parseFloat(surfaceBefore)).toBeCloseTo(1.2, 10);
+    for (const [element, size] of before) {
+      expect(sizeOf(element), element.className || element.tagName).toBe(size);
+    }
 
     // And the rule that did it can only ever reach the surface: every style
     // rule in the page setting the new size matches the editor element and
@@ -282,6 +312,77 @@ describe("scaling the editing surface", () => {
     expect(textScaleStep(app.view)).toBe(0);
     expect(sizeOf(app.view.dom)).toBe("14px");
     expect(sizeOf(app.view.dom)).toBe(fontSizeFor(0));
+  });
+
+  it("spends the numeric argument the chord's own reader took", async () => {
+    // `C-u 3 C-x C-0` is the whole of the defect. The shipped Emacs package
+    // reads Control-and-a-digit as the start of a numeric argument before it
+    // consults its own prefix chain, so the guard in `src/emacs.ts` answers
+    // `C-x C-0` itself — and a guard that closes the chain but leaves the
+    // count behind hands that count to the next key, which then runs three
+    // times over.
+    chapterText = HAZARDOUS;
+    await app.openChapter(only);
+    pressSequence(app.view, "C-x C-=");
+    press(app.view, "C-u");
+    press(app.view, "3");
+    expect(pressSequence(app.view, "C-x C-0")).toBe(true);
+    expect(textScaleStep(app.view)).toBe(0);
+    expect(position(app)).toBe("L1:C1");
+
+    // The next key is read with whatever count is left. One line down is one
+    // line down: with the argument still holding, this lands on line four.
+    press(app.view, "C-n");
+    expect(position(app)).toBe("L2:C1");
+
+    // And a letter goes to the browser, which types one copy of it. jsdom
+    // types nothing of its own, so what is proved here is the other half:
+    // the package's own `insertstring` — the count's other reader — did not
+    // run, and the chord did not swallow the key.
+    const before = documentText(app.view);
+    expect(press(app.view, "a")).toBe(false);
+    expect(documentText(app.view)).toBe(before);
+  });
+
+  it("answers the chord from the keypad as well as from the digit row", async () => {
+    // The package identifies a key by its `code` and strips the `Numpad`
+    // prefix before it reads it, so `C-x Numpad-0` is swallowed exactly as
+    // `C-x C-0` is, and has to be answered in the same place.
+    await app.openChapter(only);
+    pressSequence(app.view, "C-x C-=");
+    expect(textScaleStep(app.view)).toBe(1);
+
+    expect(pressSequence(app.view, "C-x C-Numpad0")).toBe(true);
+    expect(textScaleStep(app.view)).toBe(0);
+    expect(sizeOf(app.view.dom)).toBe(fontSizeFor(0));
+  });
+
+  it("writes the scale one file at a time, and the last step wins", async () => {
+    // A chord held down sends steps faster than the shell writes a file, and
+    // the write at the other end reads the whole settings file, changes one
+    // field and writes it back. Two of those in flight together persist a
+    // step the surface has already left and drop whatever was written beside
+    // them, so the page keeps one write in flight and collapses what arrives
+    // behind it to the step the surface is actually showing.
+    const waiting: (() => void)[] = [];
+    heldWrite = () => new Promise<void>((resolve) => waiting.push(resolve));
+
+    pressSequence(app.view, "C-x C-=");
+    pressSequence(app.view, "C-x C-=");
+    pressSequence(app.view, "C-x C-=");
+    expect(textScaleStep(app.view)).toBe(3);
+    expect(scaleWrites).toEqual([1]);
+    expect(waiting.length).toBe(1);
+
+    waiting.shift()?.();
+    await writesLand();
+    // Step 2 was overtaken before it reached the file; step 3 is the surface.
+    expect(scaleWrites).toEqual([1, 3]);
+    expect(waiting.length).toBe(1);
+
+    waiting.shift()?.();
+    await writesLand();
+    expect(scaleWrites).toEqual([1, 3]);
   });
 
   it("shows the scale in the modeline and then clears it", () => {
@@ -351,6 +452,7 @@ describe("scaling the editing surface", () => {
     pressSequence(app.view, "C-x C-=");
     pressSequence(app.view, "C-x C--");
     pressSequence(app.view, "C-x C-0");
+    await writesLand();
 
     expect(documentText(app.view)).toBe(HAZARDOUS);
     expect(app.dirty).toBe(false);
@@ -366,6 +468,7 @@ describe("scaling the editing surface", () => {
     await app.openChapter(only);
     pressSequence(app.view, "C-x C-=");
     pressSequence(app.view, "C-x C-=");
+    await writesLand();
     expect(scaleWrites).toEqual([1, 2]);
     expect(written).toBeNull();
   });
@@ -378,7 +481,7 @@ describe("scaling the editing surface", () => {
     expect(sizeOf(app.view.dom)).toBe(fontSizeFor(2));
   });
 
-  it("keeps the surface wrapping at every step", async () => {
+  it("keeps the line-wrapping class on the surface at every step", async () => {
     chapterText = HAZARDOUS;
     await app.openChapter(only);
     const longest = HAZARDOUS.split("\n").reduce(

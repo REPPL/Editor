@@ -226,6 +226,9 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   let reportedDirty: boolean | null = null;
   /** The timer clearing a message that says itself once, if one is running. */
   let transient: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a type-scale write is in flight, and the step waiting behind it. */
+  let scaleWriting = false;
+  let pendingScale: number | null = null;
 
   const sidebar = createSidebar({
     onOpenChapter: (chapter, node) => {
@@ -348,9 +351,41 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     const now = textScaleStep(view);
     announceBriefly(textScaleMessage(now, moved));
     if (!moved) return;
-    void services.writeTextScale?.(now).catch((error: unknown) => {
-      announce(String(error));
-    });
+    rememberScale(now);
+  }
+
+  /**
+   * Remember the step this machine was left at, one write at a time.
+   *
+   * A chord is pressed faster than a file is written, and the write is a
+   * read-modify-write of the whole settings file at the other end: two of them
+   * in flight together can persist a step the surface has already left, and
+   * can drop a change made beside them. So one write is in flight at a time
+   * and the steps that arrive while it is are collapsed to the last of them —
+   * which is the one the surface is actually showing. Nothing intermediate is
+   * worth a file: the scale is a single number about a single surface.
+   */
+  function rememberScale(step: number): void {
+    const write = services.writeTextScale;
+    if (!write) return;
+    pendingScale = step;
+    if (scaleWriting) return;
+    scaleWriting = true;
+    void (async () => {
+      try {
+        while (pendingScale !== null) {
+          const next = pendingScale;
+          pendingScale = null;
+          try {
+            await write(next);
+          } catch (error: unknown) {
+            announce(String(error));
+          }
+        }
+      } finally {
+        scaleWriting = false;
+      }
+    })();
   }
 
   /** Ask before edits are thrown away. True means carry on. */

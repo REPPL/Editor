@@ -251,6 +251,22 @@ function accessorFor(source, binding) {
 }
 
 /**
+ * The mount taking the accessor as a parameter's default, for one accessor.
+ *
+ * `src/present.ts` reaches the engine in one place a caller can override —
+ * `function mountDeck(…, reveal = engine())` — and that default is what the
+ * shipped window runs on. So the question is asked of a parameter list: the
+ * accessor's call sitting between a `(` or a `,` and a `,` or a `)`, which is
+ * the only place a default can be. A plain `const reveal = engine()` inside a
+ * function body answers `=V()` and answers nothing about the mount, and the
+ * emitted chunk has one of those too — which is what made the loose check pass
+ * a bundle it had not read the mount of.
+ */
+function mountDefaultFor(accessor) {
+  return new RegExp(`[(,]\\s*[\\w$]+\\s*=\\s*${quoted(accessor)}\\(\\s*\\)\\s*[,)]`);
+}
+
+/**
  * What one source is missing of the engine wiring. Empty means it is whole.
  *
  * The three questions in order, because each one only means anything if the
@@ -267,7 +283,7 @@ function engineMissingFrom(source) {
       `the engine accessor in src/present.ts resolving to ${binding}, which is the engine this chunk carries`,
     ];
   }
-  if (!source.includes(`=${accessor}()`)) {
+  if (!mountDefaultFor(accessor).test(source)) {
     return [`the mount defaulting to ${accessor}(), the accessor that holds the engine`];
   }
   return [];
