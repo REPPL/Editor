@@ -359,11 +359,34 @@ stricter scope.
   contents list "carries" without saying every entry must be a link.
 - **`article-video.js` loaded as `type="module"` in `preview.html`, plain
   everywhere else, was confirmed by building and inspecting `dist/`, not
-  merely reasoned about.** A future change to `article-video.js` that added
-  a real `import`/`export` statement would need re-confirming against a
-  fresh build; nothing about it is enforced by a test, because the failure
-  mode (a 404 in a release bundle) is exactly the kind of thing `npm run
-  build` catches and a unit test cannot.
+  merely reasoned about — and the confirmation found the note's own claim
+  wrong.** `iss-2609061513087574`: `vite build` does not preserve a
+  module-tagged script reference as its own copied file the way this note
+  first assumed. `article-video.js`, `article-controls.js` and
+  `article-eggs.js` all have zero `import`/`export` statements — each is a
+  plain global-attaching IIFE, `type="module"` only being the spelling that
+  makes the bundler notice the reference at all — so `vite build` merges
+  all three straight into `preview.ts`'s own output chunk rather than
+  emitting one file per `<script src>`. The separate `<script src>` tags
+  the source `preview.html` carries genuinely disappear from `dist/preview.html`;
+  what survives is the effect, not the file. Each script is written to
+  tolerate exactly this: `article-video.js` establishes the shared
+  `ArticlePage.register` seam and boots itself unconditionally on
+  `DOMContentLoaded`, and `article-controls.js`/`article-eggs.js` each fall
+  back to the same unconditional boot when `ArticlePage` is not there to
+  register with — so whichever order the merged chunk runs them in, all
+  three still run. Proven by loading the actual built chunk from a fresh
+  `dist/` into jsdom: `ArticlePage`, `ArticleVideo` and `ArticleControls`
+  all end up defined, and the reader-controls toolbar's markup is appended
+  to `document.body` exactly as `article-controls.test.ts` expects it
+  standalone. A future change that gave any of the three a real
+  `import`/`export` — or a boot path that assumed `ArticlePage` exists
+  rather than falling back — would need re-confirming against a fresh
+  build the same way; nothing about the merge itself is enforced by a test,
+  because the failure mode a real regression would take (a script that
+  silently stops running once merged) is exactly the kind of thing
+  inspecting a fresh `dist/` catches and a unit test, which imports the
+  source file directly rather than the bundle, cannot.
 - **The exported single file, named in the acceptance criterion's own
   words, is this map's folder export.** The brief's map #17 owns bundling a
   single offline HTML file; this build's own instructions name

@@ -953,6 +953,34 @@ describe("byte fidelity", () => {
   });
 });
 
+describe("paging", () => {
+  it("C-v scrolls the viewport a page rather than jumping point to the last line", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    // Long enough that a page's worth of scroll lands well short of the end —
+    // the package's own binding routes the chord through `cursorPageDown`,
+    // which jumps point straight to the chapter's last line instead
+    // (`iss-2609061510051784`).
+    const lines = Array.from({ length: 200 }, (_, i) => `Line ${i + 1}`);
+    const view = createEditor(host, lines.join("\n"));
+    // jsdom lays nothing out, so the height `scroll-up-command` pages by has
+    // to be asserted by hand.
+    Object.defineProperty(view.scrollDOM, "clientHeight", {
+      configurable: true,
+      value: 300,
+    });
+    place(view, 0);
+    const before = view.scrollDOM.scrollTop;
+    expect(press(view, "C-v")).toBe(true);
+    expect(view.scrollDOM.scrollTop).toBeGreaterThan(before);
+    // A scroll, not a cursor move: point stays exactly where it was, never at
+    // the document's last line the way `cursorPageDown` would leave it.
+    expect(view.state.selection.main.head).toBe(0);
+    view.destroy();
+    host.remove();
+  });
+});
+
 describe("the network", () => {
   it("attempts no network request while editing", async () => {
     const attempts: string[] = [];
@@ -1215,6 +1243,24 @@ describe("Editor's own chords", () => {
     await Promise.resolve();
     // Nothing is written by a reload, whatever else it does.
     expect(written).toBeNull();
+  });
+
+  it("opens the preview on C-c C-v rather than paging the text", async () => {
+    // `preview` is registered from outside the binding table, the way
+    // `src/main.ts` registers it on the real application; the chord must
+    // still reach it through the `C-c` prefix chain rather than being caught
+    // by the page-down binding the second step shares a key with
+    // (`iss-2609061510051784`).
+    let calls = 0;
+    app.registerCommand("preview", () => {
+      calls += 1;
+    });
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    const before = documentText(app.view);
+    expect(pressSequence(app.view, "C-c C-v")).toBe(true);
+    expect(calls).toBe(1);
+    expect(documentText(app.view)).toBe(before);
   });
 
   it("shows every tier-one prose command in the keys panel", () => {

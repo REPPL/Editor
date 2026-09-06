@@ -91,8 +91,6 @@
   box-sizing: border-box;
   padding: clamp(1rem, 4vmin, 3rem);
   opacity: 1;
-  /* Sections are laid out by this stylesheet, not moved about by the engine. */
-  transform: none !important;
   transition: none !important;
   display: flex;
   flex-direction: column;
@@ -116,11 +114,52 @@
   pointer-events: none;
 }
 
+/*
+ * Sections are laid out by this stylesheet, not moved about by the engine —
+ * except while reveal.js's own overview is up. `Overview.layout` sets each
+ * slide's own `element.style.transform` to its place in the grid, and
+ * `Overview.update` scales and pans `.slides` to centre the current one; both
+ * are how Escape's grid is laid out at all. Forcing `transform` to `none`
+ * regardless used to win over that inline style the same way it wins over the
+ * engine's transition, which left every slide sitting exactly on top of the
+ * stage's one resting position — the present slide's, since visibility below
+ * still showed only that one — rather than spread into a grid
+ * (`iss-2609061514457567`).
+ */
+.reveal:not(.overview) .slides > section,
+.reveal:not(.overview) .slides > section > section {
+  transform: none !important;
+}
+
 /* The slide in view, and only it, is on the screen and takes the pointer. */
 .reveal .slides > section.present,
 .reveal .slides > section > section.present {
   visibility: visible;
   pointer-events: auto;
+}
+
+/*
+ * Overview shows the whole deck at once, so every slide is back on the
+ * screen for it, not only the one that was `present` a moment ago — the same
+ * `visibility`/`pointer-events` pair the rule above answers for one slide,
+ * generalised to all of them for as long as `.overview` is on the element the
+ * engine puts it on.
+ */
+.reveal.overview .slides > section,
+.reveal.overview .slides > section > section {
+  visibility: visible !important;
+  pointer-events: auto;
+}
+
+/*
+ * Every face, not only the present one, needs its content laid out to be
+ * legible in its grid cell — the same reason the present-only rule below
+ * exists, generalised the way the visibility rule above is. A stack is
+ * excluded because a stack is not a face; its children get this rule through
+ * the `section > section` half above.
+ */
+.reveal.overview .slides > section:not(.stack) {
+  display: flex !important;
 }
 
 /*

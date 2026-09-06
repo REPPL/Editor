@@ -717,6 +717,58 @@ describe("the deck the real engine is holding", () => {
     expect(window.getComputedStyle(stack).position).toBe("absolute");
     expect(window.getComputedStyle(inside[0] ?? stack).position).toBe("absolute");
   });
+
+  it("spreads every slide into its own place for reveal.js's own overview", async () => {
+    // `iss-2609061514457567`: Escape's overview lays every slide out with its
+    // own `element.style.transform` (`Overview.layout`, set unconditionally —
+    // `disableLayout` only gates the main engine's own scale-to-fit). The
+    // fluid stylesheet's `transform: none !important` answered every slide
+    // alike regardless, which is the stacked box the bug report saw: one
+    // slide's face, repeated over an otherwise-empty grid. This drives the
+    // real engine's own `toggleOverview`/`isOverview` rather than simulating
+    // an Escape keydown, so what is proved is the stylesheet's answer to the
+    // class the engine puts on `.reveal`, not the keyboard plugin.
+    stageStyledDeck();
+    const reveal = await startedEngine();
+    mountDeck(document, deckFragment(CHAPTER_TEXT, pathResolver()), true, reveal);
+    await settledEngine();
+
+    const engineApi = reveal as unknown as {
+      toggleOverview?: () => void;
+      isOverview?: () => boolean;
+    };
+    if (!engineApi.toggleOverview || !engineApi.isOverview) {
+      throw new Error("the engine exposes no overview API");
+    }
+
+    engineApi.toggleOverview();
+    await settledEngine();
+    expect(engineApi.isOverview()).toBe(true);
+
+    const sections = [
+      ...document.querySelectorAll<HTMLElement>(".reveal .slides > section"),
+    ].filter((section) => !section.classList.contains("stack"));
+    expect(sections.length).toBeGreaterThan(1);
+    // Each top-level slide's own placement, not the same stacked box: the
+    // engine gave each a different `translate3d`, and every one of them is
+    // back on the screen rather than only the one that was `present`.
+    const transforms = sections.map((section) => section.style.transform);
+    expect(new Set(transforms).size).toBe(transforms.length);
+    expect(transforms.every((value) => value !== "")).toBe(true);
+    expect(sections.every((section) => visibilityOf(section) === "visible")).toBe(
+      true,
+    );
+
+    engineApi.toggleOverview();
+    await settledEngine();
+    expect(engineApi.isOverview()).toBe(false);
+    // Reveal.js clears the transform it wrote, and only the present slide is
+    // back on the screen — the ordinary, one-slide-at-a-time behaviour this
+    // spread from.
+    expect(sections.every((section) => section.style.transform === "")).toBe(true);
+    expect(visibilityOf(sections[0]!)).toBe("visible");
+    expect(visibilityOf(sections[1]!)).toBe("hidden");
+  });
 });
 
 /**

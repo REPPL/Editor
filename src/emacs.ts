@@ -21,7 +21,12 @@
  * replace the first.
  */
 
-import { defaultKeymap, historyKeymap } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  historyKeymap,
+  selectPageDown,
+  selectPageUp,
+} from "@codemirror/commands";
 import {
   SearchQuery,
   findNext,
@@ -83,6 +88,11 @@ export const APP_COMMAND_IDS: readonly string[] = [
   "text-scale-reset",
   // Owned by the deck bundle; the chord is the table's row.
   "present",
+  // Owned by the preview window; the chord is the table's row. Missing from
+  // this list left `C-c C-v` unbound behind the `C-c` prefix `present`
+  // already opens, so the second step fell through to whatever lower keymap
+  // answers a bare `C-v` (`iss-2609061510051784`).
+  "preview",
   // Owned by the publish bundle, and by the shell's settings store.
   "publish-open",
   "open-settings",
@@ -339,6 +349,45 @@ export function queryReplaceRegex(view: EditorView): void {
 }
 
 /**
+ * Move the viewport by a page, the way Emacs's `scroll-up-command` and
+ * `scroll-down-command` do, leaving point exactly where it was.
+ *
+ * The package's own binding for `C-v`/`M-v` (and `PageDown`/`PageUp`,
+ * `C-Down`/`C-Up`) routes the chord through CodeMirror's `cursorPageDown`/
+ * `cursorPageUp`, which moves the selection by a page's worth of vertical
+ * distance unconditionally — for any chapter shorter than a screen, that
+ * lands point on the document's last (or first) line, not part way down the
+ * next page (`iss-2609061510051784`). Scrolling `scrollDOM` directly, with no
+ * transaction dispatched, is also what keeps this a scroll rather than a
+ * cursor move dressed up as one: dispatching one here, even to nudge point
+ * back on screen, hands CodeMirror's own scroll-anchoring straight back to
+ * wherever it last recorded the offset, undoing the very scroll this answers.
+ */
+function scrollByPage(view: EditorView, forward: boolean): boolean {
+  const dom = view.scrollDOM;
+  const amount = Math.max(
+    dom.clientHeight - view.defaultLineHeight,
+    view.defaultLineHeight,
+  );
+  const before = dom.scrollTop;
+  dom.scrollTop = forward ? before + amount : Math.max(0, before - amount);
+  return dom.scrollTop !== before;
+}
+
+/**
+ * `C-v`/`M-v`: `scrollByPage` when the mark is not set, and the package's own
+ * selection-extending page move when it is — `goOrSelect`'s other half is left
+ * alone because nothing reported it broken.
+ */
+function scrollPage(handler: EmacsHandler, forward: boolean): void {
+  if (handler.emacsMark()) {
+    (forward ? selectPageDown : selectPageUp)(handler.view);
+    return;
+  }
+  scrollByPage(handler.view, forward);
+}
+
+/**
  * A command every version of the package registers for itself.
  *
  * The package installs itself in two module-level calls — the loop that binds
@@ -435,6 +484,27 @@ function registerEditorChords(): void {
   // never produces, so they are re-bound under the name a real event carries.
   // The command is the package's own; only the spelling changes.
   for (const [spec, chord] of REBOUND) rebindUnreachable(spec, chord);
+
+  // `scroll-up`/`scroll-down`: the package's own binding for these chords
+  // moves point by a page unconditionally rather than scrolling the window,
+  // which is Emacs's actual `scroll-up-command`/`scroll-down-command`
+  // (`iss-2609061510051784`). Read from the table like every `APP_COMMAND_IDS`
+  // row, but bound directly to a view command rather than an application one,
+  // the way `gotoline` and the other package-gap commands above are.
+  EmacsHandler.addCommands({
+    "editor:scroll-up": (handler: EmacsHandler) => {
+      scrollPage(handler, true);
+    },
+    "editor:scroll-down": (handler: EmacsHandler) => {
+      scrollPage(handler, false);
+    },
+  });
+  for (const chord of bindingById("scroll-up")?.chords ?? []) {
+    EmacsHandler.bindKey(toPackageChord(chord), "editor:scroll-up");
+  }
+  for (const chord of bindingById("scroll-down")?.chords ?? []) {
+    EmacsHandler.bindKey(toPackageChord(chord), "editor:scroll-down");
+  }
 }
 
 /**

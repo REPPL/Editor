@@ -117,12 +117,23 @@ export interface BoxReport {
    * screen at all look alike in a log of boxes; this is the difference.
    */
   readonly textLength: number;
+  /**
+   * The transform the cascade resolves to, as reveal.js's own overview mode
+   * writes it: each slide gets its own `translate3d` there, offset by its
+   * place in the grid, and the fluid stylesheet forcing this to `none`
+   * regardless was `iss-2609061514457567` — every slide answering the same
+   * transform is the log's own reading of the bug the reader saw stacked.
+   */
+  readonly transform: string;
 }
 
 /** One reading of the present window's state, one JSON object per line. */
 export interface DeckObservation {
   readonly at: number;
-  /** What had just happened: `mount`, `ready`, `slidechanged`, `resize`. */
+  /**
+   * What had just happened: `mount`, `ready`, `slidechanged`, `resize`,
+   * `overviewshown`, `overviewhidden`.
+   */
   readonly phase: string;
   /** Slides in the deck, stacks excluded. */
   readonly slides: number;
@@ -161,6 +172,7 @@ function boxReport(element: Element | null): BoxReport {
       height: 0,
       fontSize: "",
       textLength: 0,
+      transform: "",
     };
   }
   const style = getComputedStyle(element);
@@ -175,6 +187,7 @@ function boxReport(element: Element | null): BoxReport {
     height: Math.round(rect.height),
     fontSize: style.fontSize,
     textLength: (element.textContent ?? "").trim().length,
+    transform: style.transform,
   };
 }
 
@@ -513,6 +526,16 @@ async function start(): Promise<void> {
     for (const type of ["ready", "slidechanged"]) {
       reveal.on(type, () => {
         notes.draw(document);
+        record(type);
+      });
+    }
+    // `iss-2609061514457567`: reveal.js's own overview lays every slide out
+    // with its own transform the moment Escape opens it, and undoes it the
+    // moment Escape closes it again — these two are what let a scripted run
+    // show that in the log, one line with the slides spread out and the next
+    // with them back to one at a time, rather than only a description of it.
+    for (const type of ["overviewshown", "overviewhidden"]) {
+      reveal.on(type, () => {
         record(type);
       });
     }
