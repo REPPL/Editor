@@ -12,15 +12,22 @@ these files beside the deck it writes; nothing points at a CDN.
 
 | File | Why |
 |---|---|
-| `reveal.js` | the engine, the UMD build a plain `<script>` tag loads |
+| `reveal.js` | the engine, the UMD build a plain `<script>` tag loads: the published site and the single-file export serve it raw, under `script-src 'self'`, with no bundler anywhere in the path |
+| `reveal.esm.js` | the same engine, the ES-module build `src/present.ts` imports: the app's own window goes through a bundler, and the UMD build means one thing to a bundler and another to a `<script>` tag — see `iss-2609061132369973` |
+| `reveal.esm.js.map` | that build's source map, because the module is the one vendored file the toolchain reads through: the bundler and the test runner both follow its `sourceMappingURL`, and a comment pointing at a map that is not here is a warning on every build and every test run |
 | `reveal.css` | the layout: slides, transitions, controls, progress |
 | `reset.css` | the box model reveal.js expects underneath its own styles |
 | `theme/white.css` | one theme, light, the deck's default appearance |
 | `theme/fonts/source-sans-pro/` | the theme's font, which it loads by relative path; the `.woff` faces and their licence only, since no browser Editor targets asks for the `.eot` or `.ttf` ones |
 | `plugin/notes/notes.js` | the speaker-notes window the `.notes` div feeds |
 
-Nothing else from the package travels: no other theme, no Markdown, maths,
-highlight, search or zoom plugin, no source maps, and no ES-module build.
+Both engine builds are the same version and the same code; which one is right
+depends on how the page reaches it, and the two pages reach it in two ways.
+
+Nothing else from the package travels: no other theme, and no Markdown, maths,
+highlight, search or zoom plugin. `reveal.js` keeps the `sourceMappingURL`
+comment it shipped with and its map is not here, which costs nothing: no part
+of the toolchain reads that file, it is copied beside a deck as bytes.
 
 ## Refreshing it
 

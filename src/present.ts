@@ -29,29 +29,35 @@ import { buildDeck } from "./core/deck";
 import { parseChapter } from "./core/parse";
 import { DECK_CONFIG, renderSlides } from "./core/render/slides";
 import { inShell, pendingDeck, readAsset, type DeckSource } from "./doctree";
+import Reveal, { type RevealEngine } from "./vendor/reveal/reveal.esm.js";
+
+export type { RevealEngine };
 
 /**
- * The shape reveal.js exposes on the global, which is how it is vendored.
+ * The deck engine, as a module rather than as a global.
  *
- * Everything but `initialize` is optional because it genuinely is: the
- * vendored build hands out a stub carrying `initialize`, `on` and little else,
- * and only copies the running deck's own methods — `sync`, `slide`,
- * `getIndices` — onto the global when `initialize` is called. Declaring them
- * as always present is how a call reached one of them before it existed.
+ * This is the seam `iss-2609061132369973` was about. The window used to load
+ * the vendored UMD build from its own `<script>` tag and read the `Reveal` the
+ * file assigns to `globalThis`. That global exists only when the file is
+ * *executed* as a script: served raw by the dev server it is, and evaluated
+ * into a jsdom global by a test it is, so both of those passed — but a
+ * production build hands the same file to the bundler, which reads the UMD's
+ * first branch, decides it is CommonJS, and turns `module.exports = factory()`
+ * into a module export. No global is ever assigned, `globalThis.Reveal` is
+ * `undefined`, and the release window showed one slide with dead controls.
+ *
+ * So the engine is imported, from the ES-module build that has one meaning in
+ * every toolchain: the dev server serves it as the module it is, the bundler
+ * bundles it as the module it is, and a test imports it as the module it is.
+ * Nothing here reads a global, and `engine_is_the_imported_module` in
+ * `present.test.ts` holds it to that with no global set at all.
+ *
+ * The `null` is not dead: it is the runtime half of the same guard. If a
+ * future toolchain hands this import something that is not the engine, the
+ * window says `absent` in its log rather than quietly showing one slide.
  */
-interface RevealEngine {
-  initialize(config: Record<string, unknown>): Promise<void> | void;
-  sync?(): void;
-  slide?(horizontal: number, vertical?: number): void;
-  on?(type: string, listener: () => void): void;
-  getIndices?(): { h?: number; v?: number };
-  isReady?(): boolean;
-}
-
-/** The engine, once the vendored script has run. Absent in a test. */
-function engine(): RevealEngine | null {
-  const global = globalThis as { Reveal?: RevealEngine };
-  return global.Reveal ?? null;
+export function engine(): RevealEngine | null {
+  return typeof Reveal?.initialize === "function" ? Reveal : null;
 }
 
 /**
@@ -157,14 +163,17 @@ function boxReport(element: Element | null): BoxReport {
  * The same function serves the log a scripted run reads back and the jsdom
  * test that holds the shape of that log to what the bug needed to see.
  */
-export function observeDeck(root: ParentNode, phase: string): DeckObservation {
+export function observeDeck(
+  root: ParentNode,
+  phase: string,
+  reveal: RevealEngine | null = engine(),
+): DeckObservation {
   // The root's own document, not the global one: the observation describes the
   // page it was handed, and a caller that hands over a fragment or a second
   // document should not be answered with facts about this one.
   const owner: Document =
     root instanceof Document ? root : (root.ownerDocument ?? document);
   const view: Window = owner.defaultView ?? window;
-  const reveal = engine();
   const indices = reveal?.getIndices?.() ?? null;
   const columns = [...root.querySelectorAll(".reveal .slides > section")];
   const slides = slideElements(root);
@@ -373,8 +382,7 @@ export function firstSlide(slides: Element): Element[] {
  * `slide(0, 0)` gives it somewhere to be — after which the first slide is up
  * and the controls say what the deck can do.
  */
-function settle(): void {
-  const reveal = engine();
+function settle(reveal: RevealEngine | null): void {
   reveal?.sync?.();
   reveal?.slide?.(0, 0);
 }
@@ -387,8 +395,17 @@ function settle(): void {
  * `ready`, which is the first moment `sync` and `slide` exist to be called —
  * and on every deck after that as soon as the markup is in. Whichever order
  * the two arrive in, the window ends up showing slide one.
+ *
+ * The engine is a parameter, defaulting to the imported one, so that a test
+ * can drive a stand-in — or a second, freshly loaded copy of the real engine —
+ * without any of it going through a global.
  */
-export function mountDeck(root: ParentNode, fragment: string, started: boolean): boolean {
+export function mountDeck(
+  root: ParentNode,
+  fragment: string,
+  started: boolean,
+  reveal: RevealEngine | null = engine(),
+): boolean {
   const slides = root.querySelector(".reveal .slides");
   if (slides === null) return started;
   slides.innerHTML = fragment;
@@ -396,16 +413,20 @@ export function mountDeck(root: ParentNode, fragment: string, started: boolean):
   // waiting to be told. The engine sets the same class a moment later; until
   // it does, this is the difference between a deck and a blank window.
   for (const section of firstSlide(slides)) section.classList.add("present");
-  const reveal = engine();
   if (reveal === null) return started;
   if (started) {
     // A second Present replaces the deck in the window that is already open.
-    settle();
+    settle(reveal);
     return true;
   }
-  Promise.resolve(reveal.initialize({ ...DECK_CONFIG })).then(settle, (error: unknown) => {
-    console.warn(`the deck engine: ${String(error)}`);
-  });
+  Promise.resolve(reveal.initialize({ ...DECK_CONFIG })).then(
+    () => {
+      settle(reveal);
+    },
+    (error: unknown) => {
+      console.warn(`the deck engine: ${String(error)}`);
+    },
+  );
   return true;
 }
 

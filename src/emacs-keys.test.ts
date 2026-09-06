@@ -2020,13 +2020,29 @@ describe("the package's own installation", () => {
     // command table with it.
     const dropped = "const Ww={a:1};for(let e in Ww)Ww[e];\n";
 
+    // The guard has a second gate — the deck engine, `iss-2609061132369973` —
+    // over the present entry, and it fails a `dist` with no present chunk in
+    // it. This test is about the keymap, so every folder it writes gets a
+    // healthy present chunk underneath: what varies here is the keymap alone.
+    // The engine gate's own failures are held in `present.test.ts`.
+    const engine = [
+      "class P{}var F=P;",
+      'F.initialize=e=>(Object.assign(F,new P(document.querySelector(".reveal"),e)),F.initialize());',
+      'function V(){return typeof F?.initialize==="function"?F:null}',
+      "function Me(e,t,n,r=V()){return r===null?n:(r.initialize({}),!0)}",
+      "console.log(Me);",
+    ].join("\n");
+
     /** Write one `dist` folder of named chunks and run the guard over it. */
     const runOver = (
       chunks: Readonly<Record<string, string>>,
     ): { code: number; output: string } => {
       const dist = mkdtempSync(join(tmpdir(), "check-bundle-"));
       mkdirSync(join(dist, "assets"));
-      for (const [name, source] of Object.entries(chunks)) {
+      for (const [name, source] of Object.entries({
+        "present-abc123.js": engine,
+        ...chunks,
+      })) {
         writeFileSync(join(dist, "assets", name), source);
       }
       try {

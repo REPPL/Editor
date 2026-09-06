@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { pathResolver } from "./core/assets";
 import { DECK_CONFIG } from "./core/render/slides";
@@ -19,11 +19,13 @@ import {
   createNotesView,
   createRecorder,
   deckFragment,
+  engine,
   headlineOf,
   mountDeck,
   notesOf,
   observeDeck,
   slideElements,
+  type RevealEngine,
 } from "./present";
 
 /** The chapter the manual checks use, so every check looks at one deck. */
@@ -139,8 +141,8 @@ describe("the present window", () => {
   it("mounts the fragment where reveal.js looks for it", () => {
     document.body.innerHTML = '<div class="reveal"><div class="slides"></div></div>';
     const fragment = deckFragment("## Beginnings\n\nA.\n", pathResolver());
-    // The engine is absent in a test, so the page is filled and nothing starts.
-    expect(mountDeck(document, fragment, false)).toBe(false);
+    // No engine is handed over, so the page is filled and nothing starts.
+    expect(mountDeck(document, fragment, false, null)).toBe(false);
     const slides = document.querySelector(".reveal .slides");
     expect(slides?.querySelectorAll("section")).toHaveLength(1);
     // The markup is the fragment's, with the classes that say which slide the
@@ -161,7 +163,7 @@ describe("the present window", () => {
       pathResolver(),
     );
     expect(fragment).not.toContain("present");
-    mountDeck(document, fragment, false);
+    mountDeck(document, fragment, false, null);
     const slides = document.querySelector(".reveal .slides");
     expect(withoutPresent(slides?.innerHTML ?? "")).toBe(fragment);
     // Both marks were made: the column and the first slide inside it.
@@ -170,8 +172,8 @@ describe("the present window", () => {
 
   it("replaces the deck rather than adding a second one", () => {
     document.body.innerHTML = '<div class="reveal"><div class="slides"></div></div>';
-    mountDeck(document, deckFragment("## One\n", pathResolver()), false);
-    mountDeck(document, deckFragment("## Two\n", pathResolver()), false);
+    mountDeck(document, deckFragment("## One\n", pathResolver()), false, null);
+    mountDeck(document, deckFragment("## Two\n", pathResolver()), false, null);
     const slides = document.querySelector(".reveal .slides");
     expect(slides?.querySelectorAll("section")).toHaveLength(1);
     expect(slides?.textContent).toBe("Two");
@@ -179,7 +181,7 @@ describe("the present window", () => {
 
   it("does nothing at all when the page carries no deck container", () => {
     document.body.innerHTML = "<p>Not a deck.</p>";
-    expect(mountDeck(document, "<section></section>", false)).toBe(false);
+    expect(mountDeck(document, "<section></section>", false, null)).toBe(false);
     expect(document.body.innerHTML).toBe("<p>Not a deck.</p>");
   });
 });
@@ -198,7 +200,7 @@ describe("the present window", () => {
  */
 describe("starting the engine on a deck", () => {
   /** A stand-in engine that records the order it was called in. */
-  function fakeEngine(calls: string[]): Record<string, unknown> {
+  function fakeEngine(calls: string[]): RevealEngine {
     return {
       initialize(config: Record<string, unknown>) {
         calls.push(`initialize:${String(config["disableLayout"])}`);
@@ -213,18 +215,6 @@ describe("starting the engine on a deck", () => {
     };
   }
 
-  async function withEngine(calls: string[], body: () => Promise<void> | void): Promise<void> {
-    const global = globalThis as { Reveal?: unknown };
-    const before = global.Reveal;
-    global.Reveal = fakeEngine(calls);
-    try {
-      await body();
-    } finally {
-      if (before === undefined) delete global.Reveal;
-      else global.Reveal = before;
-    }
-  }
-
   const DECK = "## One\n\nThe first face.\n\n## Two\n\nThe second face.\n";
 
   function stage(): void {
@@ -235,31 +225,31 @@ describe("starting the engine on a deck", () => {
   it("puts the fragment in before it starts the engine, and syncs after", async () => {
     const calls: string[] = [];
     stage();
-    await withEngine(calls, async () => {
-      expect(mountDeck(document, deckFragment(DECK, pathResolver()), false)).toBe(true);
-      // The engine is started on a deck that is already there, so `sync` sees
-      // both slides; and the sync happens once `initialize` has resolved,
-      // which is the first moment `sync` and `slide` exist to be called at
-      // all.
-      expect(calls).toEqual(["initialize:true"]);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    const reveal = fakeEngine(calls);
+    expect(mountDeck(document, deckFragment(DECK, pathResolver()), false, reveal)).toBe(
+      true,
+    );
+    // The engine is started on a deck that is already there, so `sync` sees
+    // both slides; and the sync happens once `initialize` has resolved, which
+    // is the first moment `sync` and `slide` exist to be called at all.
+    expect(calls).toEqual(["initialize:true"]);
+    await Promise.resolve();
+    await Promise.resolve();
     expect(calls).toEqual(["initialize:true", "sync:2", "slide:0,0"]);
   });
 
-  it("syncs a running engine the moment a second deck lands", async () => {
+  it("syncs a running engine the moment a second deck lands", () => {
     const calls: string[] = [];
     stage();
-    await withEngine(calls, () => {
-      expect(mountDeck(document, deckFragment(DECK, pathResolver()), true)).toBe(true);
-    });
+    expect(
+      mountDeck(document, deckFragment(DECK, pathResolver()), true, fakeEngine(calls)),
+    ).toBe(true);
     expect(calls).toEqual(["sync:2", "slide:0,0"]);
   });
 
   it("shows the first slide even with no engine at all", () => {
     stage();
-    mountDeck(document, deckFragment(DECK, pathResolver()), false);
+    mountDeck(document, deckFragment(DECK, pathResolver()), false, null);
     const slides = slideElements(document);
     expect(slides.findIndex((slide) => slide.classList.contains("present"))).toBe(0);
     expect(headlineOf(slides[0] ?? null)).toBe("One");
@@ -274,6 +264,7 @@ describe("starting the engine on a deck", () => {
       document,
       deckFragment("## One\n\n### Below\n\nA sub-section.\n", pathResolver()),
       false,
+      null,
     );
     const column = document.querySelector(".reveal .slides > section");
     expect(column?.querySelectorAll("section").length).toBeGreaterThan(0);
@@ -283,13 +274,13 @@ describe("starting the engine on a deck", () => {
 
   it("reports the empty window the maintainer saw, and the deck that follows", () => {
     stage();
-    const empty = observeDeck(document, "before");
+    const empty = observeDeck(document, "before", null);
     expect(empty.slides).toBe(0);
     expect(empty.presentAt).toBe(-1);
     expect(empty.indexh).toBeNull();
 
-    mountDeck(document, deckFragment(DECK, pathResolver()), false);
-    const shown = observeDeck(document, "mount");
+    mountDeck(document, deckFragment(DECK, pathResolver()), false, null);
+    const shown = observeDeck(document, "mount", null);
     expect(shown.phase).toBe("mount");
     expect(shown.slides).toBe(2);
     expect(shown.columns).toBe(2);
@@ -310,12 +301,12 @@ describe("starting the engine on a deck", () => {
     const other = document.implementation.createHTMLDocument("elsewhere");
     other.body.innerHTML =
       '<div class="reveal"><div class="slides"></div></div>';
-    mountDeck(other, deckFragment(DECK, pathResolver()), false);
+    mountDeck(other, deckFragment(DECK, pathResolver()), false, null);
 
-    const seen = observeDeck(other, "mount");
+    const seen = observeDeck(other, "mount", null);
     expect(seen.slides).toBe(2);
     expect(seen.presentAt).toBe(0);
-    expect(observeDeck(document, "mount").slides).toBe(0);
+    expect(observeDeck(document, "mount", null).slides).toBe(0);
     await Promise.resolve();
   });
 
@@ -356,8 +347,8 @@ describe("starting the engine on a deck", () => {
     controls.innerHTML =
       '<button class="navigate-left" disabled></button><button class="navigate-right enabled"></button>';
     document.querySelector(".reveal")?.append(controls);
-    mountDeck(document, deckFragment(DECK, pathResolver()), false);
-    const seen = observeDeck(document, "mount");
+    mountDeck(document, deckFragment(DECK, pathResolver()), false, null);
+    const seen = observeDeck(document, "mount", null);
     expect(seen.controls).toEqual({ "navigate-left": true, "navigate-right": false });
   });
 });
@@ -392,7 +383,7 @@ describe("the speaker's notes", () => {
       '<div class="present-stage"><div class="reveal"><div class="slides"></div></div></div>';
     const host = document.querySelector<HTMLElement>(".present-stage");
     if (!host) throw new Error("no stage");
-    mountDeck(document, deckFragment(CHAPTER, pathResolver()), false);
+    mountDeck(document, deckFragment(CHAPTER, pathResolver()), false, null);
     return host;
   }
 
@@ -447,11 +438,48 @@ describe("the speaker's notes", () => {
 });
 
 /**
+ * jsdom implements no media queries and reveal.js asks for one on start.
+ *
+ * Shared by both of the describes below, because both start the real engine.
+ */
+function stubMediaQueries(): void {
+  const window_ = window as unknown as Record<string, unknown>;
+  window_["matchMedia"] ??= (query: string) => ({
+    matches: false,
+    media: query,
+    addListener() {
+      /* jsdom implements no media queries. */
+    },
+    removeListener() {
+      /* jsdom implements no media queries. */
+    },
+    addEventListener() {
+      /* jsdom implements no media queries. */
+    },
+    removeEventListener() {
+      /* jsdom implements no media queries. */
+    },
+    dispatchEvent: () => false,
+  });
+}
+
+/** The stage `present.html` lays out, empty and ready for a deck. */
+function stageDeck(): void {
+  document.body.innerHTML =
+    '<div class="present-stage"><div class="reveal"><div class="slides"></div></div></div>';
+}
+
+/** Let the engine finish starting; it dispatches `ready` on a timeout. */
+function settledEngine(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 20));
+}
+
+/**
  * The reported bug, reproduced against the real engine, and the repair.
  *
  * This is the automated half of the manual rows in
  * `spc-2609051353412219` and `spc-2609051353425884`. It loads the vendored
- * reveal.js — the same file the app and the published deck load — into jsdom
+ * reveal.js — the same engine the app and the published deck load — into jsdom
  * and reads back the same fields the present window writes to
  * `EDITOR_PRESENT_LOG` in a scripted run: how many slides the deck has, where
  * the engine says it is, which section carries `present`, and whether each
@@ -466,64 +494,43 @@ describe("the speaker's notes", () => {
 describe("the deck the real engine is holding", () => {
   const CHAPTER_TEXT = readFileSync(CHAPTER, "utf8");
 
-  /** Load the vendored engine onto the global, as `present.html` does. */
-  function loadEngine(): void {
-    const window_ = window as unknown as Record<string, unknown>;
-    window_["matchMedia"] ??= (query: string) => ({
-      matches: false,
-      media: query,
-      addListener() {
-        /* jsdom implements no media queries. */
-      },
-      removeListener() {
-        /* jsdom implements no media queries. */
-      },
-      addEventListener() {
-        /* jsdom implements no media queries. */
-      },
-      removeEventListener() {
-        /* jsdom implements no media queries. */
-      },
-      dispatchEvent: () => false,
-    });
+  /**
+   * A fresh copy of the vendored engine, handed back rather than left global.
+   *
+   * The engine is a singleton: `initialize` copies a whole running deck onto
+   * the object it was called on, so a test that started one and a test that
+   * needs a pristine one cannot share it. The UMD build is evaluated here for
+   * exactly that — a new copy per test — and the global it assigns on the way
+   * past is taken off again immediately, so nothing under test can be reading
+   * it. What the tests drive is the object, passed in.
+   */
+  function freshEngine(): RevealEngine {
+    stubMediaQueries();
+    const global = globalThis as { Reveal?: RevealEngine };
     new Function(readFileSync("src/vendor/reveal/reveal.js", "utf8"))();
-  }
-
-  function drop(): void {
-    delete (globalThis as { Reveal?: unknown }).Reveal;
-  }
-
-  function stage(): void {
-    document.body.innerHTML =
-      '<div class="present-stage"><div class="reveal"><div class="slides"></div></div></div>';
-  }
-
-  /** Let the engine finish starting; it dispatches `ready` on a timeout. */
-  function settled(): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 20));
+    const loaded = global.Reveal;
+    delete global.Reveal;
+    if (loaded === undefined) throw new Error("the vendored engine did not load");
+    return loaded;
   }
 
   it("opens on the first slide, with the controls saying where it can go", async () => {
-    stage();
-    loadEngine();
-    try {
-      mountDeck(document, deckFragment(CHAPTER_TEXT, pathResolver()), false);
-      await settled();
-      const seen = observeDeck(document, "mount");
-      expect(seen.slides).toBeGreaterThan(1);
-      expect(seen.indexh).toBe(0);
-      expect(seen.indexv).toBe(0);
-      expect(seen.presentAt).toBe(0);
-      expect(seen.sections[0]?.classes).toContain("present");
-      expect(headlineOf(slideElements(document)[0] ?? null)).toBe(
-        "Technology Impact Assessment",
-      );
-      // Nowhere to go back to from slide one, and somewhere to go forward.
-      expect(seen.controls["navigate-left"]).toBe(true);
-      expect(seen.controls["navigate-right"]).toBe(false);
-    } finally {
-      drop();
-    }
+    stageDeck();
+    const reveal = freshEngine();
+    mountDeck(document, deckFragment(CHAPTER_TEXT, pathResolver()), false, reveal);
+    await settledEngine();
+    const seen = observeDeck(document, "mount", reveal);
+    expect(seen.slides).toBeGreaterThan(1);
+    expect(seen.indexh).toBe(0);
+    expect(seen.indexv).toBe(0);
+    expect(seen.presentAt).toBe(0);
+    expect(seen.sections[0]?.classes).toContain("present");
+    expect(headlineOf(slideElements(document)[0] ?? null)).toBe(
+      "Technology Impact Assessment",
+    );
+    // Nowhere to go back to from slide one, and somewhere to go forward.
+    expect(seen.controls["navigate-left"]).toBe(true);
+    expect(seen.controls["navigate-right"]).toBe(false);
   });
 
   it("repairs a deck that landed after the engine had already started", async () => {
@@ -531,32 +538,206 @@ describe("the deck the real engine is holding", () => {
     // point of view: started on an empty `.slides`, it holds an index of
     // nothing, marks no section `present`, and disables every control — an
     // empty window with a grey back arrow.
-    stage();
-    loadEngine();
-    try {
-      const reveal = globalThis as unknown as {
-        Reveal: { initialize(config: Record<string, unknown>): Promise<void> };
-      };
-      await reveal.Reveal.initialize({ ...DECK_CONFIG });
-      await settled();
-      const broken = observeDeck(document, "started-empty");
-      expect(broken.slides).toBe(0);
-      expect(broken.indexh).toBeNull();
-      expect(broken.presentAt).toBe(-1);
-      expect(Object.values(broken.controls).every((disabled) => disabled)).toBe(true);
+    stageDeck();
+    const reveal = freshEngine();
+    await reveal.initialize({ ...DECK_CONFIG });
+    await settledEngine();
+    const broken = observeDeck(document, "started-empty", reveal);
+    expect(broken.slides).toBe(0);
+    expect(broken.indexh).toBeNull();
+    expect(broken.presentAt).toBe(-1);
+    expect(Object.values(broken.controls).every((disabled) => disabled)).toBe(true);
 
-      // Mounting a deck into that window is the second Present, and it has to
-      // leave the window showing slide one with the controls tracking it.
-      mountDeck(document, deckFragment(CHAPTER_TEXT, pathResolver()), true);
-      await settled();
-      const repaired = observeDeck(document, "mount");
-      expect(repaired.slides).toBeGreaterThan(1);
-      expect(repaired.indexh).toBe(0);
-      expect(repaired.presentAt).toBe(0);
-      expect(repaired.controls["navigate-left"]).toBe(true);
-      expect(repaired.controls["navigate-right"]).toBe(false);
-    } finally {
-      drop();
+    // Mounting a deck into that window is the second Present, and it has to
+    // leave the window showing slide one with the controls tracking it.
+    mountDeck(document, deckFragment(CHAPTER_TEXT, pathResolver()), true, reveal);
+    await settledEngine();
+    const repaired = observeDeck(document, "mount", reveal);
+    expect(repaired.slides).toBeGreaterThan(1);
+    expect(repaired.indexh).toBe(0);
+    expect(repaired.presentAt).toBe(0);
+    expect(repaired.controls["navigate-left"]).toBe(true);
+    expect(repaired.controls["navigate-right"]).toBe(false);
+  });
+});
+
+/**
+ * The engine the window actually gets, with no global anywhere.
+ *
+ * `iss-2609061132369973`: the present window used to read `globalThis.Reveal`,
+ * which the vendored UMD build assigns only when it is *executed as a script*.
+ * The dev server serves that file raw, so the global was there; this suite
+ * used to evaluate the same file into jsdom's global, so it was there too. The
+ * release build bundles it instead, takes the UMD's CommonJS branch, and
+ * assigns no global at all — and the shipped window showed one slide with dead
+ * controls while both green checks went on saying it was fine.
+ *
+ * So this describe deletes the global first and never puts one back. Nothing
+ * below can be answered by an engine some other file left lying around: what
+ * `engine()` returns is what `src/present.ts` imported, and if the import ever
+ * stops resolving to the engine these fail rather than the release does.
+ *
+ * This runs last in the file on purpose. `initialize` mutates the imported
+ * singleton — that is what gives it `sync` and `slide` — so a test after it
+ * would no longer be looking at a pristine engine.
+ */
+describe("the engine present.ts imports", () => {
+  beforeEach(() => {
+    delete (globalThis as { Reveal?: unknown }).Reveal;
+  });
+
+  it("is there before the deck starts, with no global set", () => {
+    expect((globalThis as { Reveal?: unknown }).Reveal).toBeUndefined();
+    const reveal = engine();
+    expect(reveal).not.toBeNull();
+    expect(typeof reveal?.initialize).toBe("function");
+    expect(typeof reveal?.on).toBe("function");
+    // The stub is not the running deck: `sync` and `slide` arrive with it.
+    expect(reveal?.sync).toBeUndefined();
+    expect(reveal?.slide).toBeUndefined();
+  });
+
+  it("carries initialize, sync, slide and on once the deck has started", async () => {
+    stageDeck();
+    stubMediaQueries();
+    // Nothing sets a global: `mountDeck` is given no engine and has to find
+    // the one it imported.
+    expect((globalThis as { Reveal?: unknown }).Reveal).toBeUndefined();
+    expect(mountDeck(document, deckFragment("## One\n\nA.\n\n## Two\n\nB.\n", pathResolver()), false)).toBe(
+      true,
+    );
+    await settledEngine();
+
+    const reveal = engine();
+    expect(reveal).not.toBeNull();
+    for (const method of ["initialize", "sync", "slide", "on"] as const) {
+      expect(typeof reveal?.[method]).toBe("function");
     }
+    // Still no global, before or after: the window never needed one.
+    expect((globalThis as { Reveal?: unknown }).Reveal).toBeUndefined();
+
+    // And it is a live engine, not a shape that merely type-checks: it is
+    // holding this deck, on slide one, with the controls saying so.
+    const seen = observeDeck(document, "mount");
+    expect(seen.engine).toContain("sync");
+    expect(seen.engine).toContain("slide");
+    expect(seen.slides).toBe(2);
+    expect(seen.indexh).toBe(0);
+    expect(seen.presentAt).toBe(0);
+    expect(seen.controls["navigate-left"]).toBe(true);
+    expect(seen.controls["navigate-right"]).toBe(false);
+  });
+});
+
+/**
+ * The build gate, over the emitted file the suite above never sees.
+ *
+ * Everything else in this file runs against source. The bug did not live in
+ * the source: `src/present.ts` read `globalThis.Reveal`, which was the right
+ * thing to read everywhere except in the one artefact that ships. So the gate
+ * `npm run build` runs is exercised here the way `tools/check-bundle.mjs` is
+ * exercised for the keymap in `emacs-keys.test.ts` — over folders shaped like
+ * `dist`, one healthy and the rest broken in the ways that matter.
+ */
+describe("the deck engine the build gate looks for", () => {
+  /** The emitted shape of a working present chunk, minified as it ships. */
+  const ENGINE = [
+    "class P{}var F=P;",
+    'F.initialize=e=>(Object.assign(F,new P(document.querySelector(".reveal"),e)),F.initialize());',
+    'function V(){return typeof F?.initialize==="function"?F:null}',
+    "function Me(e,t,n,r=V()){return r===null?n:(r.initialize({}),!0)}",
+    "console.log(Me);",
+  ].join("\n");
+
+  /** A main chunk with the keymap whole, so only the engine gate can speak. */
+  const KEYMAP = [
+    "const Ww={a:1};class Q{static bindKey(){}static addCommands(){}}",
+    "for(let e in Ww)Q.bindKey(e,Ww[e]);",
+    "Q.addCommands({unsetTransientMark:function(){},killLine:function(){}});",
+  ].join("\n");
+
+  async function runOver(
+    chunks: Readonly<Record<string, string>>,
+  ): Promise<{ code: number; output: string }> {
+    const { execFileSync } = await import("node:child_process");
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+
+    const dist = mkdtempSync(join(tmpdir(), "check-bundle-present-"));
+    mkdirSync(join(dist, "assets"));
+    for (const [name, source] of Object.entries({
+      "main-abc123.js": KEYMAP,
+      ...chunks,
+    })) {
+      writeFileSync(join(dist, "assets", name), source);
+    }
+    try {
+      return {
+        code: 0,
+        output: execFileSync(
+          process.execPath,
+          [join(process.cwd(), "tools/check-bundle.mjs"), dist],
+          { encoding: "utf8", stdio: "pipe" },
+        ),
+      };
+    } catch (error) {
+      const failure = error as { status?: number; stderr?: string };
+      return { code: failure.status ?? 1, output: failure.stderr ?? "" };
+    }
+  }
+
+  it("passes a chunk that carries the engine and holds on to it", async () => {
+    const whole = await runOver({ "present-abc123.js": ENGINE });
+    expect(whole.code, whole.output).toBe(0);
+    expect(whole.output).toContain("the deck engine is installed");
+  });
+
+  it("fails the build that shipped: the engine bundled, the app on the global", async () => {
+    // `iss-2609061132369973` exactly. reveal.js is in the chunk — the bundler
+    // put it there — and the application asks a global that the module build
+    // never assigns. Every source-level check passes on this bundle.
+    const broken = ENGINE.replace(
+      'function V(){return typeof F?.initialize==="function"?F:null}',
+      "function V(){return globalThis.Reveal??null}",
+    );
+    expect(broken).not.toBe(ENGINE);
+    const seen = await runOver({ "present-abc123.js": broken });
+    expect(seen.code).not.toBe(0);
+    expect(seen.output).toContain("the engine accessor in src/present.ts");
+    expect(seen.output).toContain("reads the deck engine off a global");
+  });
+
+  it("fails a chunk with no engine in it at all", async () => {
+    const seen = await runOver({ "present-abc123.js": "console.log(1);" });
+    expect(seen.code).not.toBe(0);
+    expect(seen.output).toContain("initialize implementation");
+  });
+
+  it("fails a build whose present entry loads nothing with the engine in it", async () => {
+    // The wiring failure rather than the dropped one: the engine is whole in
+    // a chunk, and the window does not load that chunk.
+    const seen = await runOver({
+      "present-abc123.js": "console.log(1);",
+      "engine-def456.js": ENGINE,
+    });
+    expect(seen.code).not.toBe(0);
+    expect(seen.output).toContain("engine-def456.js");
+    expect(seen.output).toContain("does not load");
+  });
+
+  it("takes a chunk split for what it is, and passes it", async () => {
+    const seen = await runOver({
+      "present-abc123.js": 'import"./engine-def456.js";\nconsole.log(1);',
+      "engine-def456.js": ENGINE,
+    });
+    expect(seen.code, seen.output).toBe(0);
+    expect(seen.output).toContain("engine-def456.js");
+  });
+
+  it("fails a build that emitted no present entry at all", async () => {
+    const seen = await runOver({});
+    expect(seen.code).not.toBe(0);
+    expect(seen.output).toContain("present");
   });
 });

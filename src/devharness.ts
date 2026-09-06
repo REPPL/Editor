@@ -1,29 +1,37 @@
 /**
- * The development harness, driven by two environment variables.
+ * The development harness, driven by three environment variables.
  *
- * Both are read by the shell (`src-tauri/src/devharness.rs`) and both are unset
+ * All are read by the shell (`src-tauri/src/devharness.rs`) and all are unset
  * on an ordinary launch, so this module does nothing at all unless a run asks
  * for it. `EDITOR_OPEN_FOLDER` opens a document folder and its first chapter
  * without the dialog; `EDITOR_KEY_LOG` appends every key-log observation to a
  * file as one JSON object per line, so a script that presses real keys through
- * macOS can read back what the page saw.
+ * macOS can read back what the page saw; `EDITOR_PRESENT_ON_OPEN` presses
+ * Present on that first chapter.
  *
  * The line carries the buffer's first line as well as the chord, because a
  * stray character macOS composed out of an Option chord shows up in the text
  * and nowhere else.
+ *
+ * The third switch exists for the same reason as the second: a script cannot
+ * press `C-c C-p`. Without it a run that asked for `EDITOR_PRESENT_LOG` gets
+ * an empty file and no way to tell an engine that failed to start from a
+ * window that was never opened — which is exactly the ambiguity
+ * `iss-2609061132369973` had to be settled through.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 
 import type { App } from "./app";
 import { documentText } from "./editor";
-import { inShell } from "./doctree";
+import { inShell, presentChapter } from "./doctree";
 import type { KeyObservation } from "./keyspike";
 
 /** What the shell says the environment asked for. */
 interface HarnessSettings {
   readonly open_folder: string | null;
   readonly key_log: boolean;
+  readonly present_on_open: boolean;
 }
 
 /** One line of the key log, as the harness writes it. */
@@ -83,7 +91,8 @@ export async function startDevHarness(app: App): Promise<void> {
     console.warn(`development harness: ${String(error)}`);
     return;
   }
-  if (!settings.key_log && settings.open_folder === null) return;
+  if (!settings.key_log && !settings.present_on_open && settings.open_folder === null)
+    return;
 
   if (settings.key_log) {
     app.keyLog.observe((observation) => {
@@ -108,6 +117,21 @@ export async function startDevHarness(app: App): Promise<void> {
       chapter = first.path;
     }
     app.view.focus();
+  }
+
+  // Present, as the chord would: the buffer's text, the open chapter, and one
+  // window. There is nothing to present until a chapter is open, so a run that
+  // asked for this without naming a folder gets nothing and is told why.
+  if (settings.present_on_open) {
+    if (chapter === null) {
+      console.warn("EDITOR_PRESENT_ON_OPEN: no chapter is open to present");
+    } else {
+      try {
+        await presentChapter(documentText(app.view), chapter);
+      } catch (error) {
+        console.warn(`EDITOR_PRESENT_ON_OPEN: ${String(error)}`);
+      }
+    }
   }
 
   if (settings.key_log) {

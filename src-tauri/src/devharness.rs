@@ -8,6 +8,12 @@
 //!   so the run begins with a chapter in the buffer and no dialog in the way.
 //! - `EDITOR_KEY_LOG` names a file the key log is appended to, one JSON object
 //!   per line, so the run leaves a record a script can read back.
+//! - `EDITOR_PRESENT_ON_OPEN` opens the present window on the first chapter as
+//!   soon as the folder is loaded, because a script cannot press `C-c C-p`.
+//!   Without it a run that wants to look at the deck — through
+//!   `EDITOR_PRESENT_LOG` — produces no line at all, since nothing ever opened
+//!   the window. It does nothing on its own: there is no chapter to present
+//!   until `EDITOR_OPEN_FOLDER` has opened one.
 //!
 //! Neither does anything when its variable is unset, which is every ordinary
 //! launch. The log path is the one that needs guarding: the web view is a trust
@@ -31,6 +37,9 @@ pub const OPEN_FOLDER_VAR: &str = "EDITOR_OPEN_FOLDER";
 /// The variable naming the file the key log is appended to.
 pub const KEY_LOG_VAR: &str = "EDITOR_KEY_LOG";
 
+/// The variable asking for the present window on the chapter that opens.
+pub const PRESENT_ON_OPEN_VAR: &str = "EDITOR_PRESENT_ON_OPEN";
+
 /// The longest line the key log accepts.
 ///
 /// One observation is a short object. A cap keeps a runaway page from filling
@@ -42,6 +51,7 @@ const MAX_LINE: usize = 4096;
 pub struct DevHarness {
     open_folder: Mutex<Option<String>>,
     key_log: Mutex<Option<PathBuf>>,
+    present_on_open: Mutex<bool>,
 }
 
 /// What the frontend is told about the harness.
@@ -54,6 +64,8 @@ pub struct HarnessSettings {
     /// The path itself never crosses: the page has no use for it, and a page
     /// that cannot name the file cannot ask for a different one.
     pub key_log: bool,
+    /// Whether to present the first chapter as soon as it is open.
+    pub present_on_open: bool,
 }
 
 /// The directories a key-log path may sit in.
@@ -129,6 +141,26 @@ pub fn configure<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
             Err(error) => log::warn!("{error}"),
         }
     }
+
+    if asked_for(env::var_os(PRESENT_ON_OPEN_VAR).as_deref()) {
+        log::info!("{PRESENT_ON_OPEN_VAR}: presenting the chapter that opens");
+        match state.present_on_open.lock() {
+            Ok(mut held) => *held = true,
+            Err(_) => log::error!("the development harness is unreadable"),
+        }
+    }
+}
+
+/// Whether a switch-shaped variable is on.
+///
+/// Set is on, with the two spellings of "no" that a shell script writes by
+/// accident taken as off: an empty value, which is what an unset variable
+/// expands to, and `0`.
+fn asked_for(raw: Option<&std::ffi::OsStr>) -> bool {
+    match raw {
+        None => false,
+        Some(value) => !matches!(value.to_string_lossy().trim(), "" | "0"),
+    }
 }
 
 /// Put a value behind a mutex, treating a poisoned lock as a lost setting.
@@ -145,6 +177,7 @@ pub fn dev_harness(state: tauri::State<'_, DevHarness>) -> HarnessSettings {
     HarnessSettings {
         open_folder: state.open_folder.lock().ok().and_then(|held| held.clone()),
         key_log: state.key_log.lock().is_ok_and(|held| held.is_some()),
+        present_on_open: state.present_on_open.lock().is_ok_and(|held| *held),
     }
 }
 
@@ -221,6 +254,17 @@ mod tests {
             .and_then(|parent| parent.canonicalize().ok())
             .expect("the parent should resolve");
         assert_eq!(allowed, landed.starts_with(&roots()[0]));
+    }
+
+    #[test]
+    fn the_present_switch_is_off_unless_it_is_asked_for() {
+        use std::ffi::OsStr;
+        assert!(!asked_for(None));
+        assert!(!asked_for(Some(OsStr::new(""))));
+        assert!(!asked_for(Some(OsStr::new("0"))));
+        assert!(!asked_for(Some(OsStr::new("  "))));
+        assert!(asked_for(Some(OsStr::new("1"))));
+        assert!(asked_for(Some(OsStr::new("yes"))));
     }
 
     #[test]

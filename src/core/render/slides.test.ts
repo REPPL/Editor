@@ -231,5 +231,10 @@ describe("the engine", () => {
     expect(DECK_ENGINE_FILES).toContain("reveal.css");
     expect(DECK_ENGINE_FILES).toContain("LICENSE");
     expect(DECK_ENGINE_FILES.some((file) => file.includes("theme"))).toBe(false);
+    // The ES-module build is vendored too, for `src/present.ts` to import,
+    // and it must not travel: a published deck and a single-file export load
+    // the engine from a plain `<script>` tag under `script-src 'self'`, and a
+    // module served to a tag that is not one runs nothing at all.
+    expect(DECK_ENGINE_FILES).not.toContain("reveal.esm.js");
   });
 });

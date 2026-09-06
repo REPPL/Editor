@@ -327,16 +327,29 @@ against the tablet path, not against the desktop editor.
 ## Driving the checklist from a script
 
 A person working down the table cannot say afterwards which chord the page
-saw, so two environment variables let a script do it instead. Both are unset
-on every ordinary launch, and the application does nothing with either until
-one is set.
+saw, so three environment variables let a script do it instead. All are unset
+on every ordinary launch, and the application does nothing with any of them
+until one is set.
 
 | Variable | Effect |
 |---|---|
 | `EDITOR_OPEN_FOLDER` | A document folder the window opens on start, along with its first chapter, so a run begins with text in the buffer and no dialog in the way |
 | `EDITOR_KEY_LOG` | A file every key-log observation is appended to, one JSON object per line |
+| `EDITOR_PRESENT_ON_OPEN` | Presses Present on that first chapter as soon as it is open, because a script cannot press `C-c C-p`. Set it to anything but an empty value or `0`; it needs `EDITOR_OPEN_FOLDER`, since there is otherwise no chapter to present |
 
-The shell reads both once at start (`src-tauri/src/devharness.rs`) and the
+`EDITOR_PRESENT_ON_OPEN` is what makes `EDITOR_PRESENT_LOG` (see
+`src-tauri/src/present.rs`) usable from a script at all: without it a run that
+asked for a present log gets an empty file, and an empty file cannot tell an
+engine that failed to start from a window that was never opened. That
+ambiguity is what `iss-2609061132369973` had to be settled through, and this
+is the line the release build wrote once it was:
+
+```json
+{"phase":"ready","slides":5,"indexh":0,"indexv":0,"engine":"initialize+sync+slide+ready","presentAt":0,
+ "controls":{"navigate-left":true,"navigate-right":false,"navigate-up":true,"navigate-down":true}}
+```
+
+The shell reads all three once at start (`src-tauri/src/devharness.rs`) and the
 page asks it what they said (`src/devharness.ts`). The log path is the one
 that needs guarding, because the web view is a trust boundary and a script
 running in it can call any command: the path is resolved from the environment

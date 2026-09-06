@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 /*
- * Check that the built bundle still carries the Emacs keymap.
+ * Check that the built bundle still carries what the running app needs.
+ *
+ * Two gates, one shape of bug: a dependency that installs itself correctly on
+ * disk, correctly under the dev server, and correctly under the test runner,
+ * and is then taken apart by the bundler on the one path nobody runs before
+ * shipping. Neither gate can be answered by a unit test, because a unit test
+ * never sees the emitted file.
+ *
+ * GATE ONE: the Emacs keymap.
  *
  * `@replit/codemirror-emacs` installs itself in two module-level calls, and
  * both carry a `/*@__PURE__*\/` annotation saying they may be dropped:
@@ -30,6 +38,32 @@
  * matters: is the keymap whole in some chunk the entry actually loads? The
  * entry's own imports are followed, transitively, and the run fails only when
  * no chunk on that graph carries it.
+ *
+ * GATE TWO: the deck engine the present window drives.
+ *
+ * `iss-2609061132369973`: `present.html` used to load the vendored UMD build
+ * of reveal.js from a `<script type="module">` tag and `src/present.ts` read
+ * the `Reveal` that file assigns to `globalThis`. The assignment happens in
+ * the UMD's *last* branch, the one taken when the file is executed as a
+ * script. The dev server serves it raw, so that branch ran and the global was
+ * there; the jsdom suite evaluated the same file into its own global, so it
+ * was there too. The release build handed the file to the bundler instead,
+ * which read the UMD's *first* branch — `typeof exports === "object"` — took
+ * it for CommonJS, and turned `module.exports = factory()` into a module
+ * export. No global was ever assigned. `globalThis.Reveal` was `undefined` in
+ * the shipped window, the deck mounted with no engine behind it, and the
+ * maintainer got one slide and a row of dead arrows while every check stayed
+ * green.
+ *
+ * The repair is to import the engine — the ES-module build, which means the
+ * same thing to a bundler, a dev server and a test runner alike — and this is
+ * the half of the guard that reads the emitted file. Three questions, on the
+ * present entry's own graph: is reveal's `initialize` implementation actually
+ * in there; does the accessor `src/present.ts` reads the engine through
+ * resolve to that same binding; and is that accessor what the mount defaults
+ * to. A build where the engine is present but the application is looking
+ * somewhere else passes the first question and fails the second, which is
+ * exactly the build that shipped.
  *
  * Usage: node tools/check-bundle.mjs [dist directory]
  */
@@ -163,6 +197,162 @@ function graphFrom(assets, entry) {
   return seen;
 }
 
+/**
+ * reveal.js's own `initialize`, whatever the bundler renamed it to.
+ *
+ * The engine's last statement wires the stub the module exports to the deck it
+ * builds:
+ *
+ *     Reveal.initialize = options => (
+ *       Object.assign(Reveal, new Deck(document.querySelector(".reveal"), options)),
+ *       …,
+ *       Reveal.initialize()
+ *     );
+ *
+ * Structure again rather than names: the back-reference ties the object being
+ * assigned *to* to the object whose `initialize` is being defined, and
+ * `document.querySelector(".reveal")` is the engine's own literal, which no
+ * minifier renames. The identifier it captures is the engine's binding in the
+ * emitted chunk, which is the thing the second question is about.
+ */
+const ENGINE_INITIALIZE =
+  /([\w$]+)\.initialize\s*=\s*[\w$]+\s*=>\s*\(\s*Object\.assign\(\s*\1\s*,\s*new\s+[\w$]+\(\s*document\.querySelector\(\s*["'`]\.reveal["'`]\s*\)/;
+
+/**
+ * Anything at all reading the engine off a global.
+ *
+ * The bug's own spelling. `src/present.ts` must not go back to it, and no
+ * chunk on the present graph should mention it: the ES-module build never
+ * assigns one, so a read here could only ever answer `undefined`.
+ */
+const GLOBAL_READ =
+  /\b(?:globalThis|window|self)\s*(?:\.\s*Reveal\b|\[\s*["'`]Reveal["'`]\s*\])/;
+
+/** One identifier, safe to paste into a regular expression. */
+function quoted(name) {
+  return name.replace(/[$]/g, "\\$&");
+}
+
+/**
+ * The accessor `src/present.ts` reads the engine through, for one binding.
+ *
+ * `export function engine() { return typeof Reveal?.initialize === "function"
+ * ? Reveal : null; }` — asked of *this* binding, so it answers the question
+ * the release build failed: not "is the engine in the bundle" but "is the
+ * engine in the bundle the one the application is holding". Returns the
+ * accessor's own emitted name, or null.
+ */
+function accessorFor(source, binding) {
+  const name = quoted(binding);
+  const found = new RegExp(
+    `function\\s+([\\w$]+)\\s*\\(\\s*\\)\\s*\\{\\s*return\\s+typeof\\s+${name}\\s*\\?\\.\\s*initialize\\s*={2,3}\\s*["'\`]function["'\`]\\s*\\?\\s*${name}\\s*:\\s*null\\s*\\}`,
+  ).exec(source);
+  return found === null ? null : found[1];
+}
+
+/**
+ * What one source is missing of the engine wiring. Empty means it is whole.
+ *
+ * The three questions in order, because each one only means anything if the
+ * one before it was answered: the engine is here, the accessor resolves to
+ * *this* engine, and the mount defaults to *that* accessor.
+ */
+function engineMissingFrom(source) {
+  const found = ENGINE_INITIALIZE.exec(source);
+  if (found === null) return ["reveal.js's own initialize implementation"];
+  const binding = found[1];
+  const accessor = accessorFor(source, binding);
+  if (accessor === null) {
+    return [
+      `the engine accessor in src/present.ts resolving to ${binding}, which is the engine this chunk carries`,
+    ];
+  }
+  if (!source.includes(`=${accessor}()`)) {
+    return [`the mount defaulting to ${accessor}(), the accessor that holds the engine`];
+  }
+  return [];
+}
+
+/**
+ * One gate: something the running application needs, in the emitted files.
+ *
+ * The same shape for both, because the same reasoning holds for both. Which
+ * chunk carries it is the bundler's business, so the entry's own imports are
+ * followed transitively and the run fails only when nothing on that graph has
+ * it; and where else it landed is reported, because a chunk the entry does not
+ * load is a wiring problem rather than a dropped installation.
+ */
+function gate({ assets, chunks, entryPattern, what, missingFrom: missing, note }) {
+  const entries = chunks.filter((name) => entryPattern.test(name));
+  if (entries.length === 0) {
+    console.error(
+      `check-bundle: no ${entryPattern.source} in ${assets}. The build wrote ${
+        chunks.length === 0 ? "no chunk at all" : chunks.join(", ")
+      }.`,
+    );
+    return 1;
+  }
+
+  const failures = [];
+  const installed = [];
+  for (const entry of entries) {
+    const reachable = graphFrom(assets, entry);
+    const carrier = reachable.find(
+      (name) => missing(readFileSync(join(assets, name), "utf8")).length === 0,
+    );
+    if (carrier === undefined) {
+      failures.push({
+        entry,
+        reachable,
+        missing: missing(readFileSync(join(assets, entry), "utf8")),
+      });
+    } else {
+      installed.push(carrier === entry ? carrier : `${carrier} (loaded by ${entry})`);
+    }
+  }
+
+  if (failures.length === 0) {
+    console.log(`check-bundle: ${what} is installed in ${installed.join(", ")}.`);
+    return 0;
+  }
+
+  for (const { entry, reachable, missing: absent } of failures) {
+    console.error(
+      `check-bundle: nothing ${entry} loads carries ${what}. ${entry} itself is missing ${absent.join(", ")}.`,
+    );
+    console.error(
+      `check-bundle: it loads ${reachable.length === 1 ? "no other chunk" : reachable.slice(1).join(", ")}.`,
+    );
+    const elsewhere = chunks
+      .filter((other) => !reachable.includes(other))
+      .filter((other) => missing(readFileSync(join(assets, other), "utf8")).length === 0);
+    if (elsewhere.length > 0) {
+      console.error(
+        `check-bundle: it is whole in ${elsewhere.join(", ")}, which ${entry} does not load, so the wiring moved rather than ${what} being dropped.`,
+      );
+    }
+  }
+  console.error(`check-bundle: ${note}`);
+  return 1;
+}
+
+/**
+ * Nobody on the present graph reads the engine off a global.
+ *
+ * Separate from the gate above because it is the opposite kind of question: a
+ * global read is not something missing from a chunk, it is something present
+ * in one, and one chunk having it is enough to fail.
+ */
+function globalReadIn(assets, chunks) {
+  const entries = chunks.filter((name) => /^present-.*\.js$/.test(name));
+  for (const entry of entries) {
+    for (const name of graphFrom(assets, entry)) {
+      if (GLOBAL_READ.test(readFileSync(join(assets, name), "utf8"))) return name;
+    }
+  }
+  return null;
+}
+
 function main() {
   const dist = process.argv[2] ?? "dist";
   const assets = join(dist, "assets");
@@ -175,65 +365,32 @@ function main() {
     return 1;
   }
 
-  const entries = chunks.filter((name) => /^main-.*\.js$/.test(name));
-  if (entries.length === 0) {
-    console.error(
-      `check-bundle: no main-*.js in ${assets}. The build wrote ${
-        chunks.length === 0 ? "no chunk at all" : chunks.join(", ")
-      }.`,
-    );
-    return 1;
-  }
+  // Both gates run whatever the first one answers: a build with two things
+  // wrong should say so once rather than over two runs.
+  const keymap = gate({
+    assets,
+    chunks,
+    entryPattern: /^main-.*\.js$/,
+    what: "the Emacs keymap",
+    missingFrom,
+    note: "the bundler took @replit/codemirror-emacs's own installation for pure calls. See the treeshake note in vite.config.ts.",
+  });
+  const deckEngine = gate({
+    assets,
+    chunks,
+    entryPattern: /^present-.*\.js$/,
+    what: "the deck engine",
+    missingFrom: engineMissingFrom,
+    note: "the present window has no engine to drive, or is not holding the one that was bundled. See iss-2609061132369973 and the import at the top of src/present.ts.",
+  });
 
-  const failures = [];
-  const installed = [];
-  for (const entry of entries) {
-    // The entry and everything it loads: which of them carries the keymap is
-    // the bundler's business, and a chunk split is not a keymap being dropped.
-    const reachable = graphFrom(assets, entry);
-    const carrier = reachable.find(
-      (name) => missingFrom(readFileSync(join(assets, name), "utf8")).length === 0,
-    );
-    if (carrier === undefined) {
-      failures.push({
-        entry,
-        reachable,
-        missing: missingFrom(readFileSync(join(assets, entry), "utf8")),
-      });
-    } else {
-      installed.push(carrier === entry ? carrier : `${carrier} (loaded by ${entry})`);
-    }
-  }
-
-  if (failures.length === 0) {
-    console.log(
-      `check-bundle: the Emacs keymap is installed in ${installed.join(", ")}.`,
-    );
-    return 0;
-  }
-
-  for (const { entry, reachable, missing } of failures) {
+  const global = globalReadIn(assets, chunks);
+  if (global !== null) {
     console.error(
-      `check-bundle: nothing ${entry} loads carries the Emacs keymap. ${entry} itself is missing ${missing.join(", ")}.`,
+      `check-bundle: ${global} reads the deck engine off a global. The ES-module build assigns none, so that read answers undefined in the shipped window — which is the whole of iss-2609061132369973. Import the engine instead.`,
     );
-    console.error(
-      `check-bundle: it loads ${reachable.length === 1 ? "no other chunk" : reachable.slice(1).join(", ")}.`,
-    );
-    // Where else it landed is the useful next question: a chunk the entry does
-    // not load is a wiring problem, and that is a different repair.
-    const elsewhere = chunks
-      .filter((other) => !reachable.includes(other))
-      .filter((other) => missingFrom(readFileSync(join(assets, other), "utf8")).length === 0);
-    if (elsewhere.length > 0) {
-      console.error(
-        `check-bundle: it is whole in ${elsewhere.join(", ")}, which ${entry} does not load, so the wiring moved rather than the keymap being dropped.`,
-      );
-    }
   }
-  console.error(
-    "check-bundle: the bundler took @replit/codemirror-emacs's own installation for pure calls. See the treeshake note in vite.config.ts.",
-  );
-  return 1;
+  return keymap === 0 && deckEngine === 0 && global === null ? 0 : 1;
 }
 
 process.exit(main());
