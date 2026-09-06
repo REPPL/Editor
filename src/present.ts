@@ -85,10 +85,11 @@ export function headlineOf(slide: Element | null): string {
 /**
  * What one box looks like to the layout engine, as the log records it.
  *
- * A slide that is not shown and a slide that is shown but has no height look
- * the same from the outside, and the difference is the whole of the bug this
- * shape was written for, so both the `display` and the measured height are
- * here.
+ * A slide that is not shown, a slide that is shown but has no height, and a
+ * slide that is shown and empty all look alike from the outside, and telling
+ * them apart is the whole of what this shape was written for: how the box is
+ * displayed, whether it is visible, how large it measures, and how much text
+ * it holds.
  */
 export interface BoxReport {
   /** Whether the element was on the page at all. */
@@ -96,9 +97,26 @@ export interface BoxReport {
   readonly classes: string;
   readonly display: string;
   readonly position: string;
+  /**
+   * Whether the box is on the screen.
+   *
+   * `display` alone could not tell the two failures apart: the engine writes
+   * `display: block` inline on every slide near the one in view, so a hidden
+   * slide and the shown one read the same. Since `iss-2609061209123970` the
+   * stylesheet takes a slide off the screen with `visibility` instead, and
+   * this is the field that says whether it worked.
+   */
+  readonly visibility: string;
   readonly width: number;
   readonly height: number;
   readonly fontSize: string;
+  /**
+   * How much text the box holds, trimmed.
+   *
+   * A slide that is on the screen and empty and a slide that is not on the
+   * screen at all look alike in a log of boxes; this is the difference.
+   */
+  readonly textLength: number;
 }
 
 /** One reading of the present window's state, one JSON object per line. */
@@ -138,9 +156,11 @@ function boxReport(element: Element | null): BoxReport {
       classes: "",
       display: "",
       position: "",
+      visibility: "",
       width: 0,
       height: 0,
       fontSize: "",
+      textLength: 0,
     };
   }
   const style = getComputedStyle(element);
@@ -150,9 +170,11 @@ function boxReport(element: Element | null): BoxReport {
     classes: element.className,
     display: style.display,
     position: style.position,
+    visibility: style.visibility,
     width: Math.round(rect.width),
     height: Math.round(rect.height),
     fontSize: style.fontSize,
+    textLength: (element.textContent ?? "").trim().length,
   };
 }
 

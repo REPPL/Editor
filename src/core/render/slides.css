@@ -2,11 +2,16 @@
  * The deck's own layout, over reveal.js's engine and instead of its theme.
  *
  * reveal.js runs with `disableLayout: true`, so it moves between slides and
- * does not scale them: a slide is a block of normal flow at the reader's own
- * size. That is what "legible on three device classes" costs and buys — the
- * body text is never shrunk to fit a fixed 960 by 700 stage, so nothing needs
- * pinching at 390 CSS px, and the price is that exact visual placement is not
- * available.
+ * does not scale them: a slide is laid out at the reader's own size, in the
+ * window it is given. That is what "legible on three device classes" costs and
+ * buys — the body text is never shrunk to fit a fixed 960 by 700 stage, so
+ * nothing needs pinching at 390 CSS px, and the price is that exact visual
+ * placement is not available.
+ *
+ * The slides are laid over one another on one stage the size of the window,
+ * and the one in view is the one that is visible. That much this file must own
+ * rather than leave to normal flow, because the engine writes `display`
+ * inline: see the section rule below, and `iss-2609061209123970`.
  *
  * Every measure here is relative. There is no pixel width anywhere, no
  * transform that scales, and nothing that can be wider than its slide.
@@ -21,8 +26,15 @@
    */
   position: relative;
   width: 100%;
-  height: auto;
-  overflow: visible;
+  /*
+   * The stage is one window tall and it clips: the slides lie over one
+   * another inside it, so a deck is one slide at a time rather than a column
+   * of all of them. In the app `present.css` gives the stage the height of
+   * the split view; `100svh` is what a published deck opens at, where there
+   * is no stage around it.
+   */
+  height: 100svh;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   /*
    * The deck's type scale: one length, in the window's own units, that every
@@ -43,47 +55,97 @@
   background: #fdfdfc;
 }
 
+/* The stage itself: the box every slide is laid over, and exactly that size. */
 .reveal .slides {
-  position: static;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: auto;
-  inset: auto;
+  height: 100%;
   margin: 0;
   padding: 0;
   text-align: start;
   transform: none;
 }
 
+/*
+ * One slide, laid over the others rather than under them.
+ *
+ * `iss-2609061209123970`: these used to be blocks of normal flow, hidden with
+ * `display: none` and shown with `display: flex`. But `display` is the one
+ * property the engine writes as an inline style — `updateSlidesVisibility`
+ * shows every slide within its view distance with `element.style.display =
+ * "block"` — and an inline style beats a stylesheet. So every slide came back
+ * a block in normal flow, the deck became a column as tall as the deck is
+ * long, and the window's own `overflow: hidden` cropped it after the title
+ * slide: navigation moved the engine's index and the reader saw nothing move.
+ *
+ * Position is the answer. Each slide is placed over the same stage, so
+ * nothing stacks whatever `display` it is handed, and the slides that are not
+ * in view are taken off the screen with `visibility` and `pointer-events` —
+ * the two properties the engine never writes inline.
+ */
 .reveal .slides > section,
 .reveal .slides > section > section {
-  position: static;
-  width: 100%;
-  height: auto;
-  min-height: 100svh;
+  position: absolute;
+  inset: 0;
   box-sizing: border-box;
   padding: clamp(1rem, 4vmin, 3rem);
   opacity: 1;
   /* Sections are laid out by this stylesheet, not moved about by the engine. */
   transform: none !important;
   transition: none !important;
-  display: none;
+  display: flex;
   flex-direction: column;
   justify-content: center;
+  /*
+   * Centred while the face fits the stage, and scrolled from its own top when
+   * it does not: a slide too long for the window is read by scrolling that
+   * slide, never by losing the head of it above the edge.
+   *
+   * Two declarations, the second refining the first: a browser that does not
+   * know the `safe` keyword drops that line unread and keeps plain centring.
+   * The app's bundler collapses the pair to the second, which is right there
+   * — the app is one known engine; the site is served this file as it stands,
+   * where the older browser is the one that needs the first line.
+   */
+  justify-content: safe center;
+  overflow-y: auto;
   gap: 0.6em;
   overflow-wrap: anywhere;
+  visibility: hidden;
+  pointer-events: none;
 }
 
+/* The slide in view, and only it, is on the screen and takes the pointer. */
 .reveal .slides > section.present,
 .reveal .slides > section > section.present {
-  display: flex;
+  visibility: visible;
+  pointer-events: auto;
 }
 
-/* A stack is the parent of the vertical slides, not a slide of its own. */
+/*
+ * The face of the slide in view is laid out by this stylesheet.
+ *
+ * `!important` for the one reason the rest of this file needs none: the
+ * engine writes `display: block` inline on the slide it is showing, which
+ * would otherwise take the centring and the foot's `margin-block-start: auto`
+ * off the slide the reader is looking at. A stack is excluded because a stack
+ * is not a face.
+ */
+.reveal .slides > section.present:not(.stack),
+.reveal .slides > section > section.present {
+  display: flex !important;
+}
+
+/*
+ * A stack is the parent of the vertical slides, not a slide of its own: it is
+ * laid over the stage like any other section, and the one child carrying
+ * `present` is the slide that shows.
+ */
 .reveal .slides > section.stack {
-  min-height: 0;
-  height: auto;
   padding: 0;
   display: block;
+  overflow: hidden;
 }
 
 /* Speaker notes belong to the speaker's window, never to the slide. */

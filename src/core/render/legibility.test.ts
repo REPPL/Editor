@@ -38,7 +38,7 @@ function mount(): void {
     plan,
     pathResolver(),
   )}</div></div>`;
-  // reveal.js marks the slide in view; nothing else is displayed.
+  // reveal.js marks the slide in view; nothing else is on the screen.
   const first = document.querySelector(".reveal .slides > section");
   first?.classList.add("present");
   Object.defineProperty(window, "innerWidth", { value: PHONE, configurable: true });
@@ -244,5 +244,74 @@ describe("the deck's type scale", () => {
       /\d(vw|vh|vmin|vmax)\b/.test(size),
     );
     expect(viewportSizes, "only the deck's own scale reads the viewport").toEqual([]);
+  });
+});
+
+/**
+ * One slide on the screen, and the deck no taller than the window.
+ *
+ * `iss-2609061209123970`: the slides were blocks of normal flow, hidden with
+ * `display: none` and shown with `display: flex`. reveal.js writes `display`
+ * as an inline style — `updateSlidesVisibility` shows every slide within its
+ * view distance with `element.style.display = "block"` — and an inline style
+ * beats a stylesheet, so every slide was laid out, the deck stood three
+ * windows tall, and the window's `overflow: hidden` cropped it after the
+ * title. jsdom lays nothing out and so cannot measure that; what it can do is
+ * read the rules back, and the rules are where the answer lives: the slides
+ * are positioned over one another, and the one not in view is taken off the
+ * screen with a property the engine never writes.
+ *
+ * The behaviour against the real engine — the index moves, the slide left
+ * behind goes, the slide arrived at comes — is held in `src/present.test.ts`.
+ */
+describe("the deck's stacking", () => {
+  /** The body of the first rule whose selector list matches. */
+  function rule(selector: string): string {
+    const at = DECK_STYLESHEET.indexOf(selector);
+    expect(at, `no rule for ${selector}`).toBeGreaterThan(-1);
+    const opened = DECK_STYLESHEET.indexOf("{", at);
+    return DECK_STYLESHEET.slice(opened + 1, DECK_STYLESHEET.indexOf("}", opened));
+  }
+
+  /** The rule every slide takes, top-level sections and vertical ones alike. */
+  const SECTIONS = ".reveal .slides > section,\n.reveal .slides > section > section {";
+
+  it("lays every slide over the stage rather than under the last one", () => {
+    expect(rule(SECTIONS)).toMatch(/position: absolute/);
+    expect(rule(SECTIONS)).toMatch(/inset: 0/);
+    // The stage is the window, and it is the box that clips.
+    expect(rule(".reveal .slides {")).toMatch(/position: absolute/);
+    expect(rule(".reveal .slides {")).toMatch(/inset: 0/);
+    expect(rule(".reveal {")).toMatch(/height: 100svh/);
+    expect(rule(".reveal {")).toMatch(/overflow: hidden/);
+    // A stack is a `> section` too, so the rule above places it; what its own
+    // rule must not do is put it back into the flow.
+    const stack = rule(".reveal .slides > section.stack {");
+    expect(stack).not.toMatch(/position:\s*static/);
+    expect(stack).toMatch(/display: block/);
+  });
+
+  it("hides the slide out of view with visibility, never with display", () => {
+    const sections = rule(SECTIONS);
+    expect(sections).toMatch(/visibility: hidden/);
+    expect(sections).toMatch(/pointer-events: none/);
+    // `display: none` here is the bug: the engine overwrites it inline.
+    expect(sections, "a slide is never hidden by display").not.toMatch(
+      /display:\s*none/,
+    );
+    const present = rule(
+      ".reveal .slides > section.present,\n.reveal .slides > section > section.present {",
+    );
+    expect(present).toMatch(/visibility: visible/);
+    expect(present).toMatch(/pointer-events: auto/);
+    // And the face of the slide in view is laid out by this stylesheet
+    // whatever `display` the engine wrote on it.
+    expect(DECK_STYLESHEET).toMatch(/display: flex !important/);
+  });
+
+  it("gives a slide too long for the stage its own scrolling", () => {
+    // The stage clips, so a slide that overflows scrolls inside itself rather
+    // than running off the bottom of the window with no way to reach it.
+    expect(rule(SECTIONS)).toMatch(/overflow-y: auto/);
   });
 });

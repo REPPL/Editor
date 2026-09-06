@@ -18,6 +18,8 @@ declare module "*/vendor/reveal/reveal.esm.js" {
     initialize(config: Record<string, unknown>): Promise<void> | void;
     sync?(): void;
     slide?(horizontal: number, vertical?: number): void;
+    /** One step right, which is what the right arrow and the control do. */
+    right?(): void;
     on?(type: string, listener: () => void): void;
     getIndices?(): { h?: number; v?: number };
     isReady?(): boolean;

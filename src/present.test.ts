@@ -14,7 +14,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { pathResolver } from "./core/assets";
-import { DECK_CONFIG } from "./core/render/slides";
+import { DECK_CONFIG, DECK_STYLESHEET } from "./core/render/slides";
 import {
   createNotesView,
   createRecorder,
@@ -469,6 +469,22 @@ function stageDeck(): void {
     '<div class="present-stage"><div class="reveal"><div class="slides"></div></div></div>';
 }
 
+/**
+ * The stage with the deck's own stylesheet over it, as the window has it.
+ *
+ * jsdom lays nothing out, so this buys no heights — but it does resolve the
+ * cascade, and the cascade is exactly what `iss-2609061209123970` turned on:
+ * the engine writes `display` inline, an inline style beats a stylesheet, and
+ * the question is whether the property the stylesheet hides a slide with is
+ * one the engine can overwrite.
+ */
+function stageStyledDeck(): void {
+  stageDeck();
+  const style = document.createElement("style");
+  style.textContent = DECK_STYLESHEET;
+  document.head.replaceChildren(style);
+}
+
 /** Let the engine finish starting; it dispatches `ready` on a timeout. */
 function settledEngine(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 20));
@@ -558,6 +574,108 @@ describe("the deck the real engine is holding", () => {
     expect(repaired.presentAt).toBe(0);
     expect(repaired.controls["navigate-left"]).toBe(true);
     expect(repaired.controls["navigate-right"]).toBe(false);
+  });
+
+  /**
+   * A fresh engine that has finished starting, with nothing left queued.
+   *
+   * `mountDeck` starts an engine by handing `initialize` a callback that puts
+   * the deck on slide one, and that callback lands whenever the engine's own
+   * `ready` does. A test that navigates cannot be sure it has: the callback
+   * arriving late would send the deck back to slide one and the assertion
+   * would be reading a race rather than the fix. So the engine is started
+   * first and the deck mounted into it — the second-Present path, where
+   * `mountDeck` settles the engine synchronously and queues nothing.
+   */
+  async function startedEngine(): Promise<RevealEngine> {
+    const reveal = freshEngine();
+    await reveal.initialize({ ...DECK_CONFIG });
+    await settledEngine();
+    return reveal;
+  }
+
+  /** One top-level section of the mounted deck, by position. */
+  function sectionAt(index: number): HTMLElement {
+    const found = document.querySelectorAll<HTMLElement>(
+      ".reveal .slides > section",
+    )[index];
+    if (found === undefined) throw new Error(`no section at ${String(index)}`);
+    return found;
+  }
+
+  /** What the cascade makes of one element, as the window would see it. */
+  function visibilityOf(element: Element): string {
+    return window.getComputedStyle(element).visibility;
+  }
+
+  it("takes the slide left behind off the screen when the deck moves on", async () => {
+    // `iss-2609061209123970`: the engine's index moved and the window did
+    // not. The slides were blocks of normal flow hidden with `display: none`,
+    // and the engine writes `display: block` inline on every slide near the
+    // one in view — an inline style beats a stylesheet, so all of them were
+    // laid out, one under the next, and the window showed the title slide and
+    // cropped the rest.
+    stageStyledDeck();
+    const reveal = await startedEngine();
+    // The second-Present path, so that nothing is still queued: `mountDeck`
+    // settles a running engine there and then, and the navigation below is
+    // answered by a deck that has finished arriving rather than racing one
+    // that is still being put on slide one.
+    mountDeck(document, deckFragment(CHAPTER_TEXT, pathResolver()), true, reveal);
+    await settledEngine();
+    reveal.right?.();
+    await settledEngine();
+
+    const seen = observeDeck(document, "slidechanged", reveal);
+    expect(seen.indexh).toBe(1);
+    expect(seen.presentAt).toBe(1);
+
+    const first = sectionAt(0);
+    const second = sectionAt(1);
+    // The engine did write `display` inline, on the slide it left as well as
+    // on the slide it moved to. That is the fact the fix is built around.
+    expect(first.style.display).toBe("block");
+    expect(second.style.display).toBe("block");
+    // It writes no `visibility` and no `position`, so the stylesheet keeps
+    // both: slide two is on the screen, slide one is not, and neither is in
+    // the flow to stack under the other.
+    expect(first.style.visibility).toBe("");
+    expect(visibilityOf(first)).toBe("hidden");
+    expect(visibilityOf(second)).toBe("visible");
+    expect(window.getComputedStyle(second).position).toBe("absolute");
+
+    // And the log the scripted run reads back says the same thing.
+    expect(seen.sections[0]?.visibility).toBe("hidden");
+    expect(seen.sections[1]?.visibility).toBe("visible");
+    // A face with words on it, not an empty slide that happens to be shown.
+    expect(seen.sections[1]?.textLength).toBeGreaterThan(0);
+  });
+
+  it("shows one child of a column of vertical slides, and only one", async () => {
+    stageStyledDeck();
+    const reveal = await startedEngine();
+    mountDeck(document, deckFragment(CHAPTER_TEXT, pathResolver()), true, reveal);
+    await settledEngine();
+    const columns = [
+      ...document.querySelectorAll<HTMLElement>(".reveal .slides > section"),
+    ];
+    const at = columns.findIndex((column) => column.classList.contains("stack"));
+    expect(at, "the chapter has a sub-section, so the deck has a stack").toBeGreaterThan(
+      -1,
+    );
+
+    reveal.slide?.(at, 0);
+    await settledEngine();
+    const stack = sectionAt(at);
+    const inside = [...stack.querySelectorAll<HTMLElement>(":scope > section")];
+    expect(inside.length).toBeGreaterThan(1);
+    expect(visibilityOf(stack)).toBe("visible");
+    expect(visibilityOf(inside[0] ?? stack)).toBe("visible");
+    expect(visibilityOf(inside[1] ?? stack)).toBe("hidden");
+    // The stack is laid over the stage like any other section, and its
+    // children over the stack.
+    expect(window.getComputedStyle(stack).position).toBe("absolute");
+    expect(window.getComputedStyle(inside[0] ?? stack).position).toBe("absolute");
   });
 });
 
