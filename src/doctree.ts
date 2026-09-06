@@ -310,3 +310,46 @@ export async function readAsset(
   requireShell("Reading an image");
   return invoke<AssetBytes>("read_asset", { chapterPath, path });
 }
+
+/**
+ * One chapter of a document waiting to be previewed, as its own buffer or
+ * the file has it.
+ *
+ * The article is one page for the whole document (spc-2609061318090042), so
+ * the preview window needs every chapter's text at once — the open one from
+ * its buffer, so an unsaved edit previews, and the rest from disk, exactly
+ * the rule `present_chapter` already follows for one chapter at a time.
+ */
+export interface PreviewChapter {
+  /** Relative to the document root, the same shape the build renders by. */
+  readonly path: string;
+  readonly text: string;
+}
+
+/** The document waiting to be previewed, as the editing window holds it. */
+export interface PreviewSource {
+  readonly title: string;
+  readonly variant: string;
+  readonly chapters: readonly PreviewChapter[];
+}
+
+/** The event the shell emits when a new document is waiting to be previewed. */
+export const PREVIEW_EVENT = "preview://document";
+
+/**
+ * Preview the whole document: hold its chapters, and open or focus the
+ * preview window.
+ *
+ * Nothing is written. The article is built in the preview window from this
+ * text and exists only while that window is open.
+ */
+export async function previewDocument(source: PreviewSource): Promise<void> {
+  requireShell("Previewing the document");
+  return invoke<void>("preview_document", { source });
+}
+
+/** The document the shell is holding, for the preview window to build. */
+export async function pendingPreview(): Promise<PreviewSource> {
+  requireShell("Reading the pending preview");
+  return invoke<PreviewSource>("pending_preview");
+}

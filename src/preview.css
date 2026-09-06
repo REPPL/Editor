@@ -1,0 +1,15 @@
+/*
+ * The preview window's own chrome.
+ *
+ * There is almost none: the article lays itself out completely — the
+ * measure, the margin, the type — through `article.css`, the one stylesheet
+ * every host that renders the article reads or copies. This file only
+ * clears the browser's own default margin around the page, the same way
+ * `present.css` clears it around the stage, so nothing outside `body.article`
+ * itself ever adds a pixel `article.css` did not ask for.
+ */
+
+html,
+body {
+  margin: 0;
+}

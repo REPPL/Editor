@@ -636,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn an_article_export_carries_only_the_article_s_stylesheet() {
+    fn an_article_export_carries_only_the_article_s_stylesheet_and_its_script() {
         let fixture = fixture();
         run_export(
             &fixture.context,
@@ -651,6 +651,7 @@ mod tests {
             vec![
                 "assets/01-part/lantern.jpg".to_string(),
                 "index.html".to_string(),
+                "presenter/article-video.js".to_string(),
                 "presenter/article.css".to_string(),
             ]
         );
@@ -1126,7 +1127,10 @@ mod tests {
             .into_iter()
             .map(|(name, _)| name)
             .collect();
-        assert_eq!(article, vec!["presenter/article.css"]);
+        assert_eq!(
+            article,
+            vec!["presenter/article.css", "presenter/article-video.js"]
+        );
         // The site's own root files are in neither: `index.html` would collide
         // with the article's, and none of the rest means anything in a folder.
         for kind in ["deck", "article"] {

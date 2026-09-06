@@ -85,7 +85,7 @@ export const FOLDER_CHROME_FILES: Readonly<Record<ExportKind, readonly string[]>
     `${FOLDER_CHROME}/slides.css`,
     `${FOLDER_CHROME}/deck.js`,
   ],
-  article: [`${FOLDER_CHROME}/article.css`],
+  article: [`${FOLDER_CHROME}/article.css`, `${FOLDER_CHROME}/article-video.js`],
 };
 
 /** The page one kind of export writes, inside its folder. */

@@ -116,9 +116,17 @@ describe("buildVersion", () => {
       expect(file.text, file.path).not.toMatch(/\sstyle\s*=/);
       expect(file.text, file.path).not.toContain("<style");
     }
-    // And the pages the site carries once, for every version.
-    for (const name of ["presenter/article.css", "presenter/deck.js", "index.html"]) {
-      const text = readFileSync(join(__dirname, "..", "..", "site", name), "utf8");
+    // And the pages the site carries once, for every version. The article's
+    // stylesheet is the rendering core's own file — `src/core/render/`,
+    // not a copy under `site/presenter/` — the same way the deck's already
+    // is; everything else here is the site's own.
+    const files: readonly [string, string][] = [
+      ["presenter/article.css", join(__dirname, "..", "core", "render", "article.css")],
+      ["presenter/deck.js", join(__dirname, "..", "..", "site", "presenter", "deck.js")],
+      ["index.html", join(__dirname, "..", "..", "site", "index.html")],
+    ];
+    for (const [name, path] of files) {
+      const text = readFileSync(path, "utf8");
       if (name.endsWith(".html")) {
         expect(text, name).not.toMatch(/\sstyle\s*=/);
       }

@@ -93,7 +93,7 @@ pub const SHELL: &str = include_str!("../../../site/index.html");
 /// Each entry is a path inside the deployed directory and the bytes that
 /// belong there. The reveal.js files are the vendored copy, so the site and
 /// the app run the same engine and neither reaches a content network.
-pub const CHROME: [(&str, &str); 9] = [
+pub const CHROME: [(&str, &str); 10] = [
     ("index.html", SHELL),
     ("404.html", SHELL),
     ("robots.txt", include_str!("../../../site/robots.txt")),
@@ -106,9 +106,18 @@ pub const CHROME: [(&str, &str); 9] = [
         "presenter/presenter.css",
         include_str!("../../../site/presenter/presenter.css"),
     ),
+    // The article's appearance and its script are the rendering core's own
+    // files, the same way the deck's stylesheet is below: `article.ts`
+    // reads `article.css` through the same `?inline` import a jsdom test
+    // reads, the app's preview page links both directly, and this is the
+    // one place their bytes reach the site (spc-2609061318090042).
     (
         "presenter/article.css",
-        include_str!("../../../site/presenter/article.css"),
+        include_str!("../../../src/core/render/article.css"),
+    ),
+    (
+        "presenter/article-video.js",
+        include_str!("../../../src/core/render/article-video.js"),
     ),
     (
         "presenter/deck.js",
@@ -171,7 +180,7 @@ pub const TOOLING: [(&str, &str); 2] = [
 pub fn chrome_for_folder(kind: &str) -> Result<Vec<(&'static str, &'static str)>, String> {
     let named: &[&str] = match kind {
         "deck" => &["presenter/slides.css", "presenter/deck.js"],
-        "article" => &["presenter/article.css"],
+        "article" => &["presenter/article.css", "presenter/article-video.js"],
         other => return Err(format!("{other} is not a rendering an export writes")),
     };
     let mut chrome: Vec<(&'static str, &'static str)> = Vec::new();

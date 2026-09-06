@@ -399,9 +399,31 @@ function refusalReason(reference: string): string {
   return "the reference climbs above the document folder";
 }
 
-function folderOf(path: string): string {
+/** The folder a chapter path sits in: its Part, for a path the build reads. */
+export function folderOf(path: string): string {
   const cut = path.lastIndexOf("/");
   return cut < 0 ? "" : path.slice(0, cut);
+}
+
+/**
+ * A Part folder's display title: its numeric prefix and its separator gone,
+ * its remaining hyphens and underscores turned to spaces.
+ *
+ * The article's contents list groups chapters by Part (spc-2609061318090042,
+ * criterion one: "two Parts holding four chapters in all"), and this is the
+ * same title the sidebar already shows for the folder — `title_of` in
+ * `src-tauri/src/document.rs` — so a reader sees one name for a Part rather
+ * than the app's own and the article's own disagreeing.
+ */
+export function partTitleOf(name: string): string {
+  const digits = /^\d+/.exec(name)?.[0] ?? "";
+  let rest = name;
+  if (digits !== "") {
+    const after = name.slice(digits.length);
+    const trimmed = after.replace(/^[ \-_.]+/, "");
+    rest = trimmed === "" ? name : trimmed;
+  }
+  return rest.replace(/[-_]/g, " ");
 }
 
 function basename(path: string): string {
@@ -503,6 +525,7 @@ export function renderVariant(
     tree.chapters.map((input, index) => ({
       chapter: input.chapter,
       idPrefix: idPrefix(index),
+      part: partTitleOf(folderOf(input.path)),
     })),
   );
   const article = [
@@ -567,6 +590,11 @@ export function articleDocument(
     "<main>",
     body,
     "</main>",
+    // A plain file, not an inline script: the site serves under
+    // `script-src 'self'`, and the page works with none of it at all — the
+    // poster and the source list are already in `body`, and this only
+    // upgrades a video to a player when a source loads.
+    `<script src="${chrome}/article-video.js" defer></script>`,
     "</body>",
     "</html>",
     "",

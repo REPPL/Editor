@@ -1,0 +1,347 @@
+/*
+ * The Tufte article: one page, a generous measure, and a margin for its notes.
+ *
+ * spc-2609061318090042 is the design record. This is the ONE source: the app's
+ * preview page links it directly, the site build and the folder export copy
+ * its bytes (`src-tauri/src/publish/stage.rs`'s `CHROME` and `chrome_for_folder`
+ * both `include_str!` this file rather than a copy kept in `site/presenter/`),
+ * and `article.test.ts` reads it as a string to prove the rules a jsdom test
+ * can reach. One file, three hosts, so a fix here reaches all of them at once.
+ *
+ * Custom properties are the seam later maps plug into without touching a
+ * selector: map #10 (`itd-2609051335492327`) sets `--article-measure`,
+ * `--article-text-scale` and the palette properties on the root element from
+ * its own toolbar; nothing below reads anything else to decide those three
+ * things. Map #12 and map #26 add their own rules in a section of their own,
+ * beneath the marker comments left for them — a stylesheet a later map can
+ * extend by appending a section, never one it has to re-open this one to
+ * change.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* The measure: the width of a line of reading text. Emacs's own default
+     fill column is 80 characters; a serif face reads comfortably narrower,
+     so the article's default sits at 38em — close to Tufte's own 55
+     characters at this type size — and map #10's "narrow/normal/wide" steps
+     move this one property. */
+  --article-measure: 38em;
+  /* The margin rail's width, beside the measure at 820 and 1280 CSS px. */
+  --article-margin-width: 16em;
+  /* The gap between the measure and the margin rail. */
+  --article-gutter: 2rem;
+  /* A multiplier on the article's own base type size; map #10's text-size
+     control changes only this property. */
+  --article-text-scale: 1;
+
+  /* The palette: three names, one shape. Light is the default; map #10's
+     dark and sepia themes redeclare only these four properties, on the root
+     element, from outside this file. */
+  --article-bg: Canvas;
+  --article-fg: CanvasText;
+  --article-muted: GrayText;
+  --article-rule: color-mix(in srgb, CanvasText 25%, transparent);
+}
+
+/* ---------------------------------------------------------------------
+ * The page.
+ * ------------------------------------------------------------------- */
+
+body.article {
+  margin: 0;
+  padding: 1.5rem 1rem 4rem;
+  font: calc(1.0625rem * var(--article-text-scale)) / 1.6 Georgia, "Iowan Old Style",
+    "Times New Roman", serif;
+  background: var(--article-bg);
+  color: var(--article-fg);
+}
+
+/* The whole page is one column at rest; the margin rail in the next section
+   is what widens it. Nothing here fixes a pixel width, so a font the reader
+   enlarges reflows the line rather than spilling past the edge. */
+body.article main {
+  max-width: var(--article-measure);
+  margin: 0 auto;
+}
+
+body.article h1,
+body.article h2,
+body.article h3,
+body.article h4 {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.2;
+  margin: 2rem 0 0.5rem;
+}
+
+body.article h1 {
+  font-size: calc(1.75rem * var(--article-text-scale));
+}
+
+body.article p {
+  margin: 0 0 1rem;
+}
+
+body.article figure {
+  margin: 1.5rem 0;
+}
+
+body.article img,
+body.article video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+body.article figcaption {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.875rem;
+  color: var(--article-muted);
+  margin-top: 0.5rem;
+}
+
+body.article pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  background: color-mix(in srgb, CanvasText 6%, Canvas);
+}
+
+body.article table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+body.article blockquote {
+  margin: 1.5rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--article-rule);
+}
+
+body.article hr {
+  border: 0;
+  border-top: 1px solid var(--article-rule);
+  margin: 2rem 0;
+}
+
+/* ---------------------------------------------------------------------
+ * The contents list, to four levels.
+ * ------------------------------------------------------------------- */
+
+body.article nav.contents {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0 0 2.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--article-rule);
+}
+
+body.article nav.contents ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+body.article nav.contents ol ol {
+  font-size: 0.95em;
+}
+
+/* A Part's own entry: a label, not a link — it has no heading of its own on
+   the page, so the Chapter nested beneath it is what a reader chooses. */
+body.article nav.contents .part {
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  color: var(--article-muted);
+}
+
+/* ---------------------------------------------------------------------
+ * Margin notes: the generic shape a footnote, a citation, a `.margin` span
+ * and a `.credit` div all share (spc-2609061318090042's seam for map #11,
+ * which will later replace an unresolved citation's body with the resolved
+ * reference and touch nothing here).
+ *
+ * The one trick that makes "beside the paragraph at 820 and 1280" and
+ * "directly after the paragraph at 390" the same markup: `renderMarginNote`
+ * in `article.ts` writes the note as the paragraph's own next sibling, so its
+ * position in the DOM never changes across a width. Below the margin
+ * breakpoint it is an ordinary block, in the flow exactly where it was
+ * written; at and above it, it is floated into the reserved gutter — CSS
+ * rules alone, per the intent's own falsifiable claim.
+ * ------------------------------------------------------------------- */
+
+body.article .margin-note {
+  display: block;
+  clear: both;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--article-muted);
+  border-left: 2px solid var(--article-rule);
+}
+
+body.article .margin-note p {
+  margin: 0 0 0.5rem;
+}
+
+body.article .margin-note p:last-child {
+  margin-bottom: 0;
+}
+
+/* An unresolved citation's body is the key exactly as the author wrote it,
+   until map #11 resolves it against a bibliography. */
+body.article .margin-note.citation.unresolved {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* ---------------------------------------------------------------------
+ * The callout.
+ * ------------------------------------------------------------------- */
+
+body.article .callout {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--article-rule);
+  border-left-width: 4px;
+  background: color-mix(in srgb, CanvasText 4%, Canvas);
+}
+
+body.article .callout::before {
+  content: attr(data-kind);
+  display: block;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.75rem;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--article-muted);
+  margin-bottom: 0.4rem;
+}
+
+body.article .callout:not([data-kind])::before,
+body.article .callout[data-kind=""]::before {
+  content: none;
+}
+
+/* ---------------------------------------------------------------------
+ * Images: declared widths, table alignment, and full-bleed.
+ *
+ * The site serves under `style-src 'self'`, which drops a `style` attribute
+ * on an element unread. So a width the author declared reaches the page as
+ * `data-width` — a whole percentage on a scale of fives — and a pipe table's
+ * alignment as `data-align`, and this is where they are answered.
+ * ------------------------------------------------------------------- */
+
+body.article img[data-width="5"] { width: 5%; height: auto; }
+body.article img[data-width="10"] { width: 10%; height: auto; }
+body.article img[data-width="15"] { width: 15%; height: auto; }
+body.article img[data-width="20"] { width: 20%; height: auto; }
+body.article img[data-width="25"] { width: 25%; height: auto; }
+body.article img[data-width="30"] { width: 30%; height: auto; }
+body.article img[data-width="35"] { width: 35%; height: auto; }
+body.article img[data-width="40"] { width: 40%; height: auto; }
+body.article img[data-width="45"] { width: 45%; height: auto; }
+body.article img[data-width="50"] { width: 50%; height: auto; }
+body.article img[data-width="55"] { width: 55%; height: auto; }
+body.article img[data-width="60"] { width: 60%; height: auto; }
+body.article img[data-width="65"] { width: 65%; height: auto; }
+body.article img[data-width="70"] { width: 70%; height: auto; }
+body.article img[data-width="75"] { width: 75%; height: auto; }
+body.article img[data-width="80"] { width: 80%; height: auto; }
+body.article img[data-width="85"] { width: 85%; height: auto; }
+body.article img[data-width="90"] { width: 90%; height: auto; }
+body.article img[data-width="95"] { width: 95%; height: auto; }
+body.article img[data-width="100"] { width: 100%; height: auto; }
+
+body.article th[data-align="left"],
+body.article td[data-align="left"] { text-align: left; }
+body.article th[data-align="center"],
+body.article td[data-align="center"] { text-align: center; }
+body.article th[data-align="right"],
+body.article td[data-align="right"] { text-align: right; }
+
+/* "Running the full measure": in the article, full-bleed means the full
+   width of the reading column, never past it — the article has no gutter
+   to bleed into at 390 CSS px, and bleeding past the measure at 820 and
+   1280 would run an image under the margin notes it shares the page with. */
+body.article .full-bleed {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* ---------------------------------------------------------------------
+ * Video: the poster, the caption, and the source list a plain reader can
+ * still follow as links. `article-video.js` upgrades this to a player when a
+ * source loads; everything here also has to stand with no script at all.
+ * ------------------------------------------------------------------- */
+
+body.article figure.video {
+  position: relative;
+}
+
+body.article figure.video ul.video-sources {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.875rem;
+}
+
+body.article figure.video ul.video-sources li {
+  margin: 0.2rem 0;
+}
+
+/* The script hides the source list once a player is standing in its place;
+   this is the state with no script at all, so the list starts visible. */
+body.article figure.video[data-player-ready] ul.video-sources,
+body.article figure.video[data-player-ready] img {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------
+ * The margin rail: 820 and 1280 CSS px.
+ *
+ * Below this breakpoint every `.margin-note` is the ordinary block above:
+ * in the flow, at the text's own size, directly after the paragraph that
+ * made it — which is the whole of what "folds into the flow" means, because
+ * nothing has moved it there. It was never anywhere else.
+ * ------------------------------------------------------------------- */
+
+@media (min-width: 760px) {
+  body.article main {
+    max-width: calc(
+      var(--article-measure) + var(--article-gutter) + var(--article-margin-width)
+    );
+    padding-right: calc(var(--article-gutter) + var(--article-margin-width));
+  }
+
+  /* Every direct flow child keeps the measure; a margin note is the one
+     child that is allowed to reach past it, into the padding reserved
+     above. `nav.contents` is exempted the same way a margin note is not,
+     so the contents list still uses the whole width the wide layout has. */
+  body.article main > :not(.margin-note):not(nav) {
+    max-width: var(--article-measure);
+  }
+
+  body.article .margin-note {
+    float: right;
+    clear: right;
+    width: var(--article-margin-width);
+    margin: 0.3rem calc(-1 * (var(--article-gutter) + var(--article-margin-width))) 0.75rem 0;
+    border-left-width: 1px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Later maps register here, each in a section of its own.
+ *
+ * Map #10 (`itd-2609051335492327`, reader controls): reads and writes
+ * `--article-measure`, `--article-text-scale`, `--article-bg`,
+ * `--article-fg`, `--article-muted` and `--article-rule` on the root
+ * element; it adds no selector above and needs none.
+ *
+ * Map #12 (`itd-2609051335496883`?, the once-only quotation and the easter
+ * eggs) and map #26 (`itd-2609051402083398`, moving by keyboard) each add a
+ * stylesheet section below this comment, never above it.
+ * ------------------------------------------------------------------- */

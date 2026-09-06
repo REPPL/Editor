@@ -217,3 +217,7 @@ text.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: the article as a Tufte page — margin notes that fold at 390 CSS px and sit beside the paragraph at 820 and 1280 through stylesheet rules alone, a four-level contents list grouped by Part, a callout box, full-bleed images, and a video rule a small runtime script upgrades; one renderer and one stylesheet and one script read or copied unchanged by the app's new preview window, the site build, and the folder export. It would be wrong if a margin note ever duplicated its paragraph's text inline, if the three hosts disagreed on headings or margin placement for one document, if any slide-only construct left a trace in the article, or if a video block ever showed a player before a source actually loaded.

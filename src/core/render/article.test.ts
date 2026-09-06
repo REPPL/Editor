@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { pathResolver } from "../assets";
 import { CANON_ROWS, placementOf } from "../canon";
 import { parseChapter } from "../parse";
-import { renderArticle } from "./article";
+import { renderArticle, renderDocumentContents } from "./article";
 
 /** The article for one chapter. */
 function article(source: string, resolve = pathResolver()): string {
@@ -40,7 +40,9 @@ describe("what the article carries", () => {
         "",
       ].join("\n"),
     );
-    expect(html).toContain("<h1>The Lantern Papers</h1>");
+    // The title's own anchor is what a "Chapter" contents entry sends a
+    // reader to; nothing else in the canon gives it one.
+    expect(html).toContain('<h1 id="the-lantern-papers">The Lantern Papers</h1>');
     expect(html).toContain('<h2 id="beginnings">Beginnings</h2>');
     expect(html).toContain('<h3 id="beginnings/the-first-year">The first year</h3>');
     expect(html).toContain(
@@ -84,26 +86,50 @@ describe("what the article carries", () => {
     expect(article('![Dusk](assets/lantern.jpg){width="320"}\n')).toContain('width="320"');
   });
 
-  it("writes a footnote reference and its note", () => {
+  it("writes a footnote as a margin note beside its paragraph, not at the foot of the page", () => {
     const html = article("A claim.[^dates]\n\n[^dates]: The dates are estimates.\n");
     expect(html).toContain('<sup class="footnote-reference"><a href="#fn-dates"');
-    expect(html).toContain('<section class="footnotes">');
-    expect(html).toContain('<li id="fn-dates">');
+    expect(html).toContain('<p>A claim.<sup class="footnote-reference">');
+    expect(html).toContain('<aside id="fn-dates" class="margin-note footnote">');
     expect(html).toContain("The dates are estimates.");
+    // The paragraph and its note are siblings, so a stylesheet rule alone
+    // decides whether the note sits beside it or folds into the flow.
+    expect(html).toMatch(/<\/p><aside id="fn-dates"/);
+    expect(html).not.toContain("<section class=\"footnotes\">");
   });
 
-  it("writes an inline footnote's content in the notes too", () => {
+  it("writes an inline footnote's content in a margin note too", () => {
     const html = article("A claim.^[an inline note]\n");
-    expect(html).toContain('<section class="footnotes">');
+    expect(html).toMatch(/class="margin-note footnote"/);
     expect(html).toContain("an inline note");
+    expect(html).not.toContain("<section class=\"footnotes\">");
   });
 
-  it("writes a citation as the unresolved key the author wrote", () => {
+  it("writes a citation as the unresolved key the author wrote, and as a margin note beside it", () => {
     const html = article("As shown [@smith2020, p. 4] and by @jones2019.\n");
     expect(html).toContain('<span class="citation">[@smith2020, p. 4]</span>');
     expect(html).toContain('<span class="citation">@jones2019</span>');
+    // The seam map #11 replaces: the body is the key exactly as written,
+    // marked unresolved, until a bibliography resolves it.
+    expect(html).toContain(
+      '<aside class="margin-note citation unresolved">[@smith2020, p. 4]</aside>',
+    );
+    expect(html).toContain('<aside class="margin-note citation unresolved">@jones2019</aside>');
     // Nothing here resolves a key or generates a reference list.
     expect(html).not.toContain("References");
+  });
+
+  it("puts a citation and a footnote from the same paragraph in the margin, in source order, beside it rather than at the foot", () => {
+    const html = article(
+      "A claim [@smith2020, p. 4] and a note.^[an inline note]\n",
+    );
+    const paragraph = html.indexOf("<p>A claim");
+    const citationNote = html.indexOf('class="margin-note citation unresolved"');
+    const footnoteNote = html.indexOf('class="margin-note footnote"');
+    expect(paragraph).toBeGreaterThanOrEqual(0);
+    expect(citationNote).toBeGreaterThan(paragraph);
+    expect(footnoteNote).toBeGreaterThan(citationNote);
+    expect(html).not.toContain('<section class="footnotes">');
   });
 
   it("writes a video as its poster and a link", () => {
@@ -148,6 +174,121 @@ describe("what the article carries", () => {
     expect(html).toContain("<caption>The counts</caption>");
     expect(html).toContain('<code class="language-ts">const x = 1;');
   });
+
+  it("writes a callout as a box in the flow, carrying its kind", () => {
+    const html = article(
+      '::: {.callout kind="warning"}\nThe figures before 1998 are estimates.\n:::\n',
+    );
+    expect(html).toContain(
+      '<div data-kind="warning" class="callout"><p>The figures before 1998 are estimates.</p></div>',
+    );
+  });
+
+  it("runs a `.full-bleed` image the full measure", () => {
+    const html = article(
+      '![The lantern at dusk](assets/lantern.jpg "By Carol"){.full-bleed}\n',
+    );
+    expect(html).toContain('<figure class="full-bleed">');
+    expect(html).toContain('src="assets/lantern.jpg"');
+    expect(html).toContain('<span class="caption">The lantern at dusk</span>');
+    expect(html).toContain('<span class="credit">By Carol</span>');
+  });
+
+  it("tries a video's sources in the order written, and inserts no player when they are all unreachable at render time", () => {
+    const html = article(
+      [
+        '::: {.video poster="assets/keynote-poster.jpg" caption="Part two"}',
+        "- local: keynote.mp4",
+        "- site: keynote.mp4",
+        "- gated: https://media.example.org/keynote.mp4",
+        ":::",
+        "",
+      ].join("\n"),
+    );
+    expect(html).toContain('<figure class="video">');
+    expect(html).toContain('src="assets/keynote-poster.jpg"');
+    expect(html).toContain("<figcaption>Part two</figcaption>");
+    expect(html).not.toContain("<video");
+    // The reachability of a source is a fact about the reader's own moment,
+    // never about the moment this tree was rendered — `article-video.js`,
+    // not this module, is where that is decided.
+    const local = html.indexOf('data-role="local"');
+    const site = html.indexOf('data-role="site"');
+    const gated = html.indexOf('data-role="gated"');
+    expect(local).toBeGreaterThanOrEqual(0);
+    expect(site).toBeGreaterThan(local);
+    expect(gated).toBeGreaterThan(site);
+  });
+});
+
+describe("the document's contents list, to four levels", () => {
+  // The intent's own scenario: two Parts holding four chapters in all.
+  const chapters = [
+    {
+      chapter: parseChapter(
+        "# The Lantern Papers\n\n## Beginnings\n\n### The first year\n\n#### A note on dates\n",
+      ),
+      idPrefix: "c1-",
+      part: "Beginnings",
+    },
+    {
+      chapter: parseChapter("# Winter light\n\n## Findings\n"),
+      idPrefix: "c2-",
+      part: "Beginnings",
+    },
+    {
+      chapter: parseChapter("# The Lantern Papers\n\n## Later work\n"),
+      idPrefix: "c3-",
+      part: "Findings",
+    },
+    {
+      chapter: parseChapter("# Closing notes\n"),
+      idPrefix: "c4-",
+      part: "Findings",
+    },
+  ];
+
+  it("carries the Parts, the Chapters, the Sections and the Sub-sections, and each entry points at that heading", () => {
+    const contents = renderDocumentContents(chapters);
+    // The Parts, each holding its own Chapters. A Part has no heading of its
+    // own on the page, so its own entry is a label, not a link — the
+    // Chapter nested directly beneath it is what a reader chooses instead.
+    expect(contents).toContain('<span class="part">Beginnings</span>');
+    expect(contents).toContain('<span class="part">Findings</span>');
+    // Two chapters opening with the same title write two different ids: the
+    // prefix is what a document-wide contents list needs that one chapter's
+    // own never did.
+    expect(contents).toContain('<a href="#c1-the-lantern-papers">The Lantern Papers</a>');
+    expect(contents).toContain('<a href="#c3-the-lantern-papers">The Lantern Papers</a>');
+    expect(contents).toContain('<a href="#c2-winter-light">Winter light</a>');
+    expect(contents).toContain('<a href="#c4-closing-notes">Closing notes</a>');
+    // The Sections and the Sub-sections.
+    expect(contents).toContain('<a href="#c1-beginnings">Beginnings</a>');
+    expect(contents).toContain('<a href="#c1-beginnings/the-first-year">The first year</a>');
+    expect(contents).toContain('<a href="#c2-findings">Findings</a>');
+    expect(contents).toContain('<a href="#c3-later-work">Later work</a>');
+    // Four levels, not five: a Sub-sub-section still gets a heading and an
+    // anchor on the page, but the list that jumps to one stops short of it.
+    expect(contents).not.toContain("A note on dates");
+  });
+
+  it("choosing an entry moves the page to that heading: every href names an id the chapter's own rendering writes", () => {
+    const rendered = chapters
+      .map((entry) =>
+        renderArticle(entry.chapter, pathResolver(), {
+          contents: false,
+          idPrefix: entry.idPrefix,
+        }),
+      )
+      .join("");
+    expect(rendered).toContain('id="c1-the-lantern-papers"');
+    expect(rendered).toContain('id="c1-beginnings/the-first-year"');
+    expect(rendered).toContain('id="c2-findings"');
+    expect(rendered).toContain('id="c3-later-work"');
+    expect(rendered).toContain('id="c4-closing-notes"');
+    // The Sub-sub-section is still a real heading on the page.
+    expect(rendered).toContain('id="c1-beginnings/the-first-year/a-note-on-dates"');
+  });
 });
 
 describe("the slide-only constructs", () => {
@@ -182,9 +323,25 @@ describe("the slide-only constructs", () => {
     expect(html).not.toContain("Slow down here.");
   });
 
-  it("writes a credit where the article's margin note will go", () => {
-    const html = article("::: {.credit}\nPhotograph by Carol.\n:::\n");
-    expect(html).toContain('<aside class="credit"><p>Photograph by Carol.</p></aside>');
+  it("writes a credit as a margin note, beside the block it follows", () => {
+    const html = article(
+      "A photograph.\n\n::: {.credit}\nPhotograph by Carol.\n:::\n",
+    );
+    expect(html).toContain(
+      '<aside class="margin-note credit"><p>Photograph by Carol.</p></aside>',
+    );
+    // It sits right after the paragraph it credits: one stylesheet rule
+    // decides whether that means "beside it" or "directly after it".
+    expect(html).toMatch(/<p>A photograph\.<\/p><aside class="margin-note credit">/);
+  });
+
+  it("writes a `.margin` span as a margin note, and leaves no marker behind in the sentence", () => {
+    const html = article("She arrived [in the second week]{.margin} and stayed.\n");
+    expect(html).toContain('<aside class="margin-note margin">in the second week</aside>');
+    // The canon calls it "a margin aside without a marker": the words are in
+    // the note, not doubled into the sentence that made it.
+    expect(visible(html)).not.toContain("in the second week and stayed");
+    expect(visible(html)).toContain("She arrived");
   });
 
   it("ignores a page-break comment", () => {

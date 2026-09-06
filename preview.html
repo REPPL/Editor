@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Preview</title>
+    <link rel="stylesheet" href="/src/preview.css" />
+    <!--
+      The article's own stylesheet, linked directly rather than copied: this
+      is the one source `src/core/render/article.css` names, and every host
+      that renders the article reads or copies it (spc-2609061318090042).
+    -->
+    <link rel="stylesheet" href="/src/core/render/article.css" />
+    <script type="module" src="/src/preview.ts"></script>
+  </head>
+  <body class="article">
+    <main></main>
+    <!--
+      The video rule's own script, the exact file the site build and the
+      folder export copy — never an inline one, because the shell's CSP is
+      `script-src 'self'`. `type="module"` is this page's own arrangement,
+      not the file's: `article-video.js` is a plain global-attaching script
+      everywhere else, and the bundler only copies a page's own script
+      reference when it is a module (present.html's engine import is why
+      `src/present.ts` reads that lesson too). It runs after `preview.ts`
+      has written the body, and upgrades a source to a player if one loads;
+      nothing here depends on it running at all.
+    -->
+    <script type="module" src="/src/core/render/article-video.js" defer></script>
+  </body>
+</html>
