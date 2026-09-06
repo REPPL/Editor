@@ -187,7 +187,8 @@ in one chord.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-3bbfe1df5bc4 -->
+Fidelity review OWED (receipt rcp-3bbfe1df5bc4).
 
 ## Grounds
 
