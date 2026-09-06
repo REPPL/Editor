@@ -30,6 +30,7 @@ import {
   renderDocumentContents,
   renderReferenceList,
 } from "../core/render/article";
+import { readingKeysDataScript } from "../core/render/reading-keys";
 import { renderSlides } from "../core/render/slides";
 import type { Block, Chapter, Inline } from "../core/tree";
 import { walkChapterBlocks } from "../core/tree";
@@ -652,6 +653,14 @@ export function articleDocument(
     // inert button, because the markup that degrade needs is already in
     // `body` either way.
     `<script src="${chrome}/article-eggs.js" defer></script>`,
+    // Keyboard movement, the contents list, search, cancel and the keys
+    // panel (map #26, spc-2609061318158216): the data block is the one
+    // table's own rows, read by `article-keys.js` and by the fidelity
+    // tests alike; with both absent the article still reads and every
+    // link, heading and control the page already carries still works by
+    // Tab and by touch.
+    readingKeysDataScript(),
+    `<script src="${chrome}/article-keys.js" defer></script>`,
     "</body>",
     "</html>",
     "",

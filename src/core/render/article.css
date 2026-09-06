@@ -640,3 +640,140 @@ body.article .article-controls-reset {
   padding: 0.2rem 0.6rem;
   cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------
+ * Map #26 (`itd-2609051402083398`, spc-2609061318158216): moving through
+ * the article by keyboard — the contents list, the search panel and the
+ * keys panel `article-keys.js` builds, and the one visible button that
+ * reaches the keys panel without a reader ever needing to know its chord
+ * first (`itd-2609061324342715` forbids a panel reachable only by one).
+ * Every colour below is one of the six custom properties map #10's own
+ * toolbar already reads, so the three reader themes answer these rules
+ * exactly as they answer that one, with no fixed pixel width anywhere
+ * that would refuse to fit inside 390 CSS px.
+ * ------------------------------------------------------------------- */
+
+.article-keys-help {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 10;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--article-fg);
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  max-width: calc(100vw - 1.5rem);
+}
+
+.article-keys-help:focus-visible,
+.article-contents-overlay:focus-visible,
+.article-search-panel:focus-visible,
+.article-keys-panel:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+.article-contents-overlay,
+.article-search-panel,
+.article-keys-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  width: calc(100vw - 2rem);
+  max-width: 32rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  font: inherit;
+  color: var(--article-fg);
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.4rem;
+  padding: 1rem;
+}
+
+.article-overlay-hint,
+.article-keys-panel-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85em;
+  color: var(--article-muted);
+}
+
+.article-contents-list,
+.article-contents-list ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.article-contents-part {
+  font-weight: bold;
+  list-style: none;
+  margin-left: -1.25rem;
+}
+
+.article-contents-row {
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+/* Never colour alone (`itd-2609061324342715`): weight and an underline
+   both say "this is the row the movement chords are on", the same rule
+   the reader-controls toolbar's own pressed state follows. */
+.article-contents-row[data-current="yes"] {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.article-search-label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.article-search-field {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  font: inherit;
+  color: inherit;
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.article-search-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.85em;
+  color: var(--article-muted);
+}
+
+.article-keys-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+}
+
+.article-keys-list dt {
+  font-weight: bold;
+}
+
+.article-keys-list dd {
+  margin: 0;
+}
+
+.article-keys-list kbd {
+  font: inherit;
+  font-family: ui-monospace, monospace;
+  background: var(--article-muted);
+  color: var(--article-bg);
+  border-radius: 0.2rem;
+  padding: 0.05rem 0.35rem;
+  margin-right: 0.35rem;
+}

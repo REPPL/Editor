@@ -42,5 +42,15 @@
       and every marker read with no wiring here.
     -->
     <script type="module" src="/src/core/render/article-eggs.js" defer></script>
+    <!--
+      Keyboard movement, the contents list, search, cancel and the keys
+      panel (map #26, spc-2609061318158216), the same one-source file the
+      site build and the folder export copy; `type="module"` is this page's
+      own arrangement, not the file's, for the reason above. Its own data —
+      the honoured rows of `src/keys.ts`'s table — is written into the page
+      by `src/preview.ts` itself, the one other host besides `articleDocument`
+      that has to write it.
+    -->
+    <script type="module" src="/src/core/render/article-keys.js" defer></script>
   </body>
 </html>

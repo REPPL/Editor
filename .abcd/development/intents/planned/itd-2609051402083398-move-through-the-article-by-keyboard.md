@@ -179,3 +179,7 @@ later reading surface something to inherit rather than invent.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: the reading views honour nine existing binding-table rows (heading movement, line movement, occur, isearch, cancel, keys-panel) with no invented chord, proven in article-keys.test.ts and reading-keys.test.ts; wrong would show as a chord live on the page absent from the table, or an honoured chord doing nothing.

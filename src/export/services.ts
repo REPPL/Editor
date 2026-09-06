@@ -90,6 +90,9 @@ export const FOLDER_CHROME_FILES: Readonly<Record<ExportKind, readonly string[]>
     `${FOLDER_CHROME}/article-video.js`,
     `${FOLDER_CHROME}/article-controls.js`,
     `${FOLDER_CHROME}/article-eggs.js`,
+    // Keyboard movement, the contents list, search, cancel and the keys
+    // panel (map #26, spc-2609061318158216).
+    `${FOLDER_CHROME}/article-keys.js`,
   ],
 };
 

@@ -143,15 +143,42 @@ nowhere else; clear that browser's storage and the page returns to how it
 looked the first time you opened it. The deck built from the same chapters
 carries neither the quotation nor a mark: both belong to the article alone.
 
+## Moving through the article by keyboard
+
+With a keyboard attached, the same chords you already use in Editor move
+you through the article. `C-c C-n` moves to the next heading — a Chapter, a
+Section, or a Sub-section, in document order — and `C-c p` moves to the
+previous one; from either, `C-n`/`Down` and `C-p`/`Up` step through the
+paragraphs, figures and notes inside it. `M-s o` opens the contents list as
+a small overlay you can move through with the same chords; `Return` jumps to
+the entry you land on, and closes the list. `C-s` opens a live search of the
+page's own text — type a word, and the page moves to each place it appears
+as you keep pressing `C-s`; `C-r` steps backward through the same matches.
+Whatever is open — the contents list, the search — `C-g` or `Escape` closes
+it and leaves you exactly where you were.
+
+Nothing here is a chord invented for this page: every one of them is a row
+in Editor's own binding table, so the deck at the lectern and the article
+inside a single file move the same way. A small "Keyboard shortcuts" button
+sits at the top of the page for anyone who has not read the binding table;
+opening it (by the button, or `C-h b`) lists exactly the chords this page
+answers, with nothing shown that does not work. A chord not on that list
+does nothing here, whatever it does in Editor itself.
+
+None of this is sent anywhere or remembered between visits: a search term
+lives only for as long as the search panel is open, and where you have
+moved is never written to your browser's storage or to a request.
+
 ## The same page from every host
 
 The preview window, the page a publish pushes to the site, and the page an
 export writes into a folder are three readings of one file,
-`src/core/render/article.css`, and three scripts,
+`src/core/render/article.css`, and four scripts,
 `src/core/render/article-video.js`, `src/core/render/article-controls.js`,
-and `src/core/render/article-eggs.js`. A fix to any one of them reaches every
-one of these hosts at once; a difference between what the three show is a
-defect in the rendering core, not a fact about one of the hosts.
+`src/core/render/article-eggs.js`, and `src/core/render/article-keys.js`. A
+fix to any one of them reaches every one of these hosts at once; a
+difference between what the three show is a defect in the rendering core,
+not a fact about one of the hosts.
 
 ## Related
 

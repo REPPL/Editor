@@ -93,7 +93,7 @@ pub const SHELL: &str = include_str!("../../../site/index.html");
 /// Each entry is a path inside the deployed directory and the bytes that
 /// belong there. The reveal.js files are the vendored copy, so the site and
 /// the app run the same engine and neither reaches a content network.
-pub const CHROME: [(&str, &str); 12] = [
+pub const CHROME: [(&str, &str); 13] = [
     ("index.html", SHELL),
     ("404.html", SHELL),
     ("robots.txt", include_str!("../../../site/robots.txt")),
@@ -131,6 +131,13 @@ pub const CHROME: [(&str, &str); 12] = [
     (
         "presenter/article-eggs.js",
         include_str!("../../../src/core/render/article-eggs.js"),
+    ),
+    // Keyboard movement, the contents list, search, cancel and the keys
+    // panel (map #26, spc-2609061318158216): the same one-source
+    // arrangement as the three files above.
+    (
+        "presenter/article-keys.js",
+        include_str!("../../../src/core/render/article-keys.js"),
     ),
     (
         "presenter/deck.js",
@@ -198,6 +205,7 @@ pub fn chrome_for_folder(kind: &str) -> Result<Vec<(&'static str, &'static str)>
             "presenter/article-video.js",
             "presenter/article-controls.js",
             "presenter/article-eggs.js",
+            "presenter/article-keys.js",
         ],
         other => return Err(format!("{other} is not a rendering an export writes")),
     };

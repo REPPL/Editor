@@ -79,7 +79,6 @@ Questions the constraints have settled are dropped. What remains:
 - Whether individual chords in that table are rebindable and persisted, as
   the keyboard-navigation prototype allows. Alternative binding *sets* are
   out of scope; rebinding one action is a different question.
-- Which navigation chords the reading views share with the editor.
 - Which key combinations macOS and the web view take before the editor sees
   them, and which of those the shell can claim back.
 - How concurrent edits from two devices are detected so that last-write-wins

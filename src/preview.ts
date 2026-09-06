@@ -24,6 +24,7 @@ import {
   renderDocumentContents,
   renderReferenceList,
 } from "./core/render/article";
+import { READING_KEYS_DATA_ID, readingBindingDataJson } from "./core/render/reading-keys";
 import type { Chapter } from "./core/tree";
 import {
   inShell,
@@ -63,6 +64,39 @@ function articleVideo(): { upgradeVideos(): Promise<unknown> } | undefined {
 function articleEggs(): { boot(): void } | undefined {
   return (window as unknown as { ArticleEggs?: { boot(): void } }).ArticleEggs;
 }
+
+/**
+ * The window `article-keys.js` installs (map #26, spc-2609061318158216),
+ * loaded as a plain script beside this module. `boot` is idempotent for the
+ * same reason `articleEggs`'s own is: a fresh Preview means fresh headings,
+ * and a reading position from the document this replaced no longer means
+ * anything against them.
+ */
+function articleKeys(): { boot(): void } | undefined {
+  return (window as unknown as { ArticleKeys?: { boot(): void } }).ArticleKeys;
+}
+
+/**
+ * Write the reading views' own honoured rows into the page, once.
+ *
+ * `articleDocument` (`src/publish/build.ts`) writes the same block for the
+ * site build and the folder export; the preview window has no equivalent
+ * call, because its `<head>` is `preview.html`'s own static markup rather
+ * than something this module builds. The data is a fixed function of the
+ * binding table, not of the document being previewed, so writing it once at
+ * module load — before `article-keys.js`'s own `<script>` tag in the body
+ * even runs — is enough for every later Preview.
+ */
+function writeReadingKeysData(): void {
+  if (document.getElementById(READING_KEYS_DATA_ID) !== null) return;
+  const script = document.createElement("script");
+  script.type = "application/json";
+  script.id = READING_KEYS_DATA_ID;
+  script.textContent = readingBindingDataJson();
+  document.head.append(script);
+}
+
+writeReadingKeysData();
 
 /**
  * Read every picture one chapter refers to, through the shell.
@@ -185,6 +219,10 @@ async function show(source: PreviewSource): Promise<void> {
   // `<main>`; harmless where the script never loaded, the same as the video
   // upgrade above.
   articleEggs()?.boot();
+  // Re-scans the freshly written `<main>` for headings and resets the
+  // reading position to it, the same reason the two calls above run again
+  // on every Preview rather than once at page load.
+  articleKeys()?.boot();
 }
 
 /**

@@ -31,6 +31,7 @@ import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { parseChapter } from "./core/parse";
+import { READING_KEYS_DATA_ID } from "./core/render/reading-keys";
 import { sliceBytes, type Block, type Chapter } from "./core/tree";
 import {
   renderVariant,
@@ -270,9 +271,6 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
     // Video is the one interaction the article script carries today. A
     // document with no video block exercises nothing here beyond confirming
     // that fact, rather than failing for lack of one.
-    //
-    // Pending, for later maps to register their own check for instead of
-    // editing this one: keyboard movement and search (map #26).
     name: "every video block shows its fallback before the script runs, and a player after a probe succeeds",
     run: async (_doc, rendered) => {
       const before = new DOMParser().parseFromString(rendered.article, "text/html");
@@ -456,6 +454,72 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
       expect(document.querySelector(".egg-panel")).toBeNull();
       expect(marker.hidden).toBe(true);
       expect(document.querySelector(".egg-tray")).not.toBeNull();
+    },
+  },
+  {
+    // Keyboard movement, the contents list, search, cancel and the keys
+    // panel (map #26, spc-2609061318158216). The honoured rows are a fixed
+    // function of the binding table, not of what a document holds, so this
+    // check exercises the keys panel unconditionally and moves by Section
+    // only where the document actually has a heading to move to.
+    name: "the keys panel lists the honoured rows, and the movement chords reach a real heading when one exists",
+    run: async (_doc, rendered) => {
+      const scripts = articleScriptsOf(rendered.article);
+      expect(scripts, "the article links its own keyboard-movement script").toContain(
+        "article-keys.js",
+      );
+
+      document.body.innerHTML = new DOMParser().parseFromString(rendered.article, "text/html")
+        .body.innerHTML;
+      const dataScript = document.getElementById(READING_KEYS_DATA_ID);
+      expect(dataScript, "the article carries no reading-keys data block").not.toBeNull();
+
+      const globalBag = (): {
+        ARTICLE_PAGE_MANUAL?: boolean;
+        ArticleKeys?: { boot(): void; state(): { sectionIndex: number } };
+        ArticlePage?: unknown;
+      } => window as unknown as {
+        ARTICLE_PAGE_MANUAL?: boolean;
+        ArticleKeys?: { boot(): void; state(): { sectionIndex: number } };
+        ArticlePage?: unknown;
+      };
+      globalBag().ARTICLE_PAGE_MANUAL = true;
+      delete globalBag().ArticleKeys;
+      delete globalBag().ArticlePage;
+
+      for (const name of scripts) {
+        const source = readFileSync(join(__dirname, "core/render", name), "utf8");
+        new Function(source)();
+      }
+      const keys = globalBag().ArticleKeys;
+      if (keys === undefined) throw new Error("article-keys.js installed no ArticleKeys");
+      keys.boot();
+
+      // C-h b: the keys panel, listing exactly the honoured rows.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { code: "KeyH", key: "h", ctrlKey: true, bubbles: true }),
+      );
+      document.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyB", key: "b", bubbles: true }));
+      const panel = document.querySelector(".article-keys-panel");
+      expect(panel).not.toBeNull();
+      expect(panel?.querySelectorAll("dt").length).toBe(9);
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { code: "Escape", key: "Escape", bubbles: true }),
+      );
+
+      const headings = document.querySelectorAll(
+        "main h1[id], main h2[id], main h3[id], main h4[id], main h5[id], main h6[id]",
+      );
+      if (headings.length === 0) return;
+
+      // C-c C-n: next Section, from the top of the page.
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { code: "KeyC", key: "c", ctrlKey: true, bubbles: true }),
+      );
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { code: "KeyN", key: "n", ctrlKey: true, bubbles: true }),
+      );
+      expect(document.activeElement?.id).toBe(headings[0]?.id);
     },
   },
 ];

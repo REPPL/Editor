@@ -219,9 +219,18 @@ that resolves to nothing.
 
 ### Moving by keyboard
 
-The reading views share the editor's navigation vocabulary: the same chords
-move by section and by item, search the text, and cancel whatever is open.
-Bob can read the whole article without reaching for the mouse.
+The reading views share the editor's navigation vocabulary: nine rows of the
+one binding table, and no chord of their own invention. `C-c C-n`/`C-c p`
+move to the next and previous heading — Chapter, Section, or Sub-section, in
+document order; `C-n`/`Down` and `C-p`/`Up` step through the items inside
+one. `M-s o` opens the contents list as a small overlay the movement chords
+step through, `Return` jumps and closes it. `C-s`/`C-r` run an incremental
+search of the page's own text, forward and backward. `C-g` and `Escape`
+cancel whatever is open and keep the reading position; `C-h b` opens a keys
+panel listing exactly what the page answers, reachable as well from a small
+visible button for a reader who has never read the table. Bob can read the
+whole article without reaching for the mouse, and nothing about where he
+has moved, or what he searched for, ever leaves his browser.
 
 ### Video in the article
 
