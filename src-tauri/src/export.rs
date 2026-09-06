@@ -652,8 +652,11 @@ mod tests {
                 "assets/01-part/lantern.jpg".to_string(),
                 "index.html".to_string(),
                 // The reader-controls toolbar (map #10, spc-2609061318154502)
-                // beside the video script both already here.
+                // and the once-only opening and easter eggs (map #12,
+                // spc-2609061318159422) beside the video script both already
+                // here.
                 "presenter/article-controls.js".to_string(),
+                "presenter/article-eggs.js".to_string(),
                 "presenter/article-video.js".to_string(),
                 "presenter/article.css".to_string(),
             ]
@@ -1136,6 +1139,7 @@ mod tests {
                 "presenter/article.css",
                 "presenter/article-video.js",
                 "presenter/article-controls.js",
+                "presenter/article-eggs.js",
             ]
         );
         // The site's own root files are in neither: `index.html` would collide

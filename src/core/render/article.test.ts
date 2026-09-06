@@ -443,3 +443,120 @@ describe("the generated reference list (itd-2609051335502171)", () => {
     expect(chapterHasRefsHeading(parseChapter("A claim [@smith2020].\n"))).toBe(false);
   });
 });
+
+describe("the once-only opening quotation (itd-2609051335518134, map #12)", () => {
+  const SOURCE = [
+    '::: {.opening once="per-browser"}',
+    "> The lantern was not the point.",
+    "",
+    "— Carol",
+    ":::",
+    "",
+    "# Beginnings",
+    "",
+  ].join("\n");
+
+  it("renders in the flow, with no `hidden` attribute, so a reader with no script sees an epigraph", () => {
+    const html = article(SOURCE);
+    expect(html).toContain('<div class="opening" data-once="per-browser">');
+    expect(html).not.toContain("hidden");
+    expect(html).toContain("The lantern was not the point.");
+    expect(html).toContain("— Carol");
+    // Still the first chapter's first block, ahead of the heading.
+    expect(html.indexOf('class="opening"')).toBeLessThan(html.indexOf("<h1"));
+  });
+
+  it("renders nothing for a chapter that is not the document's first", () => {
+    const html = article(SOURCE, pathResolver(), { isFirstChapter: false });
+    expect(html).not.toContain("opening");
+    expect(html).not.toContain("The lantern was not the point.");
+  });
+
+  it("renders nothing when the .opening block is not the chapter's own first block", () => {
+    const source = ['# Beginnings', "", '::: {.opening once="per-browser"}', "> Late.", ":::", ""].join(
+      "\n",
+    );
+    const html = article(source);
+    expect(html).not.toContain('class="opening"');
+    expect(html).not.toContain("Late.");
+  });
+
+  it("defaults isFirstChapter to true, so a chapter rendered alone is treated as the document's first", () => {
+    expect(article(SOURCE)).toContain('class="opening"');
+  });
+});
+
+describe("easter eggs (itd-2609051335518134, map #12)", () => {
+  const MATCHED = [
+    'The survey ran for three winters[✦]{.egg egg="lantern"} without a break.',
+    "",
+    '::: {.egg #lantern label="✦"}',
+    "A photograph of the lantern, and two sentences about it.",
+    ":::",
+    "",
+  ].join("\n");
+
+  it("renders the marker as a button in place, and the block's content nowhere in the flow", () => {
+    const html = article(MATCHED);
+    expect(html).toContain('<button type="button" class="egg-marker"');
+    expect(html).toContain('data-egg="egg-lantern"');
+    expect(html).toContain(">✦</button>");
+    // The block's own words are in a <template>, after the paragraph that
+    // carries the marker — never inside that paragraph's own flow text.
+    expect(html).toContain('<template id="egg-lantern"');
+    const paragraph = html.slice(0, html.indexOf("<template"));
+    expect(paragraph).not.toContain("A photograph of the lantern");
+    expect(html).toContain("A photograph of the lantern");
+  });
+
+  it("keeps the marker's own text where it sits, before the sentence that follows it", () => {
+    const html = article(MATCHED);
+    const markerAt = html.indexOf("egg-marker");
+    const wordAt = html.indexOf("winters");
+    const restAt = html.indexOf("without a break");
+    expect(wordAt).toBeLessThan(markerAt);
+    expect(markerAt).toBeLessThan(restAt);
+  });
+
+  it("prefixes both the marker's data-egg and the template's id, so two chapters never collide", () => {
+    const html = article(MATCHED, pathResolver(), { idPrefix: "c2-" });
+    expect(html).toContain('data-egg="c2-egg-lantern"');
+    expect(html).toContain('<template id="c2-egg-lantern"');
+  });
+
+  it("carries an egg's video content through the ordinary video rule", () => {
+    const source = [
+      'A clip[✦]{.egg egg="clip"} shows the site.',
+      "",
+      '::: {.egg #clip label="✦"}',
+      '::: {.video poster="assets/poster.jpg"}',
+      "- site: keynote.mp4",
+      ":::",
+      ":::",
+      "",
+    ].join("\n");
+    const html = article(source);
+    expect(html).toContain('<figure class="video">');
+    expect(html).toContain("keynote.mp4");
+  });
+
+  it("renders an orphan marker's own text as ordinary, unclickable text", () => {
+    const html = article('A word[✦]{.egg egg="lantern"} follows.\n');
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("egg-marker");
+    expect(html).toContain("word✦ follows");
+    expect(html).toContain("follows");
+  });
+
+  it("renders an orphan block nowhere at all", () => {
+    const html = article('::: {.egg #lantern label="✦"}\nContent nobody points at.\n:::\n');
+    expect(html).not.toContain("Content nobody points at");
+    expect(html).not.toContain("<template");
+  });
+
+  it("the deck's own row of the canon table places both constructs absent (confirmed here, owned by canon.ts)", () => {
+    expect(placementOf(parseChapter(MATCHED).blocks[1]!, "slides")).toBe("absent");
+    const opening = parseChapter('::: {.opening once="per-browser"}\n> A.\n:::\n').blocks[0]!;
+    expect(placementOf(opening, "slides")).toBe("absent");
+  });
+});

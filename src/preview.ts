@@ -51,6 +51,20 @@ function articleVideo(): { upgradeVideos(): Promise<unknown> } | undefined {
 }
 
 /**
+ * The window `article-eggs.js` installs (map #12, spc-2609061318159422),
+ * loaded as a plain script beside this module.
+ *
+ * `boot` is idempotent — it re-scans the DOM this module just wrote, rather
+ * than assuming it runs once over a page that never changes — which is what
+ * lets a second Preview event replace `<main>` and still have the opening
+ * and every egg's marker wired up, the same way `articleVideo`'s own
+ * `upgradeVideos` is called again below rather than assumed to still hold.
+ */
+function articleEggs(): { boot(): void } | undefined {
+  return (window as unknown as { ArticleEggs?: { boot(): void } }).ArticleEggs;
+}
+
+/**
  * Read every picture one chapter refers to, through the shell.
  *
  * One round trip per reference, and a reference the shell refuses is simply
@@ -106,6 +120,9 @@ async function renderChapter(
       contents: false,
       idPrefix,
       citations,
+      // The once-only opening belongs to the document's own first chapter
+      // alone (itd-2609051335518134, map #12).
+      isFirstChapter: index === 0,
     }),
   };
 }
@@ -164,6 +181,10 @@ async function show(source: PreviewSource): Promise<void> {
   await articleVideo()?.upgradeVideos().catch(() => {
     /* A source that errors after the probe leaves the fallback standing. */
   });
+  // Re-applies the opening and every egg's marker to the freshly written
+  // `<main>`; harmless where the script never loaded, the same as the video
+  // upgrade above.
+  articleEggs()?.boot();
 }
 
 /**

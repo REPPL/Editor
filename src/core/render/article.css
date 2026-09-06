@@ -368,7 +368,7 @@ body.article figure.video[data-player-ready] img {
  * `--article-fg`, `--article-muted` and `--article-rule` on the root
  * element; it adds no selector above and needs none.
  *
- * Map #12 (`itd-2609051335496883`?, the once-only quotation and the easter
+ * Map #12 (`itd-2609051335518134`, the once-only quotation and the easter
  * eggs) and map #26 (`itd-2609051402083398`, moving by keyboard) each add a
  * stylesheet section below this comment, never above it.
  * ------------------------------------------------------------------- */
@@ -463,4 +463,180 @@ body.article .article-controls button:focus-visible {
 
 body.article .article-controls-reset {
   font-weight: normal;
+}
+
+/* ---------------------------------------------------------------------
+ * Map #12 (`itd-2609051335518134`, spc-2609061318159422): the once-only
+ * opening quotation and the easter eggs `article-eggs.js` builds and wires
+ * at load. Nothing here is script-conditional in the way it looks: the
+ * opening's flow rule (above, ordinary `body.article` selectors) already
+ * shows it as a plain epigraph with no script at all, and the rules below
+ * style the modal, the panel, the tray and the marker the script builds —
+ * they simply have nothing to select against until it runs.
+ * ------------------------------------------------------------------- */
+
+/* The opening and an egg's panel share one backdrop shape: a fixed overlay
+   the full size of the viewport, so a reader's own scroll position behind
+   it is never how the dialog itself scrolls (itd-2609061324342715: a focus
+   trap must still leave a way to reach the dialog with no pointer, which a
+   backdrop that never moves keeps simple). */
+.egg-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, CanvasText 45%, transparent);
+}
+
+.opening-backdrop {
+  justify-content: center;
+  align-items: center;
+}
+
+.opening-modal {
+  max-width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  margin: 1rem;
+  padding: 1.5rem;
+  background: var(--article-bg);
+  color: var(--article-fg);
+  border-radius: 0.25rem;
+  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, CanvasText 25%, transparent);
+}
+
+/* The opening quotation itself, once it is inside the modal: the plain
+   flow rules above already gave its blockquote and its attribution a
+   shape, and this only removes the flow margins a dialog does not need. */
+.opening-modal .opening {
+  margin: 0;
+}
+
+.opening-dismiss {
+  display: block;
+  margin-top: 1rem;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+.opening-dismiss:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+/* The egg panel: beside the text at 820 and 1280 CSS px — a fixed strip on
+   the trailing edge, never part of the measure's own flow — and the full
+   viewport width at 390, with nothing narrower forcing a horizontal
+   scrollbar or a pinch (this map's own falsifiable claim). */
+.egg-panel {
+  width: min(28rem, 100vw);
+  max-width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 1.5rem;
+  background: var(--article-bg);
+  color: var(--article-fg);
+  position: relative;
+}
+
+@media (max-width: 759px) {
+  .egg-panel-backdrop:not(.opening-backdrop) {
+    justify-content: stretch;
+  }
+
+  .egg-panel {
+    width: 100vw;
+  }
+}
+
+.egg-panel-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+}
+
+.egg-panel-close:focus-visible,
+.egg-marker:focus-visible,
+.egg-tray-item:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+.egg-panel-body {
+  margin-top: 2rem;
+}
+
+.egg-panel-body img,
+.egg-panel-body video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* The marker: a small mark "about where a footnote marker would be" (the
+   intent's own press release), never a fixed pixel box that would refuse to
+   shrink beside the largest text size map #10 offers. */
+.egg-marker {
+  font: inherit;
+  font-size: 0.85em;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0 0.1em;
+  cursor: pointer;
+}
+
+/* The Konami reveal: a flash that is never colour alone
+   (itd-2609061324342715) — the outline and the scale both change, so a
+   reader who cannot perceive colour still sees which marks answered. */
+.egg-marker-revealed {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+  border-radius: 0.15em;
+  transform: scale(1.4);
+}
+
+/* The tray: a plain list at the foot of the page, never a fixed overlay —
+   itd-2609061324342715 requires it reachable "with the tray still reachable
+   by scrolling" at 390 CSS px, which an ordinary block in flow already is. */
+.egg-tray {
+  margin: 3rem auto 0;
+  max-width: var(--article-measure);
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--article-rule);
+}
+
+.egg-tray ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.egg-tray-item {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
 }

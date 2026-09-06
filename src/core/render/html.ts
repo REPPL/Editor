@@ -13,7 +13,7 @@
 
 import type { Resolver } from "../assets";
 import { citationPartsOf, type CitationResolution } from "../bibliography";
-import type { Block, Inline, ListItem, TableCell } from "../tree";
+import { hasClass, type Block, type Inline, type ListItem, type TableCell } from "../tree";
 
 /** What a renderer hands the shared shapes. */
 export interface RenderContext {
@@ -50,6 +50,18 @@ export interface RenderContext {
    * marked out of.
    */
   readonly variant?: string | null;
+  /**
+   * The label of every `.egg` block this chapter's markers match, by the id
+   * they name each other by (itd-2609051335518134, map #12).
+   *
+   * Present only for the article: the deck's own placement for an egg marker
+   * is "absent" (`canon.ts`), so [`inline`] never reads this for `context.
+   * rendering === "slides"` and a marker there renders as nothing at all,
+   * matching the block it never carries. An id with no entry here is an
+   * orphan marker — no block in the chapter answered it — and renders as the
+   * plain text a reader with no script, and a plain Markdown tool, both show.
+   */
+  readonly eggLabels?: ReadonlyMap<string, string>;
 }
 
 /** Whether an inline node belongs to the variant being rendered. */
@@ -177,6 +189,36 @@ function renderResolvedCitation(node: Inline, citations: CitationResolution): st
   return `<span class="citation">[${marker}]${mixed}</span>`;
 }
 
+/**
+ * An easter-egg marker: a button over the block it matches, in the article
+ * alone.
+ *
+ * `canon.ts` places an egg marker "absent" in the deck, so this answers
+ * nothing at all outside the article — a slide never carries the button, the
+ * dom id, or the marker's own text either, which is what "the deck omits
+ * both constructs entirely" (itd-2609051335518134) requires of a marker as
+ * much as of the block it opens. Inside the article, an id `context.
+ * eggLabels` does not carry is an orphan marker: it renders as the plain
+ * text the marker's own children hold, which is also what a plain Markdown
+ * tool shows a `[✦]{.egg …}` span as, and nothing there is clickable.
+ */
+function eggMarker(node: Inline, context: RenderContext): string {
+  if (context.rendering !== "article") return "";
+  const id = node.attributes.pairs["egg"] ?? "";
+  const label = context.eggLabels?.get(id);
+  if (label === undefined) return renderInlines(node.children, context);
+  const target = `${context.idPrefix ?? ""}egg-${id}`;
+  // A screen reader announces the accessible name, not the glyph a sighted
+  // reader sees, so `aria-label` says what activating it does
+  // (itd-2609061324342715: "announces what it is before it is activated"),
+  // and `aria-haspopup="dialog"` is the native way to say that in advance.
+  return `<button type="button" class="egg-marker"${attributes([
+    ["data-egg", target],
+  ])} aria-haspopup="dialog" aria-label="Reveal hidden content">${escapeText(
+    label,
+  )}</button>`;
+}
+
 /** Render one inline node. */
 function inline(node: Inline, context: RenderContext): string {
   const children = (): string => renderInlines(node.children, context);
@@ -211,6 +253,7 @@ function inline(node: Inline, context: RenderContext): string {
       ])}>${children()}</a>`;
     }
     case "span":
+      if (hasClass(node, "egg")) return eggMarker(node, context);
       return `<span${attributes([["id", node.attributes.id]])}${classAttribute(
         node.attributes.classes,
       )}>${children()}</span>`;

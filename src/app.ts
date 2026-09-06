@@ -20,6 +20,7 @@ import {
   unresolvedCitationKeysIn,
   type Bibliography,
 } from "./core/bibliography";
+import { unresolvedEggsIn } from "./core/eggs";
 import { outlineOf, type Outline, type OutlineNode } from "./core/outline";
 import { parseChapter } from "./core/parse";
 import { setBibliography } from "./citations";
@@ -496,11 +497,18 @@ export function createApp(root: HTMLElement, services: AppServices): App {
         })
       : null;
     const bibliography = parseBibliography(bibliographyText ?? "");
+    // The once-only opening belongs to the document's own first chapter alone
+    // (itd-2609051335518134, map #12); `chapters` is the same reading order
+    // `publish/build.ts`'s own `tree.chapters` walks, so "first" agrees here.
+    const firstChapterPath = chapters[0]?.path;
     for (const read of batch.reads) {
       const chapter = parseChapter(read.text);
       outlines.set(read.path, outlineOf(chapter));
-      const unresolved = unresolvedCitationKeysIn(chapter, bibliography);
-      if (unresolved.length > 0) facts.set(read.path, { unresolvedCitations: unresolved });
+      const unresolvedCitations = unresolvedCitationKeysIn(chapter, bibliography);
+      const unresolvedEggs = unresolvedEggsIn(chapter, read.path === firstChapterPath);
+      if (unresolvedCitations.length > 0 || unresolvedEggs.length > 0) {
+        facts.set(read.path, { unresolvedCitations, unresolvedEggs });
+      }
     }
     for (const failure of batch.failures) {
       console.warn(`outline: ${failure}`);

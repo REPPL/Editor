@@ -572,6 +572,10 @@ export function renderVariant(
       contents: false,
       idPrefix: idPrefix(index),
       citations,
+      // The once-only opening belongs to the document's own first chapter
+      // alone (itd-2609051335518134, map #12); every other chapter's own
+      // `.opening`, if it wrote one, is a misplaced block the sidebar lists.
+      isFirstChapter: index === 0,
     }),
   );
   // A `.refs` heading writes the reference list where the document asked for
@@ -642,6 +646,12 @@ export function articleDocument(
     // itself onto the page, so the article still reads with no toolbar and
     // the article's own defaults when this fails to load or does not run.
     `<script src="${chrome}/article-controls.js" defer></script>`,
+    // The once-only opening and the easter eggs (map #12,
+    // spc-2609061318159422): with this absent, the opening quotation stays
+    // in the flow as an epigraph and a marked-up egg marker is simply an
+    // inert button, because the markup that degrade needs is already in
+    // `body` either way.
+    `<script src="${chrome}/article-eggs.js" defer></script>`,
     "</body>",
     "</html>",
     "",

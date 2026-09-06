@@ -21,14 +21,18 @@ import type { Chapter, DocumentTree, Part } from "./doctree";
 /**
  * What a chapter carries, beyond its outline.
  *
- * One field so far — the citation keys it cites that resolve to nothing —
- * because that is the one fact map #11 asks the sidebar to report; the
- * variant and asset badges the header comment reserves room for are later
- * maps' own facts, not this shape's to guess at.
+ * The citation keys it cites that resolve to nothing is map #11's own fact;
+ * `unresolvedEggs` is map #12's (itd-2609051335518134) — an egg marker or
+ * block this chapter cannot match, and a misplaced `.opening` — reported the
+ * same way. Optional, so an existing caller that builds a `ChapterFacts` with
+ * only the citation field still compiles; `badgeSlot` reads it with the same
+ * `?? []` fallback either way.
  */
 export interface ChapterFacts {
   /** Every key this chapter cites that is in no entry of its bibliography, first-citation order. */
   readonly unresolvedCitations: readonly string[];
+  /** Every hidden construct Alice should fix in this chapter (`core/eggs.ts`'s own wording). */
+  readonly unresolvedEggs?: readonly string[];
 }
 
 /** What the sidebar asks the application to do. */
@@ -149,6 +153,16 @@ function badgeSlot(facts?: ChapterFacts): HTMLSpanElement {
     badge.className = "tree-badge tree-badge-citation";
     badge.textContent = unresolved.length === 1 ? "1 unresolved" : `${String(unresolved.length)} unresolved`;
     badge.title = `Unresolved citation key${unresolved.length === 1 ? "" : "s"}: ${unresolved.join(", ")}`;
+    slot.append(badge);
+  }
+  // A hidden construct's own badge (itd-2609051335518134, map #12): an egg
+  // marker or block with no match, or a misplaced opening quotation.
+  const hidden = facts?.unresolvedEggs ?? [];
+  if (hidden.length > 0) {
+    const badge = document.createElement("span");
+    badge.className = "tree-badge tree-badge-egg";
+    badge.textContent = hidden.length === 1 ? "1 unresolved" : `${String(hidden.length)} unresolved`;
+    badge.title = `Unresolved hidden construct${hidden.length === 1 ? "" : "s"}: ${hidden.join(", ")}`;
     slot.append(badge);
   }
   return slot;

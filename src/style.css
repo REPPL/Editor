@@ -149,6 +149,14 @@ body {
   background: var(--warning-bg, #fff1d6);
 }
 
+/* An unresolved egg marker or block, or a misplaced opening quotation
+   (itd-2609051335518134, map #12) — the same warning colours as a citation
+   badge, because both report an authoring mistake Alice fixes the same way. */
+.tree-badge-egg {
+  color: var(--warning-text, #7a4b00);
+  background: var(--warning-bg, #fff1d6);
+}
+
 .tree-part-label {
   flex: 1 1 auto;
   min-width: 0;

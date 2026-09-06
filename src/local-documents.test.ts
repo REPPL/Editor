@@ -272,8 +272,7 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
     // that fact, rather than failing for lack of one.
     //
     // Pending, for later maps to register their own check for instead of
-    // editing this one: hidden marks and the once-only quotation (map #12),
-    // keyboard movement and search (map #26).
+    // editing this one: keyboard movement and search (map #26).
     name: "every video block shows its fallback before the script runs, and a player after a probe succeeds",
     run: async (_doc, rendered) => {
       const before = new DOMParser().parseFromString(rendered.article, "text/html");
@@ -394,6 +393,69 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
       const stored = window.localStorage.getItem("editor-article-reader-preferences");
       expect(stored).not.toBeNull();
       expect(String(stored)).toContain("dark");
+    },
+  },
+  {
+    // The once-only opening and the easter eggs (map #12, spc-2609061318159422).
+    // A document with neither construct exercises nothing here beyond
+    // confirming that fact, rather than failing for lack of one.
+    name: "the opening reads as an epigraph with no script, and the script wires a marker's panel and the tray",
+    run: async (_doc, rendered) => {
+      const before = new DOMParser().parseFromString(rendered.article, "text/html");
+      const opening = before.querySelector(".opening");
+      if (opening !== null) {
+        // No script has run: the flow copy is exactly what a plain browser,
+        // and a plain Markdown reader's own div, both show — an epigraph, not
+        // a hidden node waiting for one.
+        expect(opening.hasAttribute("hidden")).toBe(false);
+      }
+      const markers = [...before.querySelectorAll(".egg-marker")];
+      if (opening === null && markers.length === 0) return;
+
+      const scripts = articleScriptsOf(rendered.article);
+      expect(scripts, "an opening or a marker with no script to wire it").toContain(
+        "article-eggs.js",
+      );
+
+      const globalBag = (): {
+        ARTICLE_PAGE_MANUAL?: boolean;
+        ArticleEggs?: { boot(): void };
+        ArticlePage?: unknown;
+      } => window as unknown as {
+        ARTICLE_PAGE_MANUAL?: boolean;
+        ArticleEggs?: { boot(): void };
+        ArticlePage?: unknown;
+      };
+      globalBag().ARTICLE_PAGE_MANUAL = true;
+      delete globalBag().ArticleEggs;
+      delete globalBag().ArticlePage;
+      window.localStorage.clear();
+      document.body.innerHTML = new DOMParser().parseFromString(rendered.article, "text/html")
+        .body.innerHTML;
+
+      for (const name of scripts) {
+        const source = readFileSync(join(__dirname, "core/render", name), "utf8");
+        new Function(source)();
+      }
+      const eggs = globalBag().ArticleEggs;
+      if (eggs === undefined) throw new Error("article-eggs.js installed no ArticleEggs");
+      eggs.boot();
+
+      if (opening !== null) {
+        expect(document.querySelector(".opening-modal")).not.toBeNull();
+        document.querySelector<HTMLButtonElement>(".opening-dismiss")?.click();
+        expect(document.querySelector(".opening-modal")).toBeNull();
+      }
+      if (markers.length === 0) return;
+
+      const marker = document.querySelectorAll<HTMLButtonElement>(".egg-marker")[0];
+      if (marker === undefined) return;
+      marker.click();
+      expect(document.querySelector(".egg-panel")).not.toBeNull();
+      document.querySelector<HTMLButtonElement>(".egg-panel-close")?.click();
+      expect(document.querySelector(".egg-panel")).toBeNull();
+      expect(marker.hidden).toBe(true);
+      expect(document.querySelector(".egg-tray")).not.toBeNull();
     },
   },
 ];

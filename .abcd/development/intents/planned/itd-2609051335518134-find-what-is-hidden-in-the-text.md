@@ -218,3 +218,7 @@ hurried one, and that costs the reader nothing in privacy to enjoy.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: the once-only opening and the easter eggs render and behave exactly as specced — a valid opening degrades to a flow epigraph and promotes to a once-per-browser modal, a matched egg opens beside the text and collects into a tray, an orphan marker or block and a misplaced opening are inert and sidebar-listed, the deck omits both constructs, and nothing about a reader's progress leaves localStorage; this would be shown wrong by a failing test in article.test.ts, html.test.ts, article-eggs.test.ts, slides.test.ts, eggs.test.ts, sidebar.test.ts or document.test.ts, or by the six gates failing.

@@ -635,3 +635,69 @@ describe("the sidebar's citation facts (itd-2609051335502171, map #11)", () => {
     expect(host.querySelector(".tree-badge-citation")?.textContent).toBe("1 unresolved");
   });
 });
+
+describe("the sidebar's hidden-construct facts (itd-2609051335518134, map #12)", () => {
+  it("lists an orphan egg marker against the chapter that carries it", async () => {
+    const markedText = 'A word[✦]{.egg egg="lantern"} follows.\n';
+    const markedTexts = new Map(texts);
+    markedTexts.set("book/01-first/01-alice.md", markedText);
+    const withMarker: AppServices = {
+      ...services,
+      readChapter: (path) => {
+        const text = markedTexts.get(path);
+        return text === undefined
+          ? Promise.reject(new Error(`cannot read ${path}`))
+          : Promise.resolve(text);
+      },
+      readChapters: (paths) => {
+        const batch: ChapterBatch = {
+          reads: paths
+            .filter((path) => markedTexts.has(path))
+            .map((path) => ({ path, text: markedTexts.get(path)! })),
+          failures: [],
+        };
+        return Promise.resolve(batch);
+      },
+    };
+    app.destroy();
+    app = createApp(host, withMarker);
+    await app.openFolder("book");
+    expandAll();
+    const badge = host.querySelector(".tree-badge-egg");
+    expect(badge?.textContent).toBe("1 unresolved");
+    expect(badge?.getAttribute("title")).toContain("lantern");
+  });
+
+  it("lists a misplaced opening against the chapter that is not the document's first", async () => {
+    const misplacedText = '::: {.opening once="per-browser"}\n> Too late.\n:::\n';
+    const misplacedTexts = new Map(texts);
+    misplacedTexts.set("book/02-second/01-bob.md", misplacedText);
+    const withMisplaced: AppServices = {
+      ...services,
+      readChapter: (path) => {
+        const text = misplacedTexts.get(path);
+        return text === undefined
+          ? Promise.reject(new Error(`cannot read ${path}`))
+          : Promise.resolve(text);
+      },
+      readChapters: (paths) => {
+        const batch: ChapterBatch = {
+          reads: paths
+            .filter((path) => misplacedTexts.has(path))
+            .map((path) => ({ path, text: misplacedTexts.get(path)! })),
+          failures: [],
+        };
+        return Promise.resolve(batch);
+      },
+    };
+    app.destroy();
+    app = createApp(host, withMisplaced);
+    await app.openFolder("book");
+    expandAll();
+    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>(".tree-button"));
+    const bobRow = buttons
+      .find((button) => button.dataset["path"] === "book/02-second/01-bob.md")
+      ?.closest(".tree-row");
+    expect(bobRow?.querySelector(".tree-badge-egg")?.textContent).toBe("1 unresolved");
+  });
+});

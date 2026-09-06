@@ -45,6 +45,9 @@ Task-oriented. Open one when you have something specific to do.
   name a `.bib` file, complete and hover a key as you type it, and see what
   an unresolved key and a generated reference list look like in each
   rendering.
+- [Hide things in the text](how-to-hide-things-in-the-text.md) — a once-only
+  opening quotation, an easter egg's marker and its block, and what a
+  mismatched marker or block looks like in the sidebar.
 
 ## Reference
 

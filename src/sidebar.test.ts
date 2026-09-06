@@ -81,3 +81,62 @@ describe("the citation badge on a chapter row", () => {
     expect(badges).toHaveLength(1);
   });
 });
+
+describe("the hidden-construct badge on a chapter row (itd-2609051335518134, map #12)", () => {
+  it("shows nothing when no facts are given at all", () => {
+    const sidebar = createSidebar(hooks());
+    sidebar.show(treeOf(chapter("01-a.md", "A")));
+    expect(sidebar.element.querySelector(".tree-badge-egg")).toBeNull();
+  });
+
+  it("shows nothing for a chapter whose facts name no unresolved egg", () => {
+    const sidebar = createSidebar(hooks());
+    const facts = new Map<string, ChapterFacts>([
+      ["01-a.md", { unresolvedCitations: [], unresolvedEggs: [] }],
+    ]);
+    sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
+    expect(sidebar.element.querySelector(".tree-badge-egg")).toBeNull();
+  });
+
+  it("names the count and lists the entries, for one unresolved construct", () => {
+    const sidebar = createSidebar(hooks());
+    const facts = new Map<string, ChapterFacts>([
+      ["01-a.md", { unresolvedCitations: [], unresolvedEggs: ["lantern (marker with no matching block)"] }],
+    ]);
+    sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
+    const badge = sidebar.element.querySelector(".tree-badge-egg");
+    expect(badge?.textContent).toBe("1 unresolved");
+    expect(badge?.getAttribute("title")).toBe(
+      "Unresolved hidden construct: lantern (marker with no matching block)",
+    );
+  });
+
+  it("names the count and lists every entry, for more than one", () => {
+    const sidebar = createSidebar(hooks());
+    const facts = new Map<string, ChapterFacts>([
+      [
+        "01-a.md",
+        {
+          unresolvedCitations: [],
+          unresolvedEggs: [
+            "lantern (marker with no matching block)",
+            "opening (not the first block of the first chapter)",
+          ],
+        },
+      ],
+    ]);
+    sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
+    const badge = sidebar.element.querySelector(".tree-badge-egg");
+    expect(badge?.textContent).toBe("2 unresolved");
+  });
+
+  it("shows the citation and the egg badge side by side when a chapter carries both", () => {
+    const sidebar = createSidebar(hooks());
+    const facts = new Map<string, ChapterFacts>([
+      ["01-a.md", { unresolvedCitations: ["nosuchkey"], unresolvedEggs: ["lantern (block with no marker)"] }],
+    ]);
+    sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
+    expect(sidebar.element.querySelector(".tree-badge-citation")).not.toBeNull();
+    expect(sidebar.element.querySelector(".tree-badge-egg")).not.toBeNull();
+  });
+});

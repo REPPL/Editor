@@ -112,14 +112,46 @@ defaults, and a reload keeps them there. The page reads exactly the same with
 no script at all: there is no toolbar, and the article renders at its
 defaults, the way the earlier sections of this page describe it.
 
+## What is hidden in the text
+
+Some documents open with a quotation, shown once. The first time you open the
+article in a browser, it stands over the page until you dismiss it; open the
+same link again in the same browser, and you land straight on the first
+paragraph — it has already made its introduction. Where a browser cannot run
+a script at all, the same words sit in the flow instead, as an ordinary
+quotation at the top of the page.
+
+Reading on, you may notice a small mark sitting inside a paragraph, about
+where a footnote marker would be. Click it, and what the author hid there
+opens beside the text — a few sentences, a photograph, or a short video,
+following the same rule as any other video in the article. Close it, and the
+mark leaves the paragraph and settles into a tray at the foot of the page, so
+you can see how many you have found and reopen any of them later. On a
+phone, the same panel fills the width of the screen rather than sitting in
+the margin, and nothing needs pinching.
+
+Nothing on the page announces that a mark is there, and that is the point.
+If you suspect there is more, type the Konami code — up, up, down, down,
+left, right, left, right, b, a — and every mark still hidden flashes
+briefly, with the page scrolling to the first of them; a mark you have
+already found does not flash again, and typing the code never collects one
+for you.
+
+None of this leaves your browser. Which quotation you have seen and which
+marks you have collected are remembered only where you are reading, and
+nowhere else; clear that browser's storage and the page returns to how it
+looked the first time you opened it. The deck built from the same chapters
+carries neither the quotation nor a mark: both belong to the article alone.
+
 ## The same page from every host
 
 The preview window, the page a publish pushes to the site, and the page an
 export writes into a folder are three readings of one file,
-`src/core/render/article.css`, and two scripts, `src/core/render/article-video.js`
-and `src/core/render/article-controls.js`. A fix to any one of them reaches
-every one of these hosts at once; a difference between what the three show is
-a defect in the rendering core, not a fact about one of the hosts.
+`src/core/render/article.css`, and three scripts,
+`src/core/render/article-video.js`, `src/core/render/article-controls.js`,
+and `src/core/render/article-eggs.js`. A fix to any one of them reaches every
+one of these hosts at once; a difference between what the three show is a
+defect in the rendering core, not a fact about one of the hosts.
 
 ## Related
 

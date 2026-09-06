@@ -89,6 +89,7 @@ export const FOLDER_CHROME_FILES: Readonly<Record<ExportKind, readonly string[]>
     `${FOLDER_CHROME}/article.css`,
     `${FOLDER_CHROME}/article-video.js`,
     `${FOLDER_CHROME}/article-controls.js`,
+    `${FOLDER_CHROME}/article-eggs.js`,
   ],
 };
 

@@ -227,6 +227,34 @@ describe("the fragment", () => {
   });
 });
 
+describe("the once-only opening and easter eggs (itd-2609051335518134, map #12)", () => {
+  it("omits both constructs entirely — the block, the marker, and the block's own words", () => {
+    const html = markup(
+      [
+        '::: {.opening once="per-browser"}',
+        "> A quotation nobody presenting should ever see.",
+        ":::",
+        "",
+        "## Beginnings",
+        "",
+        'The survey ran for three winters[✦]{.egg egg="lantern"} without a break.',
+        "",
+        '::: {.egg #lantern label="✦"}',
+        "A photograph of the lantern, and two sentences about it.",
+        ":::",
+        "",
+      ].join("\n"),
+    );
+    expect(html).not.toContain("quotation nobody presenting");
+    expect(html).not.toContain("egg-marker");
+    expect(html).not.toContain("photograph of the lantern");
+    expect(html).not.toContain("✦");
+    // What is left is the ordinary Section, undisturbed.
+    expect(html).toContain("The survey ran for three winters");
+    expect(html).toContain("without a break");
+  });
+});
+
 describe("the engine", () => {
   it("turns on touch and the on-screen controls", () => {
     expect(DECK_CONFIG.touch).toBe(true);
