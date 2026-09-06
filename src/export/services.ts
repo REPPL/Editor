@@ -85,7 +85,11 @@ export const FOLDER_CHROME_FILES: Readonly<Record<ExportKind, readonly string[]>
     `${FOLDER_CHROME}/slides.css`,
     `${FOLDER_CHROME}/deck.js`,
   ],
-  article: [`${FOLDER_CHROME}/article.css`, `${FOLDER_CHROME}/article-video.js`],
+  article: [
+    `${FOLDER_CHROME}/article.css`,
+    `${FOLDER_CHROME}/article-video.js`,
+    `${FOLDER_CHROME}/article-controls.js`,
+  ],
 };
 
 /** The page one kind of export writes, inside its folder. */
@@ -196,6 +200,7 @@ export function createExportServices(
       rendered: renderVariant(document.tree, document.variant, {
         title: document.title,
         host,
+        bibliography: document.bibliography,
       }),
     });
     return { ...document, built };

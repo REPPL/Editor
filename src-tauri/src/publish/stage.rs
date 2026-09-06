@@ -93,7 +93,7 @@ pub const SHELL: &str = include_str!("../../../site/index.html");
 /// Each entry is a path inside the deployed directory and the bytes that
 /// belong there. The reveal.js files are the vendored copy, so the site and
 /// the app run the same engine and neither reaches a content network.
-pub const CHROME: [(&str, &str); 10] = [
+pub const CHROME: [(&str, &str); 11] = [
     ("index.html", SHELL),
     ("404.html", SHELL),
     ("robots.txt", include_str!("../../../site/robots.txt")),
@@ -118,6 +118,13 @@ pub const CHROME: [(&str, &str); 10] = [
     (
         "presenter/article-video.js",
         include_str!("../../../src/core/render/article-video.js"),
+    ),
+    // The reader-controls toolbar (map #10, spc-2609061318154502): the same
+    // one-source arrangement as the two files above, so a fix reaches the
+    // app's preview, the site build and the folder export at once.
+    (
+        "presenter/article-controls.js",
+        include_str!("../../../src/core/render/article-controls.js"),
     ),
     (
         "presenter/deck.js",
@@ -180,7 +187,11 @@ pub const TOOLING: [(&str, &str); 2] = [
 pub fn chrome_for_folder(kind: &str) -> Result<Vec<(&'static str, &'static str)>, String> {
     let named: &[&str] = match kind {
         "deck" => &["presenter/slides.css", "presenter/deck.js"],
-        "article" => &["presenter/article.css", "presenter/article-video.js"],
+        "article" => &[
+            "presenter/article.css",
+            "presenter/article-video.js",
+            "presenter/article-controls.js",
+        ],
         other => return Err(format!("{other} is not a rendering an export writes")),
     };
     let mut chrome: Vec<(&'static str, &'static str)> = Vec::new();

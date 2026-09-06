@@ -41,10 +41,15 @@ note folds into the flow, directly after the paragraph, at the same size as
 the text around it. Nothing about the markup changes between the two: a single
 stylesheet rule decides which you see.
 
-A citation Editor cannot yet resolve against a bibliography shows the key
-exactly as you wrote it, marked as unresolved. Once you keep a `.bib` file
-beside the document, resolving it is the citations feature's own job; where a
-note sits, and how it folds, do not change under it.
+A citation beside a `.bib` file named in `document.yaml` renders as a numbered
+marker — `[1]`, or `[1, p. 4]` with its locator — and its margin note carries
+the entry's full reference, the same text the generated reference list holds
+at the end of the page. A key the bibliography does not carry is marked
+unresolved rather than printed as the brackets you wrote; see
+[Cite from a bibliography file](how-to-cite-from-a-bibliography-file.md) for
+the metadata keys, the completion, and what each rendering does with a
+citation. Where a note sits, and how it folds, do not change under any of
+this.
 
 ## What a talk's own constructs do here
 
@@ -85,12 +90,36 @@ each width in turn — or use your browser's own device toolbar on a published
 link. At 390, every margin note has already folded into the flow; at 820 and
 1280, the margin stands beside the text.
 
+## Reading it the way you like it
+
+A small toolbar sits in the corner of the page, offering theme (light, dark,
+sepia), text size (smaller, default, larger), measure (narrow, normal, wide),
+and a reset. Choose the dark theme and the largest text, and the page changes
+under your hands: the same words, the same notes, the same order, set the way
+you can read them. Close the tab and come back later — in the same browser —
+and the page is still dark and still large; nothing asked you to sign in, and
+nothing was set up in advance by whoever wrote the document.
+
+Your choices belong to your browser and go no further: nothing about them is
+sent anywhere, and they never appear to anyone reading the same link on a
+different browser or a different device. If your browser refuses to remember
+anything at all — some do, for a page opened from disk — a choice still
+applies for as long as you keep the page open; it is simply not there the
+next time you open it, and nothing about that is treated as an error.
+
+Reset returns the theme, the text size, and the measure to the article's own
+defaults, and a reload keeps them there. The page reads exactly the same with
+no script at all: there is no toolbar, and the article renders at its
+defaults, the way the earlier sections of this page describe it.
+
 ## The same page from every host
 
 The preview window, the page a publish pushes to the site, and the page an
-export writes into a folder are three readings of one file, `src/core/render/article.css`, and one script, `src/core/render/article-video.js`. A fix to
-either reaches every one of them at once; a difference between what the three
-show is a defect in the rendering core, not a fact about one of the hosts.
+export writes into a folder are three readings of one file,
+`src/core/render/article.css`, and two scripts, `src/core/render/article-video.js`
+and `src/core/render/article-controls.js`. A fix to any one of them reaches
+every one of these hosts at once; a difference between what the three show is
+a defect in the rendering core, not a fact about one of the hosts.
 
 ## Related
 

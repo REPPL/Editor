@@ -163,3 +163,7 @@ own browser.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: a reader-controls toolbar (theme, text size, measure, reset) that sets spc-2609061318090042's own CSS custom properties on the root element and persists per browser in localStorage, wrapped in try/catch, with no network call ever; this would be wrong if a control failed to reach the stylesheet's own seam, if a preference ever left the browser, if the widest measure with the largest text overflowed 390 CSS px, or if a margin note fell out of level with its paragraph when the measure changed.

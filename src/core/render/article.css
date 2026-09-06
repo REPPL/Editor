@@ -156,9 +156,9 @@ body.article nav.contents .part {
 
 /* ---------------------------------------------------------------------
  * Margin notes: the generic shape a footnote, a citation, a `.margin` span
- * and a `.credit` div all share (spc-2609061318090042's seam for map #11,
- * which will later replace an unresolved citation's body with the resolved
- * reference and touch nothing here).
+ * and a `.credit` div all share (spc-2609061318090042's seam, resolved by
+ * map #11: a resolved citation's body is the same reference text the
+ * generated list carries, and an unresolved one's is the key alone).
  *
  * The one trick that makes "beside the paragraph at 820 and 1280" and
  * "directly after the paragraph at 390" the same markup: `renderMarginNote`
@@ -189,10 +189,37 @@ body.article .margin-note p:last-child {
   margin-bottom: 0;
 }
 
-/* An unresolved citation's body is the key exactly as the author wrote it,
-   until map #11 resolves it against a bibliography. */
+/* An unresolved citation's margin note is the key exactly as the author
+   wrote it, because there is no reference yet to show instead. */
 body.article .margin-note.citation.unresolved {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* The same key, marked the same way, where it sits in the running text —
+   itd-2609051335502171's own rule: never the literal brackets the author
+   wrote, to a reader. */
+body.article .citation-key.unresolved {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
+  color: var(--article-muted);
+  border-bottom: 1px dotted var(--article-rule);
+}
+
+/* ---------------------------------------------------------------------
+ * The generated reference list: one entry per cited key, in first-citation
+ * order. "Every reference list is generated; none is typed"
+ * (`04-surfaces.md` section 3).
+ * ------------------------------------------------------------------- */
+
+body.article .reference-list {
+  margin: 1.5rem 0;
+  padding-left: 1.5rem;
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+
+body.article .reference-list li {
+  margin: 0 0 0.5rem;
 }
 
 /* ---------------------------------------------------------------------
@@ -345,3 +372,95 @@ body.article figure.video[data-player-ready] img {
  * eggs) and map #26 (`itd-2609051402083398`, moving by keyboard) each add a
  * stylesheet section below this comment, never above it.
  * ------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------
+ * Map #10 (`itd-2609051335492327`, spc-2609061318154502): the reader-controls
+ * toolbar `article-controls.js` builds at load, and the two themes it offers
+ * beside the light default the rules above already carry. Light needs no
+ * rule here — `:root`'s own defaults, above, already are light — so this
+ * section only redeclares the four palette properties for the other two.
+ * ------------------------------------------------------------------- */
+
+:root[data-article-theme="dark"] {
+  --article-bg: #1b1b1b;
+  --article-fg: #e9e6df;
+  --article-muted: #a9a49a;
+  --article-rule: color-mix(in srgb, #e9e6df 25%, transparent);
+}
+
+:root[data-article-theme="sepia"] {
+  --article-bg: #f4ecd8;
+  --article-fg: #3b2f1e;
+  --article-muted: #7a6a52;
+  --article-rule: color-mix(in srgb, #3b2f1e 25%, transparent);
+}
+
+/* The toolbar itself: a small, fixed corner, never a fixed pixel width — it
+   wraps its own groups rather than growing past the viewport, which is what
+   keeps it inside 390 CSS px alongside the largest text and the widest
+   measure (itd-2609051335492327's own falsifiable claim). */
+body.article .article-controls {
+  position: fixed;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: calc(100vw - 1.5rem);
+  padding: 0.5rem;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.8rem;
+  background: var(--article-bg);
+  color: var(--article-fg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+}
+
+body.article .article-controls-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+body.article .article-controls-group legend {
+  padding: 0 0.25rem 0 0;
+  font-size: 0.75em;
+  color: var(--article-muted);
+}
+
+body.article .article-controls button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+}
+
+/* The pressed control is never colour alone (itd-2609061324342715): weight
+   and a leading mark both change too, so a reader who cannot perceive
+   colour still sees which button is current. `aria-pressed` is the state a
+   screen reader hears; this is the state a sighted one sees. */
+body.article .article-controls button[aria-pressed="true"] {
+  font-weight: bold;
+  border-color: var(--article-fg);
+}
+
+body.article .article-controls button[aria-pressed="true"]::before {
+  content: "\2713 ";
+}
+
+body.article .article-controls button:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+body.article .article-controls-reset {
+  font-weight: normal;
+}

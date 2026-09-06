@@ -636,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn an_article_export_carries_only_the_article_s_stylesheet_and_its_script() {
+    fn an_article_export_carries_only_the_article_s_stylesheet_and_its_scripts() {
         let fixture = fixture();
         run_export(
             &fixture.context,
@@ -651,6 +651,9 @@ mod tests {
             vec![
                 "assets/01-part/lantern.jpg".to_string(),
                 "index.html".to_string(),
+                // The reader-controls toolbar (map #10, spc-2609061318154502)
+                // beside the video script both already here.
+                "presenter/article-controls.js".to_string(),
                 "presenter/article-video.js".to_string(),
                 "presenter/article.css".to_string(),
             ]
@@ -1129,7 +1132,11 @@ mod tests {
             .collect();
         assert_eq!(
             article,
-            vec!["presenter/article.css", "presenter/article-video.js"]
+            vec![
+                "presenter/article.css",
+                "presenter/article-video.js",
+                "presenter/article-controls.js",
+            ]
         );
         // The site's own root files are in neither: `index.html` would collide
         // with the article's, and none of the rest means anything in a folder.

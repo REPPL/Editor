@@ -22,8 +22,14 @@ import {
   type Resolution,
   type Resolver,
 } from "../core/assets";
+import { parseBibliography, resolveCitations, type CitationResolution } from "../core/bibliography";
 import { buildChapterDecks } from "../core/deck";
-import { renderArticle, renderDocumentContents } from "../core/render/article";
+import {
+  chapterHasRefsHeading,
+  renderArticle,
+  renderDocumentContents,
+  renderReferenceList,
+} from "../core/render/article";
 import { renderSlides } from "../core/render/slides";
 import type { Block, Chapter, Inline } from "../core/tree";
 import { walkChapterBlocks } from "../core/tree";
@@ -496,6 +502,16 @@ export interface RenderOptions {
   readonly title: string;
   /** Where the pages will be read from: the site, or a folder on disk. */
   readonly host: BuildHost;
+  /**
+   * The bibliography file's own text, when `document.yaml` names one.
+   *
+   * Read once here and resolved once against every chapter in `tree`, so the
+   * article's numbering, its generated reference list and the deck's credit
+   * lines all agree — `05-internals.md` section 4's "one resolver for every
+   * rendering". Absent is a document that names no bibliography, which is
+   * ordinary: nothing is numbered and no reference list appears.
+   */
+  readonly bibliography?: string | null;
 }
 
 /**
@@ -511,12 +527,34 @@ export function chromeBase(host: BuildHost, rendering: "article" | "slides"): st
   return rendering === "slides" ? `../${FOLDER_CHROME}` : FOLDER_CHROME;
 }
 
+/**
+ * Resolve a document's citations once, from the bibliography text
+ * `RenderOptions` carries.
+ *
+ * `undefined` for a document that names no bibliography at all — an ordinary
+ * document, not an empty one — so the article and the deck both fall through
+ * to their own "nothing to resolve" shape rather than an empty resolution
+ * that would still mark every citation unresolved.
+ */
+function citationsFor(
+  tree: DocumentSource,
+  bibliography: string | null | undefined,
+): CitationResolution | undefined {
+  if (bibliography === null || bibliography === undefined) return undefined;
+  return resolveCitations(
+    tree.chapters.map((input) => input.chapter),
+    parseBibliography(bibliography),
+  );
+}
+
 /** Render one variant's article and deck. */
 export function renderVariant(
   tree: DocumentSource,
   variant: string,
   options: RenderOptions,
 ): RenderedVariant {
+  const citations = citationsFor(tree, options.bibliography);
+
   // The article is one page per document, so its contents list covers every
   // chapter. Each chapter's ids carry a prefix of its own, because an outline
   // id is unique within one chapter and two chapters may open the same way.
@@ -528,16 +566,21 @@ export function renderVariant(
       part: partTitleOf(folderOf(input.path)),
     })),
   );
-  const article = [
-    contents,
-    ...tree.chapters.map((input, index) =>
-      renderArticle(input.chapter, createAssetResolver(input.path, "article"), {
-        variant,
-        contents: false,
-        idPrefix: idPrefix(index),
-      }),
-    ),
-  ]
+  const chapterPages = tree.chapters.map((input, index) =>
+    renderArticle(input.chapter, createAssetResolver(input.path, "article"), {
+      variant,
+      contents: false,
+      idPrefix: idPrefix(index),
+      citations,
+    }),
+  );
+  // A `.refs` heading writes the reference list where the document asked for
+  // it, through `renderArticle`'s own "appendix" placement; a document that
+  // wrote none gets it once, after the last chapter, rather than not at all.
+  const appendix = tree.chapters.some((input) => chapterHasRefsHeading(input.chapter))
+    ? ""
+    : renderReferenceList(citations);
+  const article = [contents, ...chapterPages, appendix]
     .filter((part) => part !== "")
     .join("\n");
 
@@ -547,7 +590,7 @@ export function renderVariant(
   // folder its references sit in.
   const plans = buildChapterDecks(
     tree.chapters.map((input) => input.chapter),
-    { variant },
+    { variant, citations },
   );
   const fragments = tree.chapters.map((input, index) =>
     renderSlides(
@@ -595,6 +638,10 @@ export function articleDocument(
     // poster and the source list are already in `body`, and this only
     // upgrades a video to a player when a source loads.
     `<script src="${chrome}/article-video.js" defer></script>`,
+    // The reader-controls toolbar (map #10, spc-2609061318154502): it builds
+    // itself onto the page, so the article still reads with no toolbar and
+    // the article's own defaults when this fails to load or does not run.
+    `<script src="${chrome}/article-controls.js" defer></script>`,
     "</body>",
     "</html>",
     "",

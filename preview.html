@@ -27,5 +27,12 @@
       nothing here depends on it running at all.
     -->
     <script type="module" src="/src/core/render/article-video.js" defer></script>
+    <!--
+      The reader-controls toolbar (map #10, spc-2609061318154502), the same
+      one-source file the site build and the folder export copy; `type="module"`
+      is this page's own arrangement, not the file's, for the reason above.
+      It builds itself onto the page, so a reader sees it with no wiring here.
+    -->
+    <script type="module" src="/src/core/render/article-controls.js" defer></script>
   </body>
 </html>

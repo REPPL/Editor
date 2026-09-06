@@ -191,6 +191,11 @@ interface ArticleVideoApi {
   upgradeVideos(prober: (href: string) => Promise<boolean>): Promise<unknown>;
 }
 
+/** The shape `article-controls.js` installs on `window` (map #10). */
+interface ArticleControlsApi {
+  boot(): void;
+}
+
 /** One check, registered by name, run against every document found. */
 interface InteractionCheck {
   readonly name: string;
@@ -267,8 +272,8 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
     // that fact, rather than failing for lack of one.
     //
     // Pending, for later maps to register their own check for instead of
-    // editing this one: reader controls (map #10), hidden marks and the
-    // once-only quotation (map #12), keyboard movement and search (map #26).
+    // editing this one: hidden marks and the once-only quotation (map #12),
+    // keyboard movement and search (map #26).
     name: "every video block shows its fallback before the script runs, and a player after a probe succeeds",
     run: async (_doc, rendered) => {
       const before = new DOMParser().parseFromString(rendered.article, "text/html");
@@ -329,6 +334,66 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
         expect(figure.querySelector("video")).not.toBeNull();
         expect(figure.hasAttribute("data-player-ready")).toBe(true);
       }
+    },
+  },
+  {
+    // The reader-controls toolbar (map #10, spc-2609061318154502) builds
+    // itself onto every article regardless of what the document holds, so
+    // this check does not depend on `doc`'s own content the way the video
+    // one above does.
+    name: "the reader-controls toolbar builds itself, is reachable by keyboard alone, and keeps a choice in localStorage",
+    run: async (_doc, rendered) => {
+      const scripts = articleScriptsOf(rendered.article);
+      expect(scripts, "the article links its own reader-controls script").toContain(
+        "article-controls.js",
+      );
+
+      document.body.innerHTML = new DOMParser().parseFromString(rendered.article, "text/html")
+        .body.innerHTML;
+
+      const globalBag = (): {
+        ARTICLE_PAGE_MANUAL?: boolean;
+        ArticleControls?: ArticleControlsApi;
+        ArticlePage?: unknown;
+      } => window as unknown as {
+        ARTICLE_PAGE_MANUAL?: boolean;
+        ArticleControls?: ArticleControlsApi;
+        ArticlePage?: unknown;
+      };
+      globalBag().ARTICLE_PAGE_MANUAL = true;
+      delete globalBag().ArticleControls;
+      delete globalBag().ArticlePage;
+      window.localStorage.clear();
+
+      for (const name of scripts) {
+        const source = readFileSync(join(__dirname, "core/render", name), "utf8");
+        new Function(source)();
+      }
+      const controls = globalBag().ArticleControls;
+      if (controls === undefined) {
+        throw new Error("article-controls.js installed no ArticleControls");
+      }
+      controls.boot();
+
+      const toolbar = document.querySelector(".article-controls");
+      expect(toolbar, "no toolbar was built").not.toBeNull();
+
+      // Native buttons alone: reachable by Tab, activated by a click a
+      // keyboard's Enter or Space would trigger the same way, no chord.
+      const darkButton = document.querySelector<HTMLButtonElement>(
+        'button[data-control="theme"][data-value="dark"]',
+      );
+      expect(darkButton).not.toBeNull();
+      expect(darkButton?.getAttribute("type")).toBe("button");
+      darkButton?.click();
+      expect(document.documentElement.getAttribute("data-article-theme")).toBe("dark");
+      expect(darkButton?.getAttribute("aria-pressed")).toBe("true");
+
+      // The choice lives in this browser's storage, under one key, and
+      // nowhere else — `itd-2609051336145770`.
+      const stored = window.localStorage.getItem("editor-article-reader-preferences");
+      expect(stored).not.toBeNull();
+      expect(String(stored)).toContain("dark");
     },
   },
 ];
