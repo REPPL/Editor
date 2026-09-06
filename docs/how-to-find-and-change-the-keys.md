@@ -76,10 +76,14 @@ binding had never existed.
 | `M-;` | the Emacs keymap | comment toggling, which Markdown has no line form for |
 | `s-/` | CodeMirror's keymap | the same comment toggle, from CodeMirror's own keymap |
 | `C-h` | CodeMirror's keymap | in the Emacs keymap `C-h` is the first step of `C-h b`; clearing it there would close the keys panel off |
+| `M-s` | the Emacs keymap | centring the selection is retired; `C-l`'s own recentre already puts the cursor's line in the middle of the view |
 
 Every chord either has a row in the binding table or appears in this list. A
 conformance check over the shipped keymaps fails a chord that is in neither, and
-one that is in both, so this table cannot quietly fall out of date.
+one that is in both, so this table cannot quietly fall out of date. `M-s` is
+the one entry that does not simply fall through: [Move through the
+outline](how-to-move-through-the-outline.md) binds `M-s o` over it, which is
+what turns `M-s` into a prefix rather than a dead key.
 
 ## Chords that need a physical key, not a character
 

@@ -32,6 +32,7 @@ import {
   toKeymapSpec,
   withoutSuppressed,
 } from "./keys";
+import { outlineExtensions } from "./outline-commands";
 import { fontSizeFor, textScaleExtension, textScaleStep } from "./text-scale";
 
 /** Where the cursor is, one-based, for the modeline. */
@@ -288,6 +289,10 @@ function editorExtensions(hooks: EditorHooks = {}, textScale = 0): Extension[] {
     ]),
     // Last of all: whatever no keymap answered, Option still must not type.
     ...metaKeys,
+    // The outline vocabulary's fold service and narrow decorations
+    // (`itd-2609061318091323`). Neither writes a document change; both are
+    // views over the untouched text, so they carry no byte-fidelity risk.
+    ...outlineExtensions(),
     theme,
     // After the base theme, and highest in precedence inside itself, so the
     // scale's own rule outranks the size the surface opens at.

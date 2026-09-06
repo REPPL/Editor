@@ -839,3 +839,74 @@ body {
     color: #e8836f;
   }
 }
+
+/* The new document panel. No width of its own: it is a `.panel`, fluid down
+   to 94vw, which is what keeps the title field and the folder line legible at
+   820 and 390 CSS pixels without a horizontal scrollbar. */
+
+.new-document-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.new-document-field {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.new-document-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.new-document-input {
+  width: 100%;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.new-document-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.new-document-folder {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.new-document-status {
+  margin: 0 0 8px;
+  font-size: 12px;
+  min-height: 1em;
+}
+
+.new-document-status[data-state="failed"] {
+  color: #a8321f;
+}
+
+@media (prefers-color-scheme: dark) {
+  .new-document-status[data-state="failed"] {
+    color: #e8836f;
+  }
+}
+
+/* The outline vocabulary (`itd-2609061318091323`): narrowing hides a line
+   from the window by removing it from layout, which is what a "narrowed
+   view must never write a truncated file" guarantee looks like from the
+   view side — `documentText` never consults this class. Folding uses
+   CodeMirror's own `cm-foldPlaceholder`; no rule is needed for it here. */
+
+.cm-outline-narrowed {
+  display: none;
+}

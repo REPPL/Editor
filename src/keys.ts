@@ -56,6 +56,7 @@ export type BindingGroup =
   | "movement"
   | "selection"
   | "editing"
+  | "outline"
   | "mark"
   | "search"
   | "document"
@@ -67,6 +68,7 @@ export const BINDING_GROUPS: readonly BindingGroup[] = [
   "movement",
   "selection",
   "editing",
+  "outline",
   "mark",
   "search",
   "document",
@@ -79,6 +81,9 @@ export const GROUP_LABELS: Readonly<Record<BindingGroup, string>> = {
   movement: "Movement",
   selection: "Selection",
   editing: "Editing",
+  // The document model as an outline (`itd-2609061318091323`): heading
+  // movement, folding, promotion, moving a section, and narrowing.
+  outline: "Outline",
   mark: "Mark and kill ring",
   search: "Search",
   document: "Document",
@@ -382,6 +387,17 @@ export const BINDINGS: readonly Binding[] = [
     chords: ["C-x C-f"],
     group: "document",
     owner: "editor",
+  },
+  {
+    // Emacs's own `C-x C-n` is `set-goal-column`, which the package this
+    // editing surface is built on does not implement — its own keymap
+    // (`@replit/codemirror-emacs`'s `emacsKeys`) carries no entry for it at
+    // all, so nothing already answers this chord (`itd-2609051402191319`).
+    id: "new-document-open",
+    label: "New document",
+    chords: ["C-x C-n"],
+    group: "document",
+    owner: "app",
   },
   {
     // `Cmd-O` is the File menu's accelerator, so macOS resolves it before the
@@ -689,13 +705,11 @@ export const BINDINGS: readonly Binding[] = [
     group: "movement",
     owner: "codemirror",
   },
-  {
-    id: "center-selection",
-    label: "Centre the selection",
-    chords: ["M-s"],
-    group: "movement",
-    owner: "keymap",
-  },
+  // `center-selection` (`M-s`, package-native) is retired here
+  // (`itd-2609061318091323`): it names no doc, test or other module, and
+  // `M-s` becomes the outline vocabulary's search prefix instead, carrying
+  // `outline-occur` on `M-s o`. `recenter` (`C-l`) already puts the cursor's
+  // line at the centre of the view, which is what centre-selection did.
   {
     id: "undo-selection",
     label: "Undo the selection change",
@@ -765,6 +779,17 @@ export const BINDINGS: readonly Binding[] = [
     id: "present",
     label: "Present the chapter",
     chords: ["C-c C-p"],
+    group: "document",
+    owner: "app",
+  },
+  {
+    // The article preview: a second window, in the manner of `present`,
+    // rendering the whole document from the buffers the shell holds
+    // (spc-2609061318090042). `v` for the view it opens, free beside
+    // `present`'s own `p`.
+    id: "preview",
+    label: "Preview the article",
+    chords: ["C-c C-v"],
     group: "document",
     owner: "app",
   },
@@ -935,6 +960,175 @@ export const BINDINGS: readonly Binding[] = [
     owner: "editor",
   },
 
+  // The outline vocabulary (`itd-2609061318091323`): the document model as
+  // Emacs's Markdown mode and Org mode treat it. Four chords this table
+  // already carried collide with Markdown mode's own spelling; the settled
+  // rule in every case is that the shipped, documented meaning keeps its
+  // chord and the new vocabulary takes another rather than displacing it —
+  // `present` (`C-c C-p`), `publish-open` (`C-c C-l`) and `toggle-key-log`
+  // (`C-x k`) are unchanged by this block. The fourth, `center-selection`
+  // on `M-s`, is retired above; `M-s` becomes the prefix `outline-occur`
+  // answers on.
+  {
+    id: "outline-next-heading",
+    label: "Next heading",
+    chords: ["C-c C-n"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    // Markdown mode's own previous-heading is `C-c C-p`, which `present`
+    // already holds; this is Editor's own family, on the same terms as
+    // `insert-palette`'s `C-c i`.
+    id: "outline-previous-heading",
+    label: "Previous heading",
+    chords: ["C-c p"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-forward-same-level",
+    label: "Next heading at this level",
+    chords: ["C-c C-f"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-backward-same-level",
+    label: "Previous heading at this level",
+    chords: ["C-c C-b"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-up-heading",
+    label: "Up to the parent heading",
+    chords: ["C-c C-u"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-toggle-fold",
+    label: "Fold or unfold this section",
+    chords: ["Tab"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-cycle",
+    label: "Cycle the whole outline",
+    chords: ["S-Tab"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-promote",
+    label: "Promote the heading",
+    chords: ["C-c Left"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-demote",
+    label: "Demote the heading",
+    chords: ["C-c Right"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-move-up",
+    label: "Move the section up",
+    chords: ["C-c Up"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-move-down",
+    label: "Move the section down",
+    chords: ["C-c Down"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-bold-region",
+    label: "Bold",
+    chords: ["C-c C-s b"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-italic-region",
+    label: "Italic",
+    chords: ["C-c C-s i"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    // Markdown mode's own insert-link is `C-c C-l`, which `publish-open`
+    // already holds; this is Editor's own family, on the same terms as
+    // `outline-previous-heading` above.
+    id: "outline-insert-link",
+    label: "Insert a link",
+    chords: ["C-c l"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-insert-image",
+    label: "Insert an image",
+    chords: ["C-c C-i"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-switch-chapter",
+    label: "Switch chapter by name",
+    chords: ["C-x b"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    // Emacs's own close-chapter is `kill-buffer`, on `C-x k`, which
+    // `toggle-key-log` already holds; `C-x C-k` sits beside it on the same
+    // terms `other-window` already sets for `C-x o` and `C-x C-o` — the
+    // Control key stays down from the `C-x`.
+    id: "outline-close-chapter",
+    label: "Close the chapter",
+    chords: ["C-x C-k"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-narrow",
+    label: "Narrow to this section",
+    chords: ["C-x n n"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-widen",
+    label: "Widen",
+    chords: ["C-x n w"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    id: "outline-occur",
+    label: "Occur: find in the document",
+    chords: ["M-s o"],
+    group: "outline",
+    owner: "editor",
+  },
+  {
+    // `C-M-%` on a US layout, written from the physical key as
+    // `query-replace` already writes `M-%`.
+    id: "query-replace-regex",
+    label: "Replace with a regular expression",
+    chords: ["C-M-S-5"],
+    group: "outline",
+    owner: "editor",
+  },
+
   // The sidebar's own rows. Every chord here is carried by an editor row as
   // well; which one answers is decided by the pane that holds the keyboard,
   // never by the chord. See `scopeOf`.
@@ -1017,6 +1211,18 @@ export const SUPPRESSED: readonly Suppression[] = [
     chord: "C-h",
     where: "codemirror",
     why: "the describe-bindings prefix; Backspace deletes backward",
+  },
+  {
+    // Not a chord Editor gives back to the browser, the way every other
+    // entry here is: the package's own `M-s` (`centerSelection`) is retired
+    // (`itd-2609061318091323`), and `outline-occur`'s `C-c…`-style row binds
+    // the longer chain `M-s o` over it, which is what turns `M-s` into a
+    // working prefix rather than a dead leaf. Clearing it here first is what
+    // lets that longer chain win — see the ordering note in
+    // `emacs.ts`'s `registerEditorChords`.
+    chord: "M-s",
+    where: "keymap",
+    why: "centre-selection is retired; C-l's own recentre already covers it, and M-s becomes outline-occur's own prefix on M-s o",
   },
 ];
 

@@ -6,9 +6,9 @@ export default defineConfig({
     setupFiles: ["./src/test-setup.ts"],
     include: ["src/**/*.test.ts"],
     globals: false,
-    // Vitest stubs CSS imports out by default. The deck's stylesheet is data
-    // the renderer hands to a host, not decoration, so a test that reads it
-    // has to see the real file.
-    css: { include: [/slides\.css/] },
+    // Vitest stubs CSS imports out by default. The deck's and the article's
+    // stylesheets are data the renderer hands to a host, not decoration, so a
+    // test that reads either has to see the real file.
+    css: { include: [/slides\.css/, /article\.css/] },
   },
 });

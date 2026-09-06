@@ -23,11 +23,14 @@
 
 import { defaultKeymap, historyKeymap } from "@codemirror/commands";
 import {
+  SearchQuery,
   findNext,
   findPrevious,
+  getSearchQuery,
   gotoLine,
   openSearchPanel,
   searchKeymap,
+  setSearchQuery,
 } from "@codemirror/search";
 import type { Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
@@ -85,6 +88,8 @@ export const APP_COMMAND_IDS: readonly string[] = [
   "open-settings",
   // Owned by the export panel; the chord is the table's row.
   "export-open",
+  // Owned by the new-document panel; the chord is the table's row.
+  "new-document-open",
   // The pane cycle. This is the route from the text; a pane the editing
   // surface cannot hear reads the same row through `src/focus.ts`.
   "other-window",
@@ -108,6 +113,33 @@ export const APP_COMMAND_IDS: readonly string[] = [
   "describe-key",
   "move-to-window-line",
   "quit",
+  // The outline vocabulary. Each is a function of the view in
+  // `src/outline-commands.ts`, wired the same way the prose vocabulary is;
+  // three of the twenty-one — switch-chapter, close-chapter and occur — are
+  // wired straight from `src/app.ts` because they need the application's
+  // chapter list, its dirty state, or the overlay host, the same reason
+  // `quit` above lives there rather than in the command module itself.
+  "outline-next-heading",
+  "outline-previous-heading",
+  "outline-forward-same-level",
+  "outline-backward-same-level",
+  "outline-up-heading",
+  "outline-toggle-fold",
+  "outline-cycle",
+  "outline-promote",
+  "outline-demote",
+  "outline-move-up",
+  "outline-move-down",
+  "outline-bold-region",
+  "outline-italic-region",
+  "outline-insert-link",
+  "outline-insert-image",
+  "outline-switch-chapter",
+  "outline-close-chapter",
+  "outline-narrow",
+  "outline-widen",
+  "outline-occur",
+  "query-replace-regex",
 ];
 
 const handlerByView = new WeakMap<EditorView, EmacsHandler>();
@@ -278,6 +310,35 @@ function queryReplace(view: EditorView): void {
 }
 
 /**
+ * `C-M-%`: the search panel, ready for a regular expression rather than a
+ * literal string.
+ *
+ * The same steps `queryReplace` takes, with the query's own `regexp` option
+ * forced on instead of left at the panel's default (`itd-2609061318091323`).
+ */
+export function queryReplaceRegex(view: EditorView): void {
+  openSearchPanel(view);
+  const current = getSearchQuery(view.state);
+  view.dispatch({
+    effects: setSearchQuery.of(
+      new SearchQuery({
+        search: current.search,
+        caseSensitive: current.caseSensitive,
+        literal: current.literal,
+        replace: current.replace,
+        wholeWord: current.wholeWord,
+        regexp: true,
+      }),
+    ),
+  });
+  const field = view.dom.querySelector<HTMLInputElement>(
+    'input[name="replace"]',
+  );
+  field?.focus();
+  field?.select();
+}
+
+/**
  * A command every version of the package registers for itself.
  *
  * The package installs itself in two module-level calls — the loop that binds
@@ -332,6 +393,23 @@ function registerEditorChords(): void {
     },
   });
 
+  // A chord that opens a dead end is worse than one that does nothing. Only
+  // the entries this keymap is asked to give up: one suppressed in CodeMirror's
+  // keymap may still be a prefix step here.
+  //
+  // Run before the application's own chords, not after: `EmacsHandler.bindKey`
+  // keeps only the last call for an exact key, and `outline-occur`'s `M-s o`
+  // (`itd-2609061318091323`) is a longer chain starting at a chord this loop
+  // clears — `M-s`, whose row is retired rather than relocated. Clearing it
+  // first and letting the longer chain bind over it is what turns `M-s` into
+  // a working prefix instead of leaving `M-s o` unreachable; the other order
+  // would silently undo the prefix the moment this loop ran.
+  for (const { chord, where } of SUPPRESSED) {
+    if (where === "keymap" || where === "both") {
+      EmacsHandler.bindKey(toPackageChord(chord), undefined);
+    }
+  }
+
   // Every application chord comes from the table, so a chord added to a row
   // reaches the command without a second edit here.
   for (const id of APP_COMMAND_IDS) {
@@ -357,15 +435,6 @@ function registerEditorChords(): void {
   // never produces, so they are re-bound under the name a real event carries.
   // The command is the package's own; only the spelling changes.
   for (const [spec, chord] of REBOUND) rebindUnreachable(spec, chord);
-
-  // A chord that opens a dead end is worse than one that does nothing. Only
-  // the entries this keymap is asked to give up: one suppressed in CodeMirror's
-  // keymap may still be a prefix step here.
-  for (const { chord, where } of SUPPRESSED) {
-    if (where === "keymap" || where === "both") {
-      EmacsHandler.bindKey(toPackageChord(chord), undefined);
-    }
-  }
 }
 
 /**

@@ -14,7 +14,7 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { createApp, type AppServices } from "./app";
 import { startDevHarness } from "./devharness";
 import { createDropTarget } from "./drop-target";
-import { documentText } from "./editor";
+import { documentText, revealLine } from "./editor";
 import {
   CHANGED_EVENT,
   addChapter,
@@ -23,11 +23,13 @@ import {
   openFolder,
   pasteReference,
   presentChapter,
+  previewDocument,
   readChapter,
   readChapters,
   readDocumentMetadata,
   setDirty,
   writeChapter,
+  type PreviewSource,
 } from "./doctree";
 import { createPublishPanel, mountPublishPanel } from "./publish-panel";
 import {
@@ -39,6 +41,12 @@ import { createSettingsPanel, mountSettingsPanel } from "./settings-panel";
 import { createSettingsServices, createTextScaleServices } from "./settings";
 import { createExportPanel, mountExportPanel } from "./export-panel";
 import { createExportServices } from "./export/services";
+import {
+  createNewDocumentPanel,
+  mountNewDocumentPanel,
+  type NewDocumentOutcome,
+} from "./new-document-panel";
+import { chooseNewDocumentFolder, createNewDocument } from "./new-document";
 import "./style.css";
 
 /** The event the shell emits when the Open Folder menu item fires. */
@@ -108,6 +116,56 @@ app.registerCommand("present", () => {
   });
 });
 
+/**
+ * The document as the preview window sees it.
+ *
+ * The article is one page for the whole document, so every chapter's text
+ * travels, not one: the open chapter's is the buffer's, so an unsaved edit
+ * previews, and every other chapter is read as the shell last read it — the
+ * same rule `present` follows for the one chapter it hands over.
+ */
+function loadForPreview(): Promise<PreviewSource> {
+  const root = app.documentRoot;
+  if (root === null) {
+    return Promise.reject(new Error("Open a document folder before previewing"));
+  }
+  const chapters = app.chapters;
+  if (chapters.length === 0) {
+    return Promise.reject(new Error("This document holds no chapters to preview"));
+  }
+  const prefix = root.endsWith("/") ? root : `${root}/`;
+  const relative = (path: string): string =>
+    path.startsWith(prefix) ? path.slice(prefix.length) : path;
+  const activePath = app.chapterPath;
+  const others = chapters.map((chapter) => chapter.path).filter((path) => path !== activePath);
+  return (others.length === 0 ? Promise.resolve({ reads: [], failures: [] }) : readChapters(others))
+    .then((batch) => {
+      const byPath = new Map(batch.reads.map((read) => [read.path, read.text]));
+      return readDocumentMetadata().then((metadata) => ({
+        title: metadata.title ?? chapters[0]?.title ?? "Untitled",
+        variant: metadata.default_variant ?? metadata.variants[0] ?? "",
+        chapters: chapters.map((chapter) => ({
+          path: relative(chapter.path),
+          text:
+            chapter.path === activePath
+              ? documentText(app.view)
+              : (byPath.get(chapter.path) ?? ""),
+        })),
+      }));
+    });
+}
+
+// Preview, `C-c C-v`: a second window, in the manner of Present, rendering
+// the whole document from the buffers the shell holds so an unsaved edit
+// previews.
+app.registerCommand("preview", () => {
+  void loadForPreview()
+    .then((source) => previewDocument(source))
+    .catch((error: unknown) => {
+      app.announce(String(error));
+    });
+});
+
 // The drop gesture's own branch of the one drop router. The shell has already
 // classified, converted, stripped and copied the files; this decides only
 // where the reference goes in the text.
@@ -160,6 +218,30 @@ const exportPanel = createExportPanel(
   },
 );
 mountExportPanel(app, exportPanel);
+
+/**
+ * New document, `C-x C-n`: the fourth overlay through the same two extension
+ * points. Creating writes the folder; showing it is map #1's own route
+ * (`itd-2609051335399446`) — `app.openFolder` walks the folder the shell just
+ * wrote, exactly as it would walk one Alice opened by hand.
+ */
+async function afterDocumentCreated(outcome: NewDocumentOutcome): Promise<void> {
+  await app.openFolder(outcome.root);
+  const chapter = app.chapters.find((candidate) => candidate.path === outcome.chapter);
+  if (chapter) {
+    await app.openChapter(chapter);
+    // The chapter is nothing but its heading and the blank line beneath it;
+    // line two is that blank line, and it is where a fresh document opens.
+    revealLine(app.view, 2);
+  }
+  app.focus.toEditor();
+}
+
+const newDocumentPanel = createNewDocumentPanel(
+  { chooseFolder: chooseNewDocumentFolder, createDocument: createNewDocument },
+  { onCreated: afterDocumentCreated },
+);
+mountNewDocumentPanel(app, newDocumentPanel);
 
 if (inShell()) {
   void listen(OPEN_FOLDER_EVENT, () => {

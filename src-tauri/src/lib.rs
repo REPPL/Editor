@@ -17,7 +17,9 @@ pub mod devharness;
 pub mod document;
 pub mod export;
 pub mod metadata;
+pub mod new_document;
 pub mod present;
+pub mod preview;
 pub mod publish;
 pub mod settings;
 pub mod watch;
@@ -272,6 +274,8 @@ pub fn run() {
         .manage(publish::PublishInProgress::default())
         .manage(devharness::DevHarness::default())
         .manage(export::ExportDestinations::default())
+        .manage(new_document::NewDocumentDestinations::default())
+        .manage(preview::PendingPreview::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_folder,
@@ -286,6 +290,8 @@ pub fn run() {
             present::present_chapter,
             present::pending_deck,
             present::read_asset,
+            preview::preview_document,
+            preview::pending_preview,
             settings::get_settings,
             settings::set_publish_target,
             settings::set_asset_root,
@@ -299,6 +305,8 @@ pub fn run() {
             export::choose_export_destination,
             export::export_rendering,
             export::reveal_staged_version,
+            new_document::choose_new_document_folder,
+            new_document::create_new_document,
             devharness::dev_harness,
             devharness::dev_log_key,
             present::present_log

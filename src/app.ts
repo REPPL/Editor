@@ -19,7 +19,12 @@ import { parseChapter } from "./core/parse";
 import { createDropRouter, type DropRouter, type DropTargets } from "./drop";
 import { createEditor, documentText, revealLine, setDocument } from "./editor";
 import { createFocusModel, type FocusModel, type PanelFocus } from "./focus";
-import { releaseEditorCommands, setEditorCommands, type EditorCommands } from "./emacs";
+import {
+  queryReplaceRegex,
+  releaseEditorCommands,
+  setEditorCommands,
+  type EditorCommands,
+} from "./emacs";
 import type {
   Chapter,
   ChapterBatch,
@@ -53,6 +58,27 @@ import {
   zapToChar,
   type ProseOptions,
 } from "./prose";
+import {
+  backwardSameLevelHeading,
+  boldRegion,
+  cycleOutline,
+  demoteHeading,
+  forwardSameLevelHeading,
+  insertImage,
+  insertLink,
+  italicRegion,
+  moveHeadingDown,
+  moveHeadingUp,
+  narrowToSection,
+  nextHeading,
+  openOccur,
+  openSwitchChapter,
+  previousHeading,
+  promoteHeading,
+  toggleHeadingFold,
+  upHeading,
+  widenSection,
+} from "./outline-commands";
 import { createSidebar, type Sidebar } from "./sidebar";
 import {
   setTextScale,
@@ -186,6 +212,12 @@ const TRANSIENT_MESSAGE_MS = 1500;
 const QUIT_CHOICES: readonly ListEntry[] = [
   { id: "keep", label: "Keep editing" },
   { id: "quit", label: "Quit without saving" },
+];
+
+/** `C-x C-k`'s confirmation, on the same terms `QUIT_CHOICES` sets. */
+const CLOSE_CHOICES: readonly ListEntry[] = [
+  { id: "keep", label: "Keep editing" },
+  { id: "close", label: "Close without saving" },
 ];
 
 /** Every chapter in a tree, in the order the sidebar draws them. */
@@ -542,6 +574,73 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     });
   }
 
+  /**
+   * `C-x C-k`: close the chapter, Emacs's `kill-buffer` for this book model.
+   *
+   * The same shape `quit` above takes: with nothing unsaved it returns
+   * straight to the welcome text; with unsaved edits it asks in the overlay
+   * host, and `C-g` or Escape put Alice back in the text with her edits
+   * intact. Unlike `quit`, closing never leaves the application — the
+   * sidebar and the folder are exactly where they were.
+   */
+  function closeChapter(): void {
+    if (openChapterPath === null) {
+      announce("No chapter is open");
+      return;
+    }
+    const title = openChapterTitle ?? "The chapter";
+    const doClose = (): void => {
+      forgetChapter();
+      announce(`Closed ${title}`);
+    };
+    if (!isDirty()) {
+      doClose();
+      return;
+    }
+    const keep = (): void => {
+      view.focus();
+      announce("Kept your edits");
+    };
+    openListOverlay<ListEntry>({
+      host: overlayHost,
+      className: "confirm",
+      label: "Close the chapter",
+      paneLabel: "Close",
+      rowKey: "choice",
+      question: `${title} has unsaved edits.`,
+      entries: () => CLOSE_CHOICES,
+      onChoose: (choice) => {
+        if (choice.id === "close") doClose();
+        else keep();
+      },
+      onClose: (chosen) => {
+        if (!chosen) keep();
+      },
+    });
+  }
+
+  /**
+   * `C-x b`: switch chapter by name, with completion.
+   *
+   * Reaches the same `app.chapters`/`app.openChapter` the sidebar already
+   * uses (`itd-2609051335399446`), through the one filterable-list overlay
+   * `outline-commands.ts` shares with the command palette.
+   */
+  function switchChapter(): void {
+    if (tree === null) {
+      announce("No document is open");
+      return;
+    }
+    openSwitchChapter(
+      app.chapters,
+      (path) => {
+        const chapter = app.chapters.find((candidate) => candidate.path === path);
+        if (chapter) void app.openChapter(chapter);
+      },
+      { host: overlayHost },
+    );
+  }
+
   const commands: EditorCommands = {
     "save-chapter": () => {
       void app.save();
@@ -635,6 +734,74 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     },
     quit: () => {
       quit();
+    },
+
+    // The outline vocabulary. Each is a function of the view in
+    // `src/outline-commands.ts`; switch-chapter, close-chapter and occur are
+    // wired here directly, the same reason `quit` is: they need the
+    // application's chapter list, its dirty state, or the overlay host.
+    "outline-next-heading": () => {
+      prose(() => nextHeading(view));
+    },
+    "outline-previous-heading": () => {
+      prose(() => previousHeading(view));
+    },
+    "outline-forward-same-level": () => {
+      prose(() => forwardSameLevelHeading(view));
+    },
+    "outline-backward-same-level": () => {
+      prose(() => backwardSameLevelHeading(view));
+    },
+    "outline-up-heading": () => {
+      prose(() => upHeading(view));
+    },
+    "outline-toggle-fold": () => {
+      prose(() => toggleHeadingFold(view));
+    },
+    "outline-cycle": () => {
+      prose(() => cycleOutline(view));
+    },
+    "outline-promote": () => {
+      prose(() => promoteHeading(view));
+    },
+    "outline-demote": () => {
+      prose(() => demoteHeading(view));
+    },
+    "outline-move-up": () => {
+      prose(() => moveHeadingUp(view));
+    },
+    "outline-move-down": () => {
+      prose(() => moveHeadingDown(view));
+    },
+    "outline-bold-region": () => {
+      prose(() => boldRegion(view));
+    },
+    "outline-italic-region": () => {
+      prose(() => italicRegion(view));
+    },
+    "outline-insert-link": () => {
+      prose(() => insertLink(view));
+    },
+    "outline-insert-image": () => {
+      prose(() => insertImage(view));
+    },
+    "outline-switch-chapter": () => {
+      switchChapter();
+    },
+    "outline-close-chapter": () => {
+      closeChapter();
+    },
+    "outline-narrow": () => {
+      prose(() => narrowToSection(view));
+    },
+    "outline-widen": () => {
+      prose(() => widenSection(view));
+    },
+    "outline-occur": () => {
+      openOccur(view, { host: overlayHost });
+    },
+    "query-replace-regex": () => {
+      queryReplaceRegex(view);
     },
   };
 
