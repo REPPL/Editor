@@ -188,3 +188,7 @@ predictable place from the start or accumulate later by hand.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: a New document command (C-x C-n) opens a panel with a title, a folder chosen through the shell's own dialog, and a Create confirmation; on confirm the shell writes document.yaml (title, default asset threshold, default citation style, no id/variants/bibliography), one numbered Part, one numbered Chapter whose heading is the title verbatim, refusing outright and writing nothing if the folder already holds a document; the page then opens the folder through map #1's own route and leaves the cursor on the blank line beneath the heading. It would show wrong if a refusal left any file behind, if the metadata carried an id or a null-valued key, if the heading text differed from what was typed, or if the panel were unusable at 390 CSS px.
