@@ -22,6 +22,9 @@ Task-oriented. Open one when you have something specific to do.
 
 - [Start a new document](how-to-start-a-new-document.md) — the New document
   panel, and the smallest folder Editor will write for you.
+- [Open a file or a folder](how-to-open-a-file-or-a-folder.md) — the one
+  chord that opens a document folder or a single Markdown file, and what a
+  bare file opens as.
 - [Find and change the keys](how-to-find-and-change-the-keys.md) — the keys
   panel, the key log, and the chords Editor deliberately answers with nothing.
 - [Edit prose with Emacs commands](how-to-edit-prose-with-emacs-commands.md) —

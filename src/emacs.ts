@@ -76,6 +76,9 @@ export type EditorCommands = Record<string, () => void>;
 export const APP_COMMAND_IDS: readonly string[] = [
   "save-chapter",
   "open-folder",
+  // The file-or-folder chooser; the chord is the table's row
+  // (`itd-2609061509393380`, map #35).
+  "open-file-or-folder",
   "toggle-key-log",
   "keys-panel",
   "insert-palette",

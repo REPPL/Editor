@@ -146,6 +146,23 @@ export interface AppServices {
   readTextScale?(): Promise<number>;
   /** Remember the type scale for this machine. Absent outside the shell. */
   writeTextScale?(steps: number): Promise<void>;
+  /**
+   * Ask the shell's own dialog for a document folder to open, under a
+   * nonce; `null` when the author cancels (`itd-2609061509393380`, map
+   * #35). Absent outside the shell.
+   */
+  pickDocumentFolder?(): Promise<{ nonce: string; name: string } | null>;
+  /** Ask the shell's own dialog for a single file to open, the same way. */
+  pickDocumentFile?(): Promise<{ nonce: string; name: string } | null>;
+  /**
+   * Claim a pick's nonce and open what it named: a folder's whole tree, or a
+   * single file as a one-chapter document, unless it already lives inside a
+   * document folder, in which case the whole document opens with that
+   * chapter selected.
+   */
+  openDocumentSource?(
+    nonce: string,
+  ): Promise<{ tree: DocumentTree; selectedChapter: string | null }>;
   /** Subscribe to a shell event. Absent outside the shell. */
   subscribe?<T>(event: string, handler: (payload: T) => void): Promise<() => void>;
 }
@@ -234,6 +251,17 @@ const QUIT_CHOICES: readonly ListEntry[] = [
 const CLOSE_CHOICES: readonly ListEntry[] = [
   { id: "keep", label: "Keep editing" },
   { id: "close", label: "Close without saving" },
+];
+
+/**
+ * `C-x C-o`'s first question (`itd-2609061509393380`, map #35).
+ *
+ * A native dialog offers files or folders, never both, so this asks which
+ * kind of thing before either dialog opens.
+ */
+const OPEN_SOURCE_CHOICES: readonly ListEntry[] = [
+  { id: "folder", label: "A document folder" },
+  { id: "file", label: "A single file" },
 ];
 
 /** Every chapter in a tree, in the order the sidebar draws them. */
@@ -686,12 +714,89 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     );
   }
 
+  /**
+   * `C-x C-o`: open a file or a folder Alice picks through the shell's own
+   * dialog (itd-2609061509393380, map #35). A native panel offers files or
+   * folders, never both, so this asks which kind of thing first, on the
+   * same list-overlay the quit and close prompts already use.
+   */
+  function openSource(): void {
+    if (
+      !services.pickDocumentFolder ||
+      !services.pickDocumentFile ||
+      !services.openDocumentSource
+    ) {
+      announce("Opening a file or a folder needs the desktop shell");
+      return;
+    }
+    openListOverlay<ListEntry>({
+      host: overlayHost,
+      className: "confirm",
+      label: "Open",
+      paneLabel: "Open",
+      rowKey: "choice",
+      question: "Open a folder or a single file?",
+      entries: () => OPEN_SOURCE_CHOICES,
+      onChoose: (choice) => {
+        void pickAndOpenSource(choice.id === "file");
+      },
+    });
+  }
+
+  /**
+   * The dialog `openSource` chose, then the result `services.openDocumentSource`
+   * hands back — shown the same way `openFolder` already shows a walked
+   * tree, with the discard guard run after the dialog closes and before the
+   * tree replaces what is on screen, the order `promptForFolder` already
+   * keeps.
+   */
+  async function pickAndOpenSource(asFile: boolean): Promise<void> {
+    try {
+      const picked = asFile
+        ? await services.pickDocumentFile?.()
+        : await services.pickDocumentFolder?.();
+      if (!picked) return; // the author cancelled the dialog
+      const outcome = await services.openDocumentSource?.(picked.nonce);
+      if (!outcome) return;
+      if (!(await mayDiscard())) {
+        announce("Kept the open chapter");
+        return;
+      }
+      forgetChapter();
+      await showTree(outcome.tree);
+      for (const failure of outcome.tree.failures) {
+        console.warn(`open ${picked.name}: ${failure}`);
+      }
+      const title = await documentTitle(outcome.tree.root.title);
+      const chapters = chaptersOf(outcome.tree.root);
+      if (chapters.length === 0) {
+        announce(`${title} holds no Markdown chapters`);
+        return;
+      }
+      const selected =
+        outcome.selectedChapter === null
+          ? undefined
+          : chapters.find((chapter) => chapter.path === outcome.selectedChapter);
+      if (selected) {
+        await app.openChapter(selected);
+        announce(`Opened ${selected.title}`);
+      } else {
+        announce(`Opened ${title}`);
+      }
+    } catch (error) {
+      announce(String(error));
+    }
+  }
+
   const commands: EditorCommands = {
     "save-chapter": () => {
       void app.save();
     },
     "open-folder": () => {
       void app.promptForFolder();
+    },
+    "open-file-or-folder": () => {
+      openSource();
     },
     "toggle-key-log": () => {
       keyLog.toggle();

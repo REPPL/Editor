@@ -36,6 +36,7 @@ import {
 } from "./emacs";
 import {
   BINDINGS,
+  READING_BINDING_IDS,
   SUPPRESSED,
   bindingById,
   canonicalChord,
@@ -44,6 +45,7 @@ import {
   chordIndexIn,
   fromKeymapSpec,
   keymapChords,
+  readingBindings,
   scopeOf,
 } from "./keys";
 import { installKeyLog } from "./keyspike";
@@ -357,7 +359,7 @@ describe("the binding table", () => {
     // the text — so its chords are the one place where per-scope uniqueness
     // is not enough: no row in any scope may share them.
     const cycle = bindingById("other-window");
-    expect(cycle?.chords).toEqual(["C-x o", "C-x C-o"]);
+    expect(cycle?.chords).toEqual(["C-x o"]);
     for (const chord of cycle?.chords ?? []) {
       const key = canonicalChord(chord);
       const claimants = BINDINGS.filter((binding) =>
@@ -386,15 +388,20 @@ describe("the binding table", () => {
     expect(publish?.owner).toBe("app");
   });
 
-  it("answers both other-window chords from the text", () => {
-    // `C-x C-o` sits beside `C-x o` so the Control key need not be lifted
-    // between the two steps. Both reach the pane cycle: the editing surface
-    // hears them through the Emacs handler's own prefix machinery, and a pane
-    // the surface cannot hear reads the same row through `src/focus.ts`.
+  it("answers other-window's one chord from the text", () => {
+    // The editing surface hears it through the Emacs handler's own prefix
+    // machinery, and a pane the surface cannot hear reads the same row
+    // through `src/focus.ts`. `C-x C-o` used to sit beside it; it now
+    // answers `open-file-or-folder` instead (`itd-2609061509393380`, map
+    // #35).
     const other = bindingById("other-window");
-    expect(other?.chords).toEqual(["C-x o", "C-x C-o"]);
+    expect(other?.chords).toEqual(["C-x o"]);
     expect(other?.owner).toBe("editor");
     expect(emacsAnsweredChords().has("C-x o")).toBe(true);
+
+    const openSource = bindingById("open-file-or-folder");
+    expect(openSource?.chords).toEqual(["C-x C-o"]);
+    expect(openSource?.owner).toBe("editor");
     expect(emacsAnsweredChords().has("C-x C-o")).toBe(true);
   });
 
@@ -2163,5 +2170,22 @@ describe("the documented chords", () => {
     const menu = bindingById("open-folder-menu");
     expect(menu?.chords).toEqual(["s-o"]);
     expect(menu?.owner).toBe("shell");
+  });
+});
+
+describe("the reading views' own vocabulary (map #26)", () => {
+  it("names only rows that exist in the table", () => {
+    expect(() => readingBindings()).not.toThrow();
+    for (const id of READING_BINDING_IDS) {
+      expect(bindingById(id), `${id} is not a row in BINDINGS`).toBeDefined();
+    }
+  });
+
+  it("resolves to the table's own rows, in the order it names them", () => {
+    const rows = readingBindings();
+    expect(rows.map((row) => row.id)).toEqual([...READING_BINDING_IDS]);
+    for (const row of rows) {
+      expect(row).toBe(bindingById(row.id));
+    }
   });
 });

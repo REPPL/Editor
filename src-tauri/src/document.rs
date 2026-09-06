@@ -427,6 +427,58 @@ pub fn read_tree(folder: &Path) -> Result<DocumentTree, String> {
     Ok(DocumentTree { root, failures })
 }
 
+/// Build a one-chapter `DocumentTree` for a single Markdown file opened on
+/// its own, rooted at the folder it sits in (`itd-2609061509393380`, map
+/// #35).
+///
+/// Nothing is written for this shape — no `document.yaml`, no Part folder —
+/// so the tree is built by hand rather than by [`read_tree`]'s own
+/// whole-folder walk: a folder walk would also draw whatever else happens to
+/// live beside the file, and "a one-chapter document" means exactly the one
+/// chapter Alice picked, not every sibling its folder happens to hold. The
+/// pieces it reuses — [`is_chapter`], [`title_of`], [`modified_millis`],
+/// [`display_name`] — are the same ones [`read_part`] calls for every other
+/// chapter, so a bare file is labelled and refused on the same terms one
+/// found by a walk would be.
+pub fn read_single_chapter(file: &Path) -> Result<DocumentTree, String> {
+    let file_name = display_name(file);
+    if !is_chapter(&file_name) {
+        return Err(format!("{file_name} is not a Markdown file"));
+    }
+    let metadata = fs::metadata(file).map_err(|e| format!("cannot inspect {file_name}: {e}"))?;
+    if !metadata.is_file() {
+        return Err(format!("{file_name} is not a file"));
+    }
+    let chapter = Chapter {
+        title: title_of(&file_name, true),
+        path: file.to_string_lossy().into_owned(),
+        order: None,
+        bytes: metadata.len(),
+        modified: modified_millis(&metadata),
+        name: file_name,
+    };
+    let folder = file
+        .parent()
+        .ok_or_else(|| format!("{} has no folder", file.display()))?;
+    let folder_name = folder
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| folder.to_string_lossy().into_owned());
+    let root = Part {
+        title: title_of(&folder_name, false),
+        path: folder.to_string_lossy().into_owned(),
+        order: None,
+        parts: Vec::new(),
+        chapters: vec![chapter],
+        truncated: false,
+        name: folder_name,
+    };
+    Ok(DocumentTree {
+        root,
+        failures: Vec::new(),
+    })
+}
+
 /// Read one Chapter's Markdown.
 pub fn read_chapter_text(path: &Path) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))
@@ -691,6 +743,41 @@ mod tests {
             vec!["01-part"]
         );
         assert!(tree.root.parts[0].parts.is_empty());
+    }
+
+    #[test]
+    fn builds_a_one_chapter_tree_without_writing_anything() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        // A sibling that must not appear beside the one chapter this builds:
+        // a whole-folder walk would show it, and this is not one.
+        fs::write(base.join("other.md"), "# Not this one\n").expect("sibling");
+        let file = base.join("01-notes.md");
+        fs::write(&file, "# Notes\n\nSomething written on a train.\n").expect("chapter");
+
+        let before: Vec<_> = fs::read_dir(base).expect("read before").collect();
+        let tree = read_single_chapter(&file).expect("tree");
+        let after: Vec<_> = fs::read_dir(base).expect("read after").collect();
+        assert_eq!(before.len(), after.len(), "nothing was written or removed");
+
+        assert_eq!(tree.root.path, base.to_string_lossy());
+        assert!(tree.root.parts.is_empty());
+        assert_eq!(tree.root.chapters.len(), 1);
+        let chapter = &tree.root.chapters[0];
+        assert_eq!(chapter.title, "notes");
+        assert_eq!(chapter.path, file.to_string_lossy());
+        assert_eq!(chapter.order, None);
+        assert!(chapter.bytes > 0);
+    }
+
+    #[test]
+    fn refuses_a_non_markdown_file_as_a_bare_chapter() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let file = root.path().join("notes.txt");
+        fs::write(&file, "Not Markdown.").expect("file");
+
+        let error = read_single_chapter(&file).expect_err("refused");
+        assert!(error.contains("is not a Markdown file"), "{error}");
     }
 
     #[test]

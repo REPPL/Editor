@@ -381,10 +381,12 @@ describe("the pane cycle", () => {
     expect(modeline(app)).toContain("[Sidebar]");
   });
 
-  it("answers C-x C-o as well, without lifting the Control key", async () => {
+  it("no longer moves the keyboard on C-x C-o", async () => {
+    // `C-x C-o` used to sit beside `C-x o` for the pane cycle; it now opens
+    // a file or a folder instead (`itd-2609061509393380`, map #35), and the
+    // pane cycle keeps `C-x o` alone. The chord is still claimed — a row of
+    // the table answers it — it just does not move the keyboard.
     await mount();
-    expect(press(app, "C-x C-o")).toBe(true);
-    expect(app.focus.pane).toBe("sidebar");
     expect(press(app, "C-x C-o")).toBe(true);
     expect(app.focus.pane).toBe("editor");
   });

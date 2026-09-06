@@ -18,6 +18,7 @@ pub mod document;
 pub mod export;
 pub mod metadata;
 pub mod new_document;
+pub mod open_source;
 pub mod present;
 pub mod preview;
 pub mod publish;
@@ -76,7 +77,11 @@ impl DocumentRoot {
             .ok_or_else(|| "no document folder is open".to_string())
     }
 
-    fn set(&self, root: PathBuf) -> Result<(), String> {
+    /// `pub(crate)` rather than private: `open_source.rs` sets the root too,
+    /// for a pick that resolved to a folder or to the folder a bare file
+    /// sits in (`itd-2609061509393380`, map #35), on the same terms
+    /// `open_folder` below already sets it.
+    pub(crate) fn set(&self, root: PathBuf) -> Result<(), String> {
         let mut held = self
             .0
             .lock()
@@ -290,6 +295,7 @@ pub fn run() {
         .manage(devharness::DevHarness::default())
         .manage(export::ExportDestinations::default())
         .manage(new_document::NewDocumentDestinations::default())
+        .manage(open_source::OpenSourcePicks::default())
         .manage(preview::PendingPreview::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -323,6 +329,9 @@ pub fn run() {
             export::reveal_staged_version,
             new_document::choose_new_document_folder,
             new_document::create_new_document,
+            open_source::pick_document_folder,
+            open_source::pick_document_file,
+            open_source::open_document_source,
             devharness::dev_harness,
             devharness::dev_log_key,
             present::present_log

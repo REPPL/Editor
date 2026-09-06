@@ -175,6 +175,54 @@ export async function openFolder(path: string): Promise<DocumentTree> {
   return invoke<DocumentTree>("open_folder", { path });
 }
 
+/**
+ * What either open-source dialog hands back: the nonce that claims what the
+ * author picked, and its own name — never the path around it
+ * (`itd-2609061509393380`, map #35).
+ */
+export interface PickedSource {
+  readonly nonce: string;
+  readonly name: string;
+}
+
+/**
+ * What claiming a pick opened: the tree to show, and the chapter to select
+ * once it is drawn, when the pick named a file rather than a folder.
+ */
+export interface OpenedSource {
+  readonly tree: DocumentTree;
+  readonly selectedChapter: string | null;
+}
+
+/**
+ * Ask the shell's own dialog for a document folder to open. `null` when the
+ * author cancels the dialog.
+ */
+export async function pickDocumentFolder(): Promise<PickedSource | null> {
+  requireShell("Opening a folder");
+  return invoke<PickedSource | null>("pick_document_folder");
+}
+
+/**
+ * Ask the shell's own dialog for a single file to open, the same way.
+ * `null` when the author cancels the dialog.
+ */
+export async function pickDocumentFile(): Promise<PickedSource | null> {
+  requireShell("Opening a file");
+  return invoke<PickedSource | null>("pick_document_file");
+}
+
+/**
+ * Claim a pick's nonce and open what it named: a folder's whole tree, or a
+ * single file as a one-chapter document rooted where it sits, unless that
+ * file already lives inside a document folder, in which case the whole
+ * document opens with that chapter selected.
+ */
+export async function openDocumentSource(nonce: string): Promise<OpenedSource> {
+  requireShell("Opening what you chose");
+  return invoke<OpenedSource>("open_document_source", { nonce });
+}
+
 /** Read the open document's `document.yaml`. */
 export async function readDocumentMetadata(): Promise<DocumentMetadata> {
   requireShell("Reading the document metadata");

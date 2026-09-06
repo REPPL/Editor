@@ -389,6 +389,20 @@ export const BINDINGS: readonly Binding[] = [
     owner: "editor",
   },
   {
+    // `C-x C-o` used to sit beside `C-x o` for `other-window`; the maintainer
+    // asked for a chord that opens a file or a folder, and Emacs itself
+    // spends this one on `delete-blank-lines`, which nothing in this table
+    // answers, so the pane cycle gives it up (`itd-2609061509393380`, map
+    // #35). `C-x C-f` keeps opening a folder exactly as it does today; this
+    // is a second door, onto a folder or a single file, chosen through the
+    // shell's own dialog.
+    id: "open-file-or-folder",
+    label: "Open a file or a folder",
+    chords: ["C-x C-o"],
+    group: "document",
+    owner: "editor",
+  },
+  {
     // Emacs's own `C-x C-n` is `set-goal-column`, which the package this
     // editing surface is built on does not implement — its own keymap
     // (`@replit/codemirror-emacs`'s `emacsKeys`) carries no entry for it at
@@ -801,15 +815,17 @@ export const BINDINGS: readonly Binding[] = [
     owner: "app",
   },
   {
-    // `C-x o` is `other-window` in Emacs, and `C-x C-o` sits beside it because
-    // the Control key is already down from the `C-x`: an author cycling
-    // between panes need not lift it to reach the second step. The row exists
-    // so both chords are spoken for and the uniqueness check holds; the
-    // sidebar-navigation spec wires the pane cycle behind them, which is why
-    // the row is answered by the application rather than reserved by it.
+    // `C-x o` is `other-window` in Emacs, and the sidebar-navigation spec
+    // wires the pane cycle behind it, which is why the row is answered by
+    // the application rather than reserved by it. `C-x C-o` sat beside it
+    // for the same reason Emacs keeps the Control key down between two
+    // related steps, until the maintainer asked for a chord that opens a
+    // file or a folder; the pane cycle keeps `C-x o` alone, as Emacs does,
+    // and `open-file-or-folder` answers the freed chord
+    // (`itd-2609061509393380`, map #35).
     id: "other-window",
     label: "Move to the other pane",
-    chords: ["C-x o", "C-x C-o"],
+    chords: ["C-x o"],
     group: "document",
     owner: "editor",
   },
@@ -1090,8 +1106,8 @@ export const BINDINGS: readonly Binding[] = [
   {
     // Emacs's own close-chapter is `kill-buffer`, on `C-x k`, which
     // `toggle-key-log` already holds; `C-x C-k` sits beside it on the same
-    // terms `other-window` already sets for `C-x o` and `C-x C-o` — the
-    // Control key stays down from the `C-x`.
+    // terms `open-file-or-folder` sits beside `C-x C-f` — the Control key
+    // stays down from the `C-x`.
     id: "outline-close-chapter",
     label: "Close the chapter",
     chords: ["C-x C-k"],
@@ -1606,4 +1622,44 @@ export function toKeymapSpec(chord: string): string {
     .map((modifier) => KEYMAP_MODIFIERS[modifier] ?? modifier)
     .join("");
   return modifiers + (KEYMAP_NAMES[step.name] ?? step.name);
+}
+
+/**
+ * The reading views' own vocabulary (`itd-2609051402083398`, map #26).
+ *
+ * A reading view declares which rows of the table above it honours; it
+ * invents no chord of its own (`spc-2609061318158216`'s own Design). Every id
+ * here must already name a row in `BINDINGS` — `readingBindings` throws
+ * rather than dropping a typo silently — and the order is the order the
+ * article's own keys panel lists them in. `src/core/render/reading-keys.ts`
+ * is what turns this into the JSON a plain script on the published site can
+ * read, because that script cannot import this module at all.
+ */
+export const READING_BINDING_IDS: readonly string[] = [
+  "outline-next-heading",
+  "outline-previous-heading",
+  "next-line",
+  "previous-line",
+  "outline-occur",
+  "isearch-forward",
+  "isearch-backward",
+  "keyboard-quit",
+  "keys-panel",
+];
+
+/**
+ * The reading views' own bindings, resolved from `READING_BINDING_IDS`.
+ *
+ * Throwing on an id with no row is deliberate: a silent `.filter(Boolean)`
+ * would make a typo here read as "one fewer honoured action" rather than the
+ * broken reference it is.
+ */
+export function readingBindings(): Binding[] {
+  return READING_BINDING_IDS.map((id) => {
+    const binding = bindingById(id);
+    if (binding === undefined) {
+      throw new Error(`READING_BINDING_IDS names "${id}", which is not a row in BINDINGS`);
+    }
+    return binding;
+  });
 }

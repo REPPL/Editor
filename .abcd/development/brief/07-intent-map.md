@@ -51,6 +51,7 @@ Three kinds:
 | 32 | Edit prose with the Emacs commands my hands already know | standalone | — | 1 |
 | 33 | Make the text bigger or smaller from the keyboard | standalone | — | 1 |
 | 34 | Move through and reshape the book by heading | standalone | — | 1 |
+| 35 | Open whatever is in front of me | standalone | — | 1 |
 
 ## The intents
 
@@ -224,6 +225,25 @@ thinking. It is tier two of
 `../research/notes/2026-09-05-emacs-vocabulary-gap.md`, and the intent
 that settles the four chord conflicts the note recorded against `C-c
 C-p`, `C-c C-l`, `C-x k` and `M-s`.
+
+**35. Open whatever is in front of me** — standalone.
+Surfaces: the editor (a chord that opens a file or a folder through the
+shell's own dialog).
+Overlaps: intent 1, which owns walking a folder into the tree once it is
+chosen — the boundary is that 1 owns the walk, and 35 owns choosing what
+gets walked, whether the choice is a folder or a single file, and reuses
+1's own walk unchanged; intent 29, which owns writing the smallest folder
+that is already a book — 35 opens what is already on disk and writes
+nothing, even for a single file with no document folder behind it; and
+intent 30, which claimed `C-x C-o` beside `C-x o` for the pane cycle
+before the maintainer asked for a second way to open — the boundary is
+that 30 keeps `C-x o` alone, as Emacs does, and 35 takes the chord 30 gave
+up.
+Plumbing excluded: the on-disk model, the folder walk, and the shell's own
+nonce-and-claim mechanism a chosen destination travels under.
+Order: phase 1, with 1 and 29, which give it something to open and a
+shape to imitate for a bare file. Amended into the map after the
+maintainer asked for one chord that opens a file or a folder.
 
 ### Bundle: The deck (phase 1)
 
