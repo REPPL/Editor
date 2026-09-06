@@ -108,6 +108,7 @@ impl Fixture {
                     site_dir: "site".to_string(),
                 },
                 asset_roots: Default::default(),
+                text_scale: 0,
             },
             git: Git::with_program(&self.fake.program),
             dry_run,

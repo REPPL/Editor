@@ -54,6 +54,12 @@ import {
   type ProseOptions,
 } from "./prose";
 import { createSidebar, type Sidebar } from "./sidebar";
+import {
+  setTextScale,
+  textScaleMessage,
+  textScaleStep,
+  TEXT_SCALE_LIMIT,
+} from "./text-scale";
 
 /** What the application needs from the world outside the page. */
 export interface AppServices {
@@ -88,6 +94,16 @@ export interface AppServices {
    * page has any say in it. Absent outside the shell.
    */
   reportDirty?(dirty: boolean): void;
+  /**
+   * The type scale this machine last left the surface at, in steps.
+   *
+   * Machine state, kept in the application's own settings and never in a
+   * document folder. Absent outside the shell, where there is nowhere to keep
+   * it and the surface simply opens at its default.
+   */
+  readTextScale?(): Promise<number>;
+  /** Remember the type scale for this machine. Absent outside the shell. */
+  writeTextScale?(steps: number): Promise<void>;
   /** Subscribe to a shell event. Absent outside the shell. */
   subscribe?<T>(event: string, handler: (payload: T) => void): Promise<() => void>;
 }
@@ -164,6 +180,9 @@ const WELCOME = [
  * saving" before Return means it. Every other confirmation in the application
  * makes the same promise.
  */
+/** How long a message that says itself once stays in the modeline. */
+const TRANSIENT_MESSAGE_MS = 1500;
+
 const QUIT_CHOICES: readonly ListEntry[] = [
   { id: "keep", label: "Keep editing" },
   { id: "quit", label: "Quit without saving" },
@@ -205,6 +224,8 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   let loadToken = 0;
   /** The last dirty state handed to the shell, so it hears only changes. */
   let reportedDirty: boolean | null = null;
+  /** The timer clearing a message that says itself once, if one is running. */
+  let transient: ReturnType<typeof setTimeout> | null = null;
 
   const sidebar = createSidebar({
     onOpenChapter: (chapter, node) => {
@@ -297,6 +318,39 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   function announce(text: string): void {
     message = text;
     refresh();
+  }
+
+  /**
+   * Say something and then stop saying it.
+   *
+   * The scale is worth reading once; the cell it is read in is the one the
+   * position and the mark sit beside, and they must come back. Anything else
+   * said in the meantime wins, because it is newer.
+   */
+  function announceBriefly(text: string): void {
+    announce(text);
+    if (transient !== null) clearTimeout(transient);
+    transient = setTimeout(() => {
+      transient = null;
+      if (message === text) announce("");
+    }, TRANSIENT_MESSAGE_MS);
+  }
+
+  /**
+   * Take a step of type scale, or say why the surface did not move.
+   *
+   * The new step is remembered for this machine only once it has been taken,
+   * so a chord pressed at a bound writes nothing.
+   */
+  function scaleText(to: (step: number) => number): void {
+    const step = to(textScaleStep(view));
+    const moved = setTextScale(view, step);
+    const now = textScaleStep(view);
+    announceBriefly(textScaleMessage(now, moved));
+    if (!moved) return;
+    void services.writeTextScale?.(now).catch((error: unknown) => {
+      announce(String(error));
+    });
   }
 
   /** Ask before edits are thrown away. True means carry on. */
@@ -474,6 +528,18 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     },
     "reload-document": () => {
       void app.reload();
+    },
+
+    // The type scale. Only the surface moves; the sidebar, the modeline and
+    // every panel keep the size they had.
+    "text-scale-increase": () => {
+      scaleText((step) => step + 1);
+    },
+    "text-scale-decrease": () => {
+      scaleText((step) => step - 1);
+    },
+    "text-scale-reset": () => {
+      scaleText(() => 0);
     },
     // From the text. A pane the editing surface cannot hear reads the same
     // row for itself, in `src/focus.ts`, and both reach this one cycle.
@@ -796,6 +862,8 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     },
 
     destroy(): void {
+      if (transient !== null) clearTimeout(transient);
+      transient = null;
       closeOverlay();
       focus.destroy();
       drop.dispose();
@@ -812,6 +880,24 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   const openButton = sidebar.element.querySelector<HTMLElement>(".sidebar-open");
   if (openButton) {
     openButton.title = describeChord("open-folder", "Open a document folder");
+  }
+
+  // The scale this machine was left at. Read once and applied without a word
+  // in the modeline: Alice did not press anything, and a surface that opens at
+  // the size she chose is not news. A machine that has never said is silent,
+  // and the surface opens at its default.
+  if (services.readTextScale) {
+    void services
+      .readTextScale()
+      .then((step) => {
+        if (Math.abs(step) > TEXT_SCALE_LIMIT) {
+          console.warn(`text scale ${String(step)} is outside the range`);
+        }
+        setTextScale(view, step);
+      })
+      .catch((error: unknown) => {
+        console.warn(`text scale: ${String(error)}`);
+      });
   }
 
   sidebar.show(null);

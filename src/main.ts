@@ -36,7 +36,7 @@ import {
   type DocumentForPublish,
 } from "./publish/services";
 import { createSettingsPanel, mountSettingsPanel } from "./settings-panel";
-import { createSettingsServices } from "./settings";
+import { createSettingsServices, createTextScaleServices } from "./settings";
 import { createExportPanel, mountExportPanel } from "./export-panel";
 import { createExportServices } from "./export/services";
 import "./style.css";
@@ -78,8 +78,10 @@ const services: AppServices = {
     void setDirty(dirty);
   },
   // Only in the shell: outside it there is no window to close, and the page
-  // says so rather than failing quietly.
-  ...(inShell() ? { quit: quitWindow } : {}),
+  // says so rather than failing quietly. The type scale is the same — outside
+  // the shell there is no per-machine store, so the surface opens at its
+  // default and the chords still work for the session.
+  ...(inShell() ? { quit: quitWindow, ...createTextScaleServices() } : {}),
   async subscribe<T>(event: string, handler: (payload: T) => void) {
     return listen<T>(event, (received) => {
       handler(received.payload);

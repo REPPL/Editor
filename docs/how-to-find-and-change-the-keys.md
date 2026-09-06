@@ -96,6 +96,23 @@ reader never produces, so they arrive under the physical key instead:
 On a keyboard where those characters sit elsewhere, press the key in the
 position the table names — the physical key, not the character printed on it.
 
+## Make the text bigger or smaller
+
+Press `C-x C-=` to enlarge the editing surface a step, `C-x C--` to shrink it a
+step, and `C-x C-0` to put it back to the size the app opened at. A step is a
+factor of 1.2, and the scale stops after five steps in each direction — about
+40 % of the default at the smallest and about 249 % at the largest. The
+modeline reads the scale as a percentage for a moment and then goes back to
+showing your position; at either limit it says so rather than doing nothing
+quietly.
+
+Only the words scale. The sidebar, the modeline and every panel keep the size
+they had, which is what separates this from the operating system's own zoom.
+The scale is remembered for this machine, beside the other things the app knows
+about it, so each machine keeps its own and nothing about it is written into
+the document folder. Every one of the three chords begins with the `C-x`
+prefix, which is why `C--` still redoes an edit and `C-=` is still free.
+
 ## Change a binding
 
 Bindings are data, in one table: `src/keys.ts`. A row names the action, its

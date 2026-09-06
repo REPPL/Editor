@@ -54,6 +54,13 @@ pub struct Settings {
     pub publish: PublishTarget,
     /// Named folders the author drops assets from, by name.
     pub asset_roots: BTreeMap<String, String>,
+    /// The editing surface's type scale, in steps of 1.2 from the default.
+    ///
+    /// Not a multiplier: 0 is the size the app opens at, 5 is five steps
+    /// larger, -5 five steps smaller. How large the author likes their text is
+    /// a fact about their eyes and their screen, so it lives here and never in
+    /// a document folder.
+    pub text_scale: i32,
 }
 
 impl Default for Settings {
@@ -62,8 +69,20 @@ impl Default for Settings {
             schema_version: 1,
             publish: PublishTarget::default(),
             asset_roots: BTreeMap::new(),
+            text_scale: 0,
         }
     }
+}
+
+/// How many steps either way the type scale is bounded at.
+pub const TEXT_SCALE_LIMIT: i32 = 5;
+
+/// A type scale brought inside the range, whatever it arrived as.
+///
+/// Applied on the way in and on the way out, so a file edited by hand to 99
+/// opens a surface the author can still read rather than one they cannot.
+pub fn clamp_text_scale(steps: i32) -> i32 {
+    steps.clamp(-TEXT_SCALE_LIMIT, TEXT_SCALE_LIMIT)
 }
 
 /// The settings file's path inside a configuration directory.
@@ -88,7 +107,10 @@ pub fn read_settings(path: &Path) -> Result<Settings, String> {
     if text.trim().is_empty() {
         return Ok(Settings::default());
     }
-    serde_json::from_str(&text).map_err(|error| format!("cannot read {SETTINGS_FILE}: {error}"))
+    let mut settings: Settings = serde_json::from_str(&text)
+        .map_err(|error| format!("cannot read {SETTINGS_FILE}: {error}"))?;
+    settings.text_scale = clamp_text_scale(settings.text_scale);
+    Ok(settings)
 }
 
 /// Write the settings, whole, through a temporary file beside themselves.
@@ -164,6 +186,18 @@ pub fn set_asset_root_at(path: &Path, name: &str, root: &str) -> Result<Settings
             .asset_roots
             .insert(name.to_string(), resolved.to_string_lossy().into_owned());
     }
+    write_settings(path, &settings)?;
+    Ok(settings)
+}
+
+/// Record the editing surface's type scale, in steps from the default.
+///
+/// Clamped rather than refused: the page has already bounded the step, and a
+/// second opinion that returned an error would leave the surface and the file
+/// disagreeing about a number neither of them can show the author.
+pub fn set_text_scale_at(path: &Path, steps: i32) -> Result<Settings, String> {
+    let mut settings = read_settings(path)?;
+    settings.text_scale = clamp_text_scale(steps);
     write_settings(path, &settings)?;
     Ok(settings)
 }
@@ -259,6 +293,15 @@ pub async fn set_asset_root(
         .map_err(|error| format!("cannot write the settings: {error}"))?
 }
 
+/// Record the editing surface's type scale for this machine.
+#[tauri::command]
+pub async fn set_text_scale(app: tauri::AppHandle, steps: i32) -> Result<Settings, String> {
+    let path = path_for(&app)?;
+    tauri::async_runtime::spawn_blocking(move || set_text_scale_at(&path, steps))
+        .await
+        .map_err(|error| format!("cannot write the settings: {error}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,6 +375,59 @@ mod tests {
         assert!(stored.asset_roots.contains_key("photos"));
         let dropped = set_asset_root_at(&path, "photos", "").expect("dropped");
         assert!(dropped.asset_roots.is_empty());
+    }
+
+    #[test]
+    fn a_text_scale_round_trips_beside_the_other_machine_facts() {
+        let dir = temp();
+        let path = settings_path(dir.path());
+        assert_eq!(read_settings(&path).expect("a fresh machine").text_scale, 0);
+
+        let stored = set_text_scale_at(&path, 2).expect("stored");
+        assert_eq!(stored.text_scale, 2);
+        let read = read_settings(&path).expect("read back");
+        assert_eq!(read.text_scale, 2);
+        assert_eq!(read, stored);
+
+        // In the application's own configuration directory, never in a
+        // document folder (`itd-2609051336080960`).
+        assert_eq!(path, dir.path().join(SETTINGS_FILE));
+        let text = fs::read_to_string(&path).expect("the file");
+        assert!(text.contains("\"text_scale\": 2"), "{text}");
+    }
+
+    #[test]
+    fn a_text_scale_is_bounded_on_the_way_in_and_on_the_way_out() {
+        let dir = temp();
+        let path = settings_path(dir.path());
+        assert_eq!(set_text_scale_at(&path, 99).expect("stored").text_scale, 5);
+        assert_eq!(
+            set_text_scale_at(&path, -99).expect("stored").text_scale,
+            -5
+        );
+
+        // A file edited by hand opens a surface the author can still read.
+        fs::write(&path, "{\"text_scale\": 40}").expect("write");
+        assert_eq!(read_settings(&path).expect("read back").text_scale, 5);
+        assert_eq!(clamp_text_scale(0), 0);
+    }
+
+    #[test]
+    fn a_text_scale_leaves_the_other_machine_facts_alone() {
+        let dir = temp();
+        let repo = temp();
+        let path = settings_path(dir.path());
+        let published = set_publish_target_at(
+            &path,
+            repo.path().to_str().expect("utf-8"),
+            "origin",
+            "main",
+            "https://example.invalid",
+        )
+        .expect("stored");
+        let scaled = set_text_scale_at(&path, 3).expect("stored");
+        assert_eq!(scaled.publish, published.publish);
+        assert_eq!(scaled.text_scale, 3);
     }
 
     #[test]

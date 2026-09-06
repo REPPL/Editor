@@ -289,6 +289,7 @@ pub fn run() {
             settings::get_settings,
             settings::set_publish_target,
             settings::set_asset_root,
+            settings::set_text_scale,
             publish::publish_preflight,
             publish::publish,
             publish::publish_dry_run,

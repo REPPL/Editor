@@ -306,6 +306,7 @@ function settingsServices(): SettingsServices {
       site_dir: "site",
     },
     asset_roots: {},
+    text_scale: 0,
   };
   return {
     getSettings: () => Promise.resolve(stored),

@@ -23,3 +23,27 @@ export function createSettingsServices(): SettingsServices {
     },
   };
 }
+
+/** Reading and writing the type scale, as the shell provides them. */
+export interface TextScaleServices {
+  readTextScale(): Promise<number>;
+  writeTextScale(steps: number): Promise<void>;
+}
+
+/**
+ * Wire the type scale to the same per-machine store the panel reads.
+ *
+ * The panel shows no field for it, so these are separate from
+ * `SettingsServices`: the two commands are the whole of the seam.
+ */
+export function createTextScaleServices(): TextScaleServices {
+  return {
+    async readTextScale() {
+      const settings = await invoke<Settings>("get_settings");
+      return settings.text_scale;
+    },
+    async writeTextScale(steps) {
+      await invoke<Settings>("set_text_scale", { steps });
+    },
+  };
+}

@@ -22,6 +22,7 @@ function settings(overrides: Partial<Settings> = {}): Settings {
       site_dir: "site",
     },
     asset_roots: { photos: "/pictures" },
+    text_scale: 0,
     ...overrides,
   };
 }

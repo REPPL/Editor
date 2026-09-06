@@ -419,6 +419,31 @@ export const BINDINGS: readonly Binding[] = [
     owner: "editor",
   },
 
+  // The editing surface's type size. Emacs's own chords, each behind the `C-x`
+  // prefix the app already claims: that is what leaves `C--` as redo and `C-=`
+  // free, and what keeps a web view's own zoom keys out of the way.
+  {
+    id: "text-scale-increase",
+    label: "Bigger text",
+    chords: ["C-x C-="],
+    group: "control",
+    owner: "editor",
+  },
+  {
+    id: "text-scale-decrease",
+    label: "Smaller text",
+    chords: ["C-x C--"],
+    group: "control",
+    owner: "editor",
+  },
+  {
+    id: "text-scale-reset",
+    label: "Default text size",
+    chords: ["C-x C-0"],
+    group: "control",
+    owner: "editor",
+  },
+
   // Selection. Every movement chord has a Shift variant that drags the
   // selection along with the point; the keymaps ship them, so the table lists
   // them rather than leaving a third of what the surface answers unnamed.

@@ -73,6 +73,11 @@ export const APP_COMMAND_IDS: readonly string[] = [
   "insert-palette",
   "toggle-sidebar",
   "reload-document",
+  // The type scale. `C-x C-0` needs the guard below to reach its command; the
+  // other two reach it through the package's own prefix machinery.
+  "text-scale-increase",
+  "text-scale-decrease",
+  "text-scale-reset",
   // Owned by the deck bundle; the chord is the table's row.
   "present",
   // Owned by the publish bundle, and by the shell's settings store.
@@ -128,8 +133,49 @@ function trackHandlers(): void {
     event: KeyboardEvent,
   ): ReturnType<EmacsHandler["handleKeyboard"]> {
     handlerByView.set(this.view, this);
+    const swallowed = swallowedChord(this, event);
+    if (swallowed !== null) {
+      this.$data.keyChain = "";
+      EmacsHandler.execCommand(EmacsHandler.commands[swallowed], this, {}, 1);
+      return { command: swallowed };
+    }
     return inherited.call(this, event);
   };
+}
+
+/**
+ * Editor's own chords, in the package's notation, by the command they reach.
+ *
+ * Only the ones registered from the binding table, which is what makes the
+ * guard below safe: it can never answer a chord the package itself owns.
+ */
+const ownChords = new Map<string, string>();
+
+/**
+ * The command a chord the package's key reader swallows would have reached.
+ *
+ * `findCommand` reads Control-and-a-digit as the start of a numeric argument
+ * *before* it consults its own key chain, so `C-x C-0` sets a count, returns
+ * nothing, and leaves the chain half-open: the chord can never reach a
+ * binding. This is the same class of defect as `REBOUND` above — a chord the
+ * package makes unreachable — and it is answered in the same place rather than
+ * with a second prefix state. It is confined to a chain that is already open
+ * and to a chord `ownChords` carries, so nothing the package answers is
+ * touched.
+ */
+function swallowedChord(
+  handler: EmacsHandler,
+  event: KeyboardEvent,
+): string | null {
+  const chain = handler.$data.keyChain;
+  if (!chain) return null;
+  if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+    return null;
+  }
+  if (!/^Digit[0-9]$/.test(event.code)) return null;
+  const name = ownChords.get(`${chain} C-${event.code}`);
+  if (name === undefined) return null;
+  return EmacsHandler.commands[name] ? name : null;
 }
 
 /**
@@ -285,7 +331,9 @@ function registerEditorChords(): void {
       },
     });
     for (const chord of binding.chords) {
-      EmacsHandler.bindKey(toPackageChord(chord), name);
+      const spec = toPackageChord(chord);
+      EmacsHandler.bindKey(spec, name);
+      ownChords.set(spec, name);
     }
   }
 

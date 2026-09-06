@@ -32,6 +32,7 @@ import {
   toKeymapSpec,
   withoutSuppressed,
 } from "./keys";
+import { fontSizeFor, textScaleExtension, textScaleStep } from "./text-scale";
 
 /** Where the cursor is, one-based, for the modeline. */
 export interface CursorPosition {
@@ -46,7 +47,9 @@ export interface EditorHooks {
 }
 
 const theme = EditorView.theme({
-  "&": { height: "100%", fontSize: "14px" },
+  // The size the surface opens at is named once, in `src/text-scale.ts`, so
+  // the restore chord and this rule cannot disagree about what "default" is.
+  "&": { height: "100%", fontSize: fontSizeFor(0) },
   ".cm-scroller": {
     fontFamily:
       "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
@@ -257,7 +260,7 @@ const searchCancel = [
 ];
 
 /** The extensions the editing surface is built from. */
-function editorExtensions(hooks: EditorHooks = {}): Extension[] {
+function editorExtensions(hooks: EditorHooks = {}, textScale = 0): Extension[] {
   return [
     lineNumbers(),
     history(),
@@ -286,6 +289,9 @@ function editorExtensions(hooks: EditorHooks = {}): Extension[] {
     // Last of all: whatever no keymap answered, Option still must not type.
     ...metaKeys,
     theme,
+    // After the base theme, and highest in precedence inside itself, so the
+    // scale's own rule outranks the size the surface opens at.
+    textScaleExtension(textScale),
     EditorView.updateListener.of((update) => {
       if (update.docChanged || update.selectionSet) {
         hooks.onChange?.(update.view);
@@ -321,12 +327,12 @@ export function documentText(view: EditorView): string {
 /** The hooks a view was built with, so a fresh state can carry them too. */
 const hooksByView = new WeakMap<EditorView, EditorHooks>();
 
-function stateFor(doc: string, hooks: EditorHooks): EditorState {
+function stateFor(doc: string, hooks: EditorHooks, textScale = 0): EditorState {
   return EditorState.create({
     doc,
     extensions: [
       EditorState.lineSeparator.of(lineSeparatorOf(doc)),
-      ...editorExtensions(hooks),
+      ...editorExtensions(hooks, textScale),
     ],
   });
 }
@@ -358,9 +364,14 @@ export function createEditor(
  * current file. And the line separator is state configuration, not content, so
  * a chapter with different endings needs its own state to be read back
  * faithfully.
+ *
+ * The type scale is state configuration too, but it belongs to Alice's eyes
+ * rather than to the chapter, so it is carried across rather than reset.
  */
 export function setDocument(view: EditorView, doc: string): void {
-  view.setState(stateFor(doc, hooksByView.get(view) ?? {}));
+  view.setState(
+    stateFor(doc, hooksByView.get(view) ?? {}, textScaleStep(view)),
+  );
 }
 
 /**

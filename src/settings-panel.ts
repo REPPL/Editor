@@ -33,6 +33,14 @@ export interface Settings {
   readonly schema_version: number;
   readonly publish: PublishTarget;
   readonly asset_roots: Readonly<Record<string, string>>;
+  /**
+   * The editing surface's type scale, in steps of 1.2 from the default.
+   *
+   * The panel shows no field for it: it is set by pressing a key, the way a
+   * text scale is set in Emacs. It is here because it is what
+   * `get_settings` returns.
+   */
+  readonly text_scale: number;
 }
 
 /** What the panel needs from the shell. */
