@@ -91,14 +91,14 @@ recorded in `.abcd/work/DECISIONS.md`:
 
 1. **The default asset threshold.** `05-internals.md` section 6 calls the
    default open, but its own `assets.json` example carries
-   `threshold_bytes: 8388608`, and both example documents under `examples/`
-   carry `asset_threshold_bytes: 8388608` in `document.yaml`.
-   `metadata::DocumentMetadata` names no default of its own — the field is a
-   bare `Option<u64>`. This writes `8_388_608` (8 MiB), the figure already in
-   use everywhere else in the repository.
-2. **The default citation style.** `numeric` — the value
-   `examples/manuscript/document.yaml` carries, and the one the brief
-   names for map #11's bibliography builder to honour.
+   `threshold_bytes: 8388608`, and both of the maintainer's own documents kept
+   for local testing (iss-2609061418065651) carry `asset_threshold_bytes:
+   8388608` in `document.yaml`. `metadata::DocumentMetadata` names no default
+   of its own — the field is a bare `Option<u64>`. This writes `8_388_608`
+   (8 MiB), the figure already in use everywhere else in the repository.
+2. **The default citation style.** `numeric` — the value one of those
+   documents' `document.yaml` carries, and the one the brief names for map
+   #11's bibliography builder to honour.
 3. **What the first Part is named.** Not from the title. The intent's own
    Open Questions section gives the reason: renaming a Part is renaming a
    folder, and the first Part is the one an author is least likely to ever

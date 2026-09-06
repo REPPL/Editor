@@ -313,9 +313,8 @@ Gap audit:
     evidence: src/core/inserts.ts:93-182 — "id: "slide-split" ... id: "divider" ... id: "columns" ... id: "speaker-notes" ... id: "credit" ... id: "page-break""
     evidence: src/palette.ts:27 — "export const PALETTE_PHASE = 1;"
     evidence: src/core/inserts.ts:351-353 — "return INSERT_FORMS.filter((form) => form.visibleFrom <= phase);"
-  - The constructs on real documents: the presentation chapters carry dividers, rules, columns, notes and credits and their snapshots pass
-    evidence: examples/presentation/01-slides/02-where-im-coming-from.md:1-26 — "# Where I'm coming from {.divider} ... ::: {.columns} ... ::: {.credit}"
-    evidence: src/core/__snapshots__/examples.test.ts.snap:1 — "slide-divider (11 hits), data-width="50" (24), data-source="authored" (26)"
+  - The constructs on real documents: a chapter of the maintainer's own local test material carries dividers, rules, columns, notes and credits and its snapshot passed at the time (iss-2609061418065651 later untracked that material and dropped the snapshot)
+    evidence: src/core/examples.test.ts (removed by iss-2609061418065651; superseded by src/local-documents.test.ts) — "# ... {.divider} ... ::: {.columns} ... ::: {.credit}"
   - The pagebreak comment produces nothing in the deck
     evidence: src/core/shaping.test.ts:301-315 — "ignores a page-break comment"
 - diverged:

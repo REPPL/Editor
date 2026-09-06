@@ -29,18 +29,17 @@ use crate::metadata::METADATA_FILE;
 /// The size above which a dropped asset is referenced rather than copied.
 ///
 /// `05-internals.md` section 6 leaves the default open but gives this figure
-/// in its own `assets.json` example, and both example documents under
-/// `examples/` carry it in `document.yaml`; `metadata::DocumentMetadata`
+/// in its own `assets.json` example, and the maintainer's own documents used
+/// for local testing carry it in `document.yaml`; `metadata::DocumentMetadata`
 /// names no default of its own for the field to inherit. Recorded as a
 /// decision in `.abcd/work/DECISIONS.md` rather than invented silently here.
 pub const DEFAULT_ASSET_THRESHOLD_BYTES: u64 = 8_388_608;
 
 /// The citation style a document opens with.
 ///
-/// Both example documents carry a citation style; `numeric` is the one
-/// `examples/manuscript/document.yaml` uses, and map #11's bibliography
-/// builder (`itd-2609051335502171`) is written to honour it. Recorded as a
-/// decision alongside the asset threshold.
+/// `numeric` is the value the maintainer's own local test documents use, and
+/// map #11's bibliography builder (`itd-2609051335502171`) is written to
+/// honour it. Recorded as a decision alongside the asset threshold.
 pub const DEFAULT_CITATION_STYLE: &str = "numeric";
 
 /// The name the first Part is given, deliberately not derived from the title.

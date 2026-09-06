@@ -10,11 +10,11 @@ There is no project file, no database, and no format only Editor can open. A
 document is a folder on your disk:
 
 ```
-presentation/
+the-lantern-papers/
   document.yaml              what belongs to the whole document
-  01-slides/                 a Part
-    01-technology-impact-assessment.md    a Chapter
-    02-where-im-coming-from.md
+  01-chapters/                a Part
+    01-the-lantern-papers.md   a Chapter
+    02-where-it-begins.md
     assets/                  the pictures those chapters use
 ```
 

@@ -13,8 +13,6 @@
  * so that it can be run there.
  */
 
-import { readFileSync } from "node:fs";
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { pathResolver } from "../assets";
@@ -22,15 +20,44 @@ import { buildDeck } from "../deck";
 import { parseChapter } from "../parse";
 import { DECK_STYLESHEET, renderSlides } from "./slides";
 
-/** The chapter the manual check uses too, so both look at one deck. */
-const CHAPTER = "examples/presentation/01-slides/01-technology-impact-assessment.md";
+/**
+ * A chapter shaped like a real talk: a title slide, a heading with an image
+ * and a caption, and a divider — the constructs the manual check at 390, 820
+ * and 1280 CSS px also exercises. Invented content, not a copy of any real
+ * document (iss-2609061418065651).
+ */
+const CHAPTER = [
+  "# The Lantern Papers",
+  "",
+  "Alice opens with a short paragraph before the first Section.",
+  "",
+  "## Where the light falls",
+  "",
+  "![A lantern on a desk](assets/lantern.svg){.full-bleed}",
+  "",
+  "*Figure: a lantern, drawn for the talk.*",
+  "",
+  "- Bob reads by lamplight",
+  "- Carol prefers the window",
+  "",
+  "## Interlude {.divider}",
+  "",
+  "### A closer look",
+  "",
+  "| Reader | Preference |",
+  "| --- | --- |",
+  "| Bob | Lamplight |",
+  "| Carol | Daylight |",
+  "",
+  "Table: what each reader prefers.",
+].join("\n");
 
 /** iPhone width, in CSS pixels. */
 const PHONE = 390;
 
 /** Mount the deck at phone width, with the deck's own stylesheet over it. */
 function mount(): void {
-  const plan = buildDeck(parseChapter(readFileSync(CHAPTER, "utf8")));
+  const plan = buildDeck(parseChapter(CHAPTER));
   const style = document.createElement("style");
   style.textContent = DECK_STYLESHEET;
   document.head.replaceChildren(style);

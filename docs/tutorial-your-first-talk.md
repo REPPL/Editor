@@ -1,25 +1,25 @@
 # Your first talk
 
-In this tutorial you open a document that is already written, change a few
-words, add a divider slide, project the deck, and dry-run a publish. Nothing
-you do here leaves your machine.
+In this tutorial you create a document, write a few lines, add a divider
+slide, project the deck, and dry-run a publish. Nothing you do here leaves
+your machine.
 
-It takes about twenty minutes. You need Editor running — `npm run tauri dev`
-from the repository root — and the `examples/` folder that ships with it.
+It takes about twenty minutes. You need Editor running: `npm run tauri dev`
+from the repository root.
 
-## 1. Open a document
+## 1. Create a document
 
-A document is a folder. Press `C-x C-f`, or use the **Open folder** button at
-the top of the sidebar, and choose `examples/presentation`.
+Press `C-x C-n`. The New document panel opens.
 
-The sidebar fills with the document's structure: the document, the Part
-`01-slides`, and six chapters beneath it. Each chapter is one Markdown file.
-Click **Denver, 1858** — it is the first chapter,
-`01-technology-impact-assessment.md` — and its text appears in the editing
-surface.
+Type a title — "The Lantern Papers" will do — then press **Choose folder…**
+and pick an empty folder. Press **Create**.
 
-The bottom line of the window is the modeline. It names the chapter you are in,
-says whether it has unsaved changes, and is where Editor answers you.
+The folder opens, the sidebar shows one Part and one Chapter, the chapter is
+open, and the cursor sits on a blank line beneath the heading Editor wrote
+from your title.
+
+The bottom line of the window is the modeline. It names the chapter you are
+in, says whether it has unsaved changes, and is where Editor answers you.
 
 ## 2. Move about with the keys
 
@@ -33,29 +33,33 @@ The editing surface answers Emacs chords. Try these:
 Press `C-h b` to see every chord Editor answers, grouped by what it does. The
 panel closes with `C-g` or Escape, which is how every overlay in Editor closes.
 
-## 3. Change some words
+## 3. Write the opening
 
-Put the cursor on the paragraph under the first heading and type. The modeline
-shows a dot beside the chapter name: the buffer now differs from the file.
+On the blank line beneath the heading, type a sentence or two — whatever
+your talk is about. The modeline shows a dot beside the chapter name: the
+buffer now differs from the file.
+
+Press Return twice and type a second heading, `## Where it begins`, then
+Return again and a line under it.
 
 Press `C-x C-s` to save. The modeline says what it wrote, and the dot goes.
 
-If you change your mind, `C-/` undoes and `C-S-/` redoes — as many times as you
-like, in one press each.
+If you change your mind, `C-/` undoes and `C-S-/` redoes — as many times as
+you like, in one press each.
 
 ## 4. Insert a divider
 
 A divider is a slide with nothing on it but its heading: the beat before you
 change subject.
 
-Put the cursor at the end of a heading line — say `## Denver, 1858` — and press
-`C-c i`. The insert palette opens. Type `div`; **Divider heading** rises to the
-top. Press Return.
+Put the cursor at the end of the second heading — `## Where it begins` — and
+press `C-c i`. The insert palette opens. Type `div`; **Divider heading**
+rises to the top. Press Return.
 
 The heading now reads:
 
 ```markdown
-## Denver, 1858 {.divider}
+## Where it begins {.divider}
 ```
 
 That is all a divider is. Every construct Editor knows is written this way:

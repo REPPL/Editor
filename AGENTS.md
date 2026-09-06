@@ -147,6 +147,15 @@ real network is recorded as an unticked checklist under
 files are local and gitignored; they are the record of what the automated runs
 above cannot reach.
 
+### Local documents for testing
+
+Real documents for exercising the parse, the article and the deck against
+writing nobody wrote for a fixture live under `examples/` (gitignored) or
+wherever the `EDITOR_LOCAL_DOCUMENTS` environment variable points.
+`npx vitest run src/local-documents.test.ts` skips loudly, with no document
+folders to run over, when neither is present. Nothing committed — code, test,
+doc, record or comment — may name a document kept there.
+
 ## Boundaries
 
 - Orientation for the current state of work lives in `.abcd/work/CONTEXT.md`.

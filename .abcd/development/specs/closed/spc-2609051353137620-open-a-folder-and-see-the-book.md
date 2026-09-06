@@ -237,10 +237,10 @@ Manual checks, run with `npm run tauri dev` and recorded against this spec:
    Verify: `npm run lint` and `cargo build --manifest-path src-tauri/Cargo.toml`.
 2. Add `src/core/parse.ts` with the pinned instance and the four plugins.
    Verify: `npx vitest run src/outline.test.ts` once step 3 lands.
-3. Add `src/core/outline.ts` and `src/outline.test.ts`, driving them from
-   `examples/presentation/01-slides/01-technology-impact-assessment.md` and a
-   fixture carrying a fourth-level heading, which the examples lack
-   (`examples/CANON-CHECK.md`). Verify: `npx vitest run src/outline.test.ts`.
+3. Add `src/core/outline.ts` and `src/outline.test.ts`, driving them from a
+   chapter shaped like a real one and a fixture carrying a fourth-level
+   heading, which real documents seen so far do not carry. Verify:
+   `npx vitest run src/outline.test.ts`.
 4. Add `bytes` and `modified` to `Chapter` in `src-tauri/src/document.rs`, and
    `read_many`. Verify: `cargo test --manifest-path src-tauri/Cargo.toml`.
 5. Add `confine_part`, `next_prefix`, and `add_chapter_from` to

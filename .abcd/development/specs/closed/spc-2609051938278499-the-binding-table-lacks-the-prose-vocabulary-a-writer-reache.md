@@ -63,8 +63,8 @@ Disciplines inherited, and how each is proven here:
 
 - **Round-trip byte-fidelity** (`itd-2609051336074533`): `M-q` replaces exactly
   `doc.line(block.line).from` to `doc.line(block.endLine).to`, and the test
-  asserts the bytes either side are identical, on a fixture and on
-  `examples/manuscript/01-manuscript/02-the-current-state-of-the-art.md`.
+  asserts the bytes either side are identical, on a fixture and on a real
+  chapter kept for local testing.
 - **No machine in the document** (`itd-2609051336080960`): no command writes a
   path, a name, or a date; `fill_column` is a number.
 - **One source, always** (`itd-2609051336090390`): the palette lists the

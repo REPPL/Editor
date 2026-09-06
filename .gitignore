@@ -40,3 +40,7 @@ coverage/
 
 # macOS Finder metadata
 .DS_Store
+
+# Local documents used only for testing (see EDITOR_LOCAL_DOCUMENTS in
+# AGENTS.md). This is the maintainer's own material and is never committed.
+examples/

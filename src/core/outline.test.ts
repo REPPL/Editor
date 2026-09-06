@@ -1,20 +1,13 @@
 /**
- * The outline, against a real chapter and against the levels it must reach.
- *
- * The examples carry no fourth-level heading — `examples/CANON-CHECK.md` says
- * so — so the level-four case is a fixture written here, beside the real
- * chapter that supplies the rest.
+ * The outline, against every level it must reach and against a chapter shaped
+ * like a real one: several paragraphs before the first heading, a Section
+ * that holds a Sub-section, and headings in source order throughout.
  */
-
-import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
 import { outlineOf, slugify, walkOutline } from "./outline";
 import { parseChapter } from "./parse";
-
-/** The first chapter of the macro talk, which the specs name as the fixture. */
-const MACRO_TALK = "examples/presentation/01-slides/01-technology-impact-assessment.md";
 
 function outlineOfSource(source: string): ReturnType<typeof outlineOf> {
   return outlineOf(parseChapter(source));
@@ -95,17 +88,46 @@ describe("the outline", () => {
     expect(outline.nodes[0]?.badges).toEqual([]);
   });
 
-  it("draws the outline of a real chapter", () => {
-    const outline = outlineOfSource(readFileSync(MACRO_TALK, "utf8"));
-    expect(outline.title).toBe("Technology Impact Assessment");
+  it("draws the outline of a chapter with prose before its first heading and a nested Sub-section", () => {
+    const source = [
+      "# The Lantern Papers",
+      "",
+      "Alice opens with a short paragraph, so the first Section does not sit",
+      "at the very top of the chapter, the way a real one never does.",
+      "",
+      "Bob supplies a second paragraph before the heading arrives, for the",
+      "same reason.",
+      "",
+      "## Beginnings",
+      "",
+      "Carol reads this Section first, before anything else, and asks Alice",
+      "why it starts here.",
+      "",
+      "## The question that opened it",
+      "",
+      "This Section holds one Sub-section, so the outline test can show a",
+      "child node nesting under its parent's line.",
+      "",
+      "### A narrower answer",
+      "",
+      "The Sub-section needs a line of its own text so it is not an empty",
+      "heading.",
+      "",
+      "## Where it rests",
+      "",
+      "The chapter's last Section, so the outline test can show three",
+      "top-level nodes in source order.",
+    ].join("\n");
+    const outline = outlineOfSource(source);
+    expect(outline.title).toBe("The Lantern Papers");
     expect(outline.titleLine).toBe(1);
     expect(outline.nodes.map((node) => [node.label, node.line])).toEqual([
-      ["Denver, 1858", 11],
-      ["In 1859 the question was:", 28],
-      ["The 2026 rush", 36],
+      ["Beginnings", 9],
+      ["The question that opened it", 14],
+      ["Where it rests", 24],
     ]);
     expect(outline.nodes[1]?.children.map((node) => node.label)).toEqual([
-      "Perhaps for 2026?",
+      "A narrower answer",
     ]);
   });
 });

@@ -9,7 +9,6 @@
 
 import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { parseChapter } from "./core/parse";
@@ -285,9 +284,24 @@ describe("filling a paragraph", () => {
   });
 
   it("fills a real chapter's paragraph without touching the table or its caption", () => {
-    const path =
-      "examples/manuscript/01-manuscript/02-the-current-state-of-the-art.md";
-    const source = readFileSync(path, "utf8");
+    // A chapter shaped like a real one: a heading, a long unwrapped paragraph,
+    // and a table with a caption below it. Invented content, not a copy of
+    // any real document (iss-2609061418065651).
+    const source = [
+      "# The Lantern Papers",
+      "",
+      "## Findings",
+      "",
+      "Alice found that readers who annotate slowly retain more of a chapter than readers who annotate quickly, a small effect that nobody on the team had measured directly before this study began, and it held up in every cohort tested afterwards as well.",
+      "",
+      "| Reader | Retention |",
+      "| --- | --- |",
+      "| Alice | High |",
+      "| Bob | High |",
+      "",
+      "Table: retention by reader.",
+      "",
+    ].join("\n");
     open(source);
 
     const blocks = parseChapter(source).blocks;

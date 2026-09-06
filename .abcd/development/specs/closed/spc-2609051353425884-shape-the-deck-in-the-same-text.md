@@ -186,7 +186,7 @@ with the phase's acceptance run.
 |---|---|
 | A `---` inside a Section makes two slides split at the rule, both in the main line, the text after the rule on the second slide rather than in the first's notes | `src/core/shaping.test.ts`, "splits a Section at a rule and puts the following text on the second slide" |
 | `## Interlude {.divider}` gives a section-break slide showing the headline alone, with `.divider` nowhere in any slide's rendered text | `src/core/shaping.test.ts`, "makes a divider slide with its headline alone"; `src/core/render/slides.test.ts`, "carries a divider as a class and never as text" |
-| A `.columns` div sits side by side in the declared proportions at 1280 and 820 CSS px and stacks in source order at 390 with no horizontal scrolling or pinch zoom | `src/core/render/slides.test.ts`, "sizes the column tracks from the declared widths"; manual: `npm run tauri dev`, Present `examples/presentation/01-slides/02-where-im-coming-from.md` and measure at each width |
+| A `.columns` div sits side by side in the declared proportions at 1280 and 820 CSS px and stacks in source order at 390 with no horizontal scrolling or pinch zoom | `src/core/render/slides.test.ts`, "sizes the column tracks from the declared widths"; manual: `npm run tauri dev`, Present a real chapter and measure at each width |
 | A `.notes` div's text is the speaker note, the Section's own paragraph is not the generated note, and neither appears on a slide | `src/core/shaping.test.ts`, "lets an authored notes div replace the generated note" |
 | A notes div after the second slide's content attaches to that slide alone; the first keeps its generated notes | `src/core/shaping.test.ts`, "attaches a notes div to the slide whose content it follows" |
 | A `.credit` div renders as a line at the foot of the slide, as a line and not as body text | `src/core/shaping.test.ts`, "puts a credit at the foot of its slide"; `src/core/render/slides.test.ts`, "renders a credit in the credit style" |
@@ -195,7 +195,7 @@ with the phase's acceptance run.
 | Inserting a `.notes` div changes only the inserted div and its blank lines: nothing reflowed, re-escaped or realigned | `src/core/degrade.test.ts`, "leaves every byte outside the inserted div alone" |
 | Inherits: seven disciplines | the table under Scope |
 | The article ignores these constructs (bundle obligation, stated here) | `src/core/canon.test.ts`, "gives every construct a placement in all three renderings"; `src/core/render/article.test.ts`, "puts columns in the flow, omits notes, keeps a divider an ordinary heading" |
-| The constructs on real documents | `src/core/examples.test.ts`, whose snapshots cover the rules, dividers, columns, notes and credits of `examples/talk` and `examples/presentation` |
+| The constructs on real documents | `src/core/examples.test.ts` (removed by iss-2609061418065651; superseded by `src/local-documents.test.ts`), whose snapshots covered the rules, dividers, columns, notes and credits of the documents kept for local testing |
 
 ## Tasks
 
@@ -241,8 +241,8 @@ with the phase's acceptance run.
   paragraph — and no more.
 - **The closed set.** The intent's mechanism says the closed set is wrong "if
   an author needs a sixth construct in the first real talk".
-  `examples/presentation` already reaches for `{.refs}`, which
-  `examples/CANON-CHECK.md` lists under "Beyond the canon" while
+  one talk kept for local testing already reaches for `{.refs}`, which
+  its own canon-check notes list under "Beyond the canon" while
   `05-internals.md` section 3 defines it. Phase 1 does not seed it, so the
   build treats a `{.refs}` heading as an ordinary Section heading and carries
   the class through. That is the sixth construct arriving early, and it is

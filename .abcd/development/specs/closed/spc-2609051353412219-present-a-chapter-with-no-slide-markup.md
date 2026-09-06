@@ -19,7 +19,7 @@ obligations. The change adds the parse, the tree, the default mapping, the
 slide renderer, the article HTML skeleton the phase-2 bundle will style, a
 Present command that opens a second web view window on the deck, a site build
 that writes the deck beside a pinned copy of reveal.js, and a snapshot harness
-over the three documents in `examples/`. Nothing is written into the document
+over real documents kept for local testing. Nothing is written into the document
 folder: in the app the deck is a string in memory, and on the site it is
 generated output under the build directory.
 
@@ -236,13 +236,13 @@ types, `@types/markdown-it` 14.2.0, `@types/markdown-it-attrs` 4.1.3,
 | A first-block image shares the headline slide; a later one does not | `src/core/deck.test.ts`, "keeps the first image on the heading's own slide" |
 | Sub-sub-sections make no slide; heading and text fold into the Sub-section's notes in source order | `src/core/deck.test.ts`, "folds a Sub-sub-section into its Sub-section's notes" |
 | Present, move through, close: the chapter's bytes unchanged, no deck file anywhere | `src-tauri/src/present.rs`, `presenting_leaves_the_chapters_bytes_untouched` — through `hold_chapter`, which is what the `present_chapter` command runs, and `PendingDeck`; `src/present.test.ts`, "writes no deck file anywhere in the document folder"; `src-tauri/src/present.rs`, `refuses_an_asset_outside_the_document` |
-| No horizontal scrolling or pinch zoom at 390, 820, 1280 CSS px | manual: `npm run tauri dev`, Present `examples/presentation/01-slides/01-technology-impact-assessment.md`, resize the present window to each width and confirm `document.scrollingElement.scrollWidth` equals `innerWidth` on every slide |
+| No horizontal scrolling or pinch zoom at 390, 820, 1280 CSS px | manual: `npm run tauri dev`, Present a real chapter, resize the present window to each width and confirm `document.scrollingElement.scrollWidth` equals `innerWidth` on every slide |
 | Swipe, on-screen controls and arrow keys all move, none offered without working | manual, at 390 CSS px, on the same chapter, supported by `src/core/render/slides.test.ts`, "turns on touch and the on-screen controls" |
 | A Section of one paragraph yields exactly one slide, nothing empty beneath or after | `src/core/deck.test.ts`, "yields one slide for a Section with one paragraph" |
 | Present twice in a session shows the new text and leaves no second copy | `src/present.test.ts`, "rebuilds the deck from the buffer on a second Present" |
 | The deck rehearsed is the deck published: Present builds the document's default variant | `src-tauri/src/present.rs`, `presenting_carries_the_documents_default_variant`; `src/present.test.ts`, "builds the variant a publish would build" |
 | Inherits: the six disciplines | the table under Scope |
-| The mapping on real documents | `src/core/examples.test.ts`: slide-plan and built-deck snapshots for every chapter of `examples/manuscript`, `examples/talk`, `examples/presentation` |
+| The mapping on real documents | `src/core/examples.test.ts` (removed by iss-2609061418065651; superseded by `src/local-documents.test.ts`): slide-plan and built-deck snapshots for every chapter of the documents kept for local testing |
 
 ## Tasks
 
@@ -258,8 +258,8 @@ types, `@types/markdown-it` 14.2.0, `@types/markdown-it-attrs` 4.1.3,
    `npx vitest run src/core/render/slides.test.ts`.
 6. Write `src/core/render/article.ts` as the skeleton —
    `npx vitest run src/core/render/article.test.ts`.
-7. Add the snapshot harness over `examples/` —
-   `npx vitest run src/core/examples.test.ts`.
+7. Add the snapshot harness over the documents kept for local testing —
+   `npx vitest run src/core/examples.test.ts` (later removed by iss-2609061418065651).
 8. Extract `confine_path`; add `confine_asset`, `read_asset`, `present_chapter`
    and `pending_deck`; widen the capability — `cargo test --manifest-path
    src-tauri/Cargo.toml` and `cargo clippy --manifest-path src-tauri/Cargo.toml
@@ -267,7 +267,7 @@ types, `@types/markdown-it` 14.2.0, `@types/markdown-it-attrs` 4.1.3,
 9. Add `present.html`, `src/present.ts`, the Vite entry, the binding-table row
    and the Present action — `npx vitest run src/present.test.ts`.
 10. Add `scripts/build-deck.ts` — `npx tsx scripts/build-deck.ts
-    examples/presentation`, then open the written `slides/index.html` from disk.
+    <a document folder>`, then open the written `slides/index.html` from disk.
 11. Run the manual checks, then `npm test && npm run lint && npm run build`.
 
 ## Risks and Open Questions
@@ -282,13 +282,13 @@ types, `@types/markdown-it` 14.2.0, `@types/markdown-it-attrs` 4.1.3,
   and unanswered in `03-evidence.md`. The build assumes the default rule
   applies unchanged, so that prose becomes the title slide's notes — which
   sends the subtitle, author, affiliation and date of
-  `examples/presentation/01-slides/01-technology-impact-assessment.md` off the
+  a real chapter's opening off the
   face of its title slide. The snapshot shows it plainly, which is why the
   assumption is taken in the open.
 - **What "the Section's text" covers.** `04-surfaces.md` says a Section's text
   becomes its notes; the criterion says "paragraph". The build sends every
   ordinary block — list, table, quote, code — to the notes, so a bullet list on
-  a Section's face needs a rule before it. Every talk in `examples/` writes one.
+  a Section's face needs a rule before it. Every talk kept for local testing writes one.
 - **The slide theme.** Open in `03-evidence.md` under "Article and slides". The
   build ships one stylesheet over reveal.js's own layout and reads no theme
   from `document.yaml`; `theme: plenary` there is carried and ignored.

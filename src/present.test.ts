@@ -9,7 +9,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -28,12 +30,6 @@ import {
   type RevealEngine,
 } from "./present";
 
-/** The chapter the manual checks use, so every check looks at one deck. */
-const CHAPTER = "examples/presentation/01-slides/01-technology-impact-assessment.md";
-
-/** The document folder that chapter belongs to. */
-const DOCUMENT = "examples/presentation";
-
 function sha256(bytes: Buffer | string): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -51,33 +47,50 @@ function listing(folder: string): string[] {
   return found;
 }
 
+/**
+ * A synthetic document folder on disk, holding one chapter — thrown away by
+ * the OS's own temp-directory cleanup — so "no deck file is written" is
+ * proved against a real folder listing rather than an in-memory string.
+ */
+function documentFolder(chapter: string): { document: string; chapter: string } {
+  const document = mkdtempSync(join(tmpdir(), "present-"));
+  const path = join(document, "chapter.md");
+  writeFileSync(path, chapter);
+  return { document, chapter: path };
+}
+
 describe("presenting a chapter", () => {
   it("leaves the chapter's bytes untouched", () => {
-    const before = readFileSync(CHAPTER);
+    const { chapter } = documentFolder("## The first reading\n\nAlice reads first.\n");
+    const before = readFileSync(chapter);
     const text = before.toString("utf8");
     const fragment = deckFragment(text, pathResolver());
     expect(fragment.length).toBeGreaterThan(0);
     // The core took a string and returned a string.
     expect(text).toBe(before.toString("utf8"));
-    expect(sha256(readFileSync(CHAPTER))).toBe(sha256(before));
+    expect(sha256(readFileSync(chapter))).toBe(sha256(before));
   });
 
   it("writes no deck file anywhere in the document folder", () => {
-    const before = listing(DOCUMENT);
-    deckFragment(readFileSync(CHAPTER, "utf8"), pathResolver());
-    expect(listing(DOCUMENT)).toEqual(before);
+    const { document, chapter } = documentFolder(
+      "## The first reading\n\nAlice reads first.\n",
+    );
+    const before = listing(document);
+    deckFragment(readFileSync(chapter, "utf8"), pathResolver());
+    expect(listing(document)).toEqual(before);
   });
 
   it("builds the deck from the buffer rather than from the file", () => {
     // The text presented is the buffer's; an unsaved edit presents.
-    const edited = readFileSync(CHAPTER, "utf8").replace(
-      "## Denver, 1858",
-      "## Denver, 1859",
+    const { chapter } = documentFolder("## The first reading\n\nAlice reads first.\n");
+    const edited = readFileSync(chapter, "utf8").replace(
+      "## The first reading",
+      "## The second reading",
     );
     const fragment = deckFragment(edited, pathResolver());
-    expect(fragment).toContain("Denver, 1859");
-    expect(fragment).not.toContain("Denver, 1858");
-    expect(readFileSync(CHAPTER, "utf8")).toContain("## Denver, 1858");
+    expect(fragment).toContain("The second reading");
+    expect(fragment).not.toContain("The first reading");
+    expect(readFileSync(chapter, "utf8")).toContain("## The first reading");
   });
 
   it("builds the variant a publish would build", () => {
@@ -508,7 +521,34 @@ function settledEngine(): Promise<void> {
  * the `present` class, and the controls.
  */
 describe("the deck the real engine is holding", () => {
-  const CHAPTER_TEXT = readFileSync(CHAPTER, "utf8");
+  /**
+   * A chapter with several top-level Sections and one that holds two
+   * Sub-sections, so the deck has more than one slide and one column of
+   * vertical slides to navigate into. Invented content
+   * (iss-2609061418065651).
+   */
+  const CHAPTER_TEXT = [
+    "# The Lantern Papers",
+    "",
+    "## Where the light falls",
+    "",
+    "Alice writes the opening Section.",
+    "",
+    "## A closer look",
+    "",
+    "### First observation",
+    "",
+    "Bob observes something here.",
+    "",
+    "### Second observation",
+    "",
+    "Carol observes something else here.",
+    "",
+    "## Closing thought",
+    "",
+    "A short closing Section.",
+    "",
+  ].join("\n");
 
   /**
    * A fresh copy of the vendored engine, handed back rather than left global.
@@ -542,7 +582,7 @@ describe("the deck the real engine is holding", () => {
     expect(seen.presentAt).toBe(0);
     expect(seen.sections[0]?.classes).toContain("present");
     expect(headlineOf(slideElements(document)[0] ?? null)).toBe(
-      "Technology Impact Assessment",
+      "The Lantern Papers",
     );
     // Nowhere to go back to from slide one, and somewhere to go forward.
     expect(seen.controls["navigate-left"]).toBe(true);
