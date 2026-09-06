@@ -1,8 +1,8 @@
 ---
 id: itd-2609061141039863
 slug: alice-cannot-change-the-editing-surface-s-text-size-from-the
-spec_id: null
-kind: null
+spec_id: spc-2609061145242761
+kind: standalone
 suggested_kind: null
 reclassification_history: []
 builds_on: []
@@ -94,35 +94,35 @@ in one chord.
 
 ## Scope Conditions
 
-- Platform: the desktop app in its web view. The surface scaled is the
+- Platform: the desktop app in its web view. The surface scaled is the <!-- cond: cond-2609061145247985 -->
   one continuous editing view the constraints describe, and the scale is
   a property of that view, not of the window or the document.
-- Population: Alice, the maintainer, one machine at a time. A second
+- Population: Alice, the maintainer, one machine at a time. A second <!-- cond: cond-2609061145241167 -->
   machine keeps its own scale, because the store is per machine and no
   scale travels with the folder.
-- Range: the scale is bounded at five steps in each direction — about
+- Range: the scale is bounded at five steps in each direction — about <!-- cond: cond-2609061145247418 -->
   0.40 of the default at the bottom and about 2.49 at the top. A chord
   pressed at a bound leaves the size where it is and says so; it does
   not wrap and it does not silently do nothing.
-- Boundary with intent 2 (itd-2609051335406422), which owns the binding
+- Boundary with intent 2 (itd-2609051335406422), which owns the binding <!-- cond: cond-2609061145244537 -->
   table's shape, the keys panel, and the cancel contract: this intent
   adds three rows to that table and owns what each does to the surface,
   and owns nothing of the table, the panel, or the contract.
-- Boundary with intent 32 (itd-2609051934109483), which owns the prose
+- Boundary with intent 32 (itd-2609051934109483), which owns the prose <!-- cond: cond-2609061145241018 -->
   commands and the `M-x` command palette: these three rows appear under
   `M-x` because every row does, and this intent owns only that they are
   there and run; 32 owns the palette itself, its filtering, and its
   prompts.
-- Boundary with intent 27 (itd-2609051402126424), which owns the
+- Boundary with intent 27 (itd-2609051402126424), which owns the <!-- cond: cond-2609061145240749 -->
   settings panel and the moment of setting a number and naming a place
   in it: the scale is written and read through the same per-machine
   settings store, gains no field in that panel, and is never set by
   typing into one.
-- Boundary with intent 5 (itd-2609051335447894), which owns the deck and
+- Boundary with intent 5 (itd-2609051335447894), which owns the deck and <!-- cond: cond-2609061145245151 -->
   its typography: the present window's type scale is untouched by these
   chords, and a deck shown after two enlargements is the deck the
   mapping produces at its own size.
-- Assumption: one editing surface is open at a time, so there is one
+- Assumption: one editing surface is open at a time, so there is one <!-- cond: cond-2609061145242133 -->
   scale and no per-buffer scale to reconcile. A second editing pane
   would reopen the question and is not in this intent.
 
@@ -188,3 +188,7 @@ in one chord.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: Emacs's own text-scale chords let Alice fit the surface to her eyes without leaving the keyboard; wrong if the web view's own zoom on the unprefixed chords fights them
