@@ -41,6 +41,10 @@ Task-oriented. Open one when you have something specific to do.
 - [Preview and read the article](how-to-preview-and-read-the-article.md) —
   open the article preview, the contents list, margin notes, and the video
   rule, at every width a reader might open the page.
+- [Cite from a bibliography file](how-to-cite-from-a-bibliography-file.md) —
+  name a `.bib` file, complete and hover a key as you type it, and see what
+  an unresolved key and a generated reference list look like in each
+  rendering.
 
 ## Reference
 

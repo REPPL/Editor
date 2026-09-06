@@ -12,6 +12,7 @@
  */
 
 import type { Resolver } from "../assets";
+import { citationPartsOf, type CitationResolution } from "../bibliography";
 import type { Block, Inline, ListItem, TableCell } from "../tree";
 
 /** What a renderer hands the shared shapes. */
@@ -22,6 +23,17 @@ export interface RenderContext {
   readonly rendering: "article" | "slides";
   /** The anchor a footnote reference points at, or null for no link. */
   readonly footnoteHref?: (label: string) => string | null;
+  /**
+   * The document's citations, resolved once by `bibliography.ts`.
+   *
+   * Present for the article, where a citation renders as a numbered marker;
+   * absent for the deck, whose speaker notes are not a surface a reader
+   * reaches (`04-surfaces.md` section 5) and which names a cited work through
+   * a credit line of its own (`deck.ts`), not through this inline marker.
+   * Absent is also the phase-1 fallback: the literal text the author wrote,
+   * which is what a plain tool shows too.
+   */
+  readonly citations?: CitationResolution | undefined;
   /**
    * What every id this rendering writes is prefixed with.
    *
@@ -140,6 +152,31 @@ function image(
   ])} />`;
 }
 
+/**
+ * A citation whose keys have been resolved: a numbered marker, its locator
+ * inside the brackets, and a resolved key that did not resolve marked as its
+ * own key rather than printed as the brackets the author wrote.
+ *
+ * `05-internals.md` section 3: "Citation … numbered reference in the list".
+ * A key that resolves to nothing is not silently dropped: itd-2609051335502171
+ * requires it "marked … rather than printed as literal bracketed text", so an
+ * unresolved key stands as a marked span carrying the key itself, inside the
+ * brackets beside any key that did resolve, or alone when none did.
+ */
+function renderResolvedCitation(node: Inline, citations: CitationResolution): string {
+  const { numbers, unresolvedKeys, locator } = citationPartsOf(node, citations);
+  const unresolvedSpans = unresolvedKeys
+    .map((key) => `<span class="citation-key unresolved">${escapeText(key)}</span>`)
+    .join(", ");
+  if (numbers.length === 0) {
+    // Nothing in this citation resolved: no brackets, just the key, marked.
+    return unresolvedSpans;
+  }
+  const marker = locator === "" ? numbers.join(", ") : `${numbers.join(", ")}, ${escapeText(locator)}`;
+  const mixed = unresolvedKeys.length === 0 ? "" : `; ${unresolvedSpans}`;
+  return `<span class="citation">[${marker}]${mixed}</span>`;
+}
+
 /** Render one inline node. */
 function inline(node: Inline, context: RenderContext): string {
   const children = (): string => renderInlines(node.children, context);
@@ -179,10 +216,16 @@ function inline(node: Inline, context: RenderContext): string {
       )}>${children()}</span>`;
     case "image":
       return image(node.src ?? "", node.text, { attributes: node.attributes }, context);
-    case "citation":
-      // Nothing resolves a key in this phase, so a citation renders as the
-      // literal text the author wrote — which is what a plain tool does too.
-      return `<span class="citation">${escapeText(node.text)}</span>`;
+    case "citation": {
+      const citations = context.citations;
+      if (citations === undefined) {
+        // No resolution was handed to this rendering — the deck's own notes,
+        // never a reader's surface — so the citation stays the literal text
+        // the author wrote, which is what a plain tool shows too.
+        return `<span class="citation">${escapeText(node.text)}</span>`;
+      }
+      return renderResolvedCitation(node, citations);
+    }
     case "footnote-reference":
     case "footnote-inline": {
       const label = node.label ?? "";

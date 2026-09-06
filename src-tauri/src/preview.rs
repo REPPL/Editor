@@ -31,6 +31,13 @@ pub struct PreviewSource {
     pub title: String,
     pub variant: String,
     pub chapters: Vec<PreviewChapter>,
+    /// The bibliography file's own text, when `document.yaml` names one. The
+    /// editing window reads it the same way it reads every chapter's text —
+    /// once, before Preview opens or focuses the window — so the preview
+    /// resolves citations the same way a publish does (itd-2609051335502171).
+    /// `#[serde(default)]` so an older payload with no field still parses.
+    #[serde(default)]
+    pub bibliography: Option<String>,
 }
 
 /// The one document waiting to be collected.
@@ -141,6 +148,7 @@ mod tests {
                 path: "01-beginnings/01-opening.md".to_string(),
                 text: "# The Lantern Papers\n".to_string(),
             }],
+            bibliography: None,
         };
         pending.set(source.clone()).expect("held");
         assert_eq!(pending.get().expect("read"), source);

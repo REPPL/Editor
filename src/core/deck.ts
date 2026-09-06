@@ -21,6 +21,7 @@
  * talk, which is why Present can throw the deck away and lose nothing.
  */
 
+import { shortReference, type CitationResolution } from "./bibliography";
 import { placementOf, type Placement } from "./canon";
 import { slugify } from "./outline";
 import { hasClass, walkInlines, type Block, type Chapter, type Inline } from "./tree";
@@ -40,15 +41,17 @@ export type SlideKind =
   /** What a horizontal rule opened: no headline of its own. */
   | "continuation";
 
-/** One line at the foot of a slide: a credit, or a footnote. */
+/** One line at the foot of a slide: a credit, a footnote, or a citation. */
 export interface FootLine {
-  readonly kind: "credit" | "footnote";
-  /** A footnote's label, or null for a credit. */
+  readonly kind: "credit" | "footnote" | "citation";
+  /** A footnote's label, or null for a credit or a citation. */
   readonly label: string | null;
   /** The line's content as blocks, for a credit div or a footnote definition. */
   readonly blocks: readonly Block[];
   /** The line's content as inline nodes, for an inline footnote. */
   readonly inlines: readonly Inline[];
+  /** `citation` only: the short label naming the cited work. */
+  readonly text?: string;
 }
 
 /** One slide. */
@@ -94,6 +97,17 @@ export interface DeckOptions {
    * if it were not written; null builds everything, which is phase 1.
    */
   readonly variant?: string | null;
+  /**
+   * The document's citations, resolved once by `bibliography.ts`.
+   *
+   * `04-surfaces.md` section 5: "a citation in the Section supplies [a credit
+   * line] the same way" a `.credit` div does. Absent, or a resolution with
+   * nothing cited, produces no citation lines — a document with no
+   * bibliography is ordinary, not an error. An unresolved key names no work,
+   * so it earns no credit line either; the sidebar is where an unresolved key
+   * is reported.
+   */
+  readonly citations?: CitationResolution | undefined;
 }
 
 /** A slide under construction. */
@@ -397,10 +411,61 @@ function footLinesFor(slide: Draft, chapter: Chapter): FootLine[] {
   return lines;
 }
 
+/**
+ * Every citation a slide's own content names, resolved, one credit line per
+ * key, in the order the slide first cites it.
+ *
+ * The headline, the face and the notes are all searched, exactly as
+ * [`footLinesFor`] searches them for a footnote: a citation is as much the
+ * Section's own words wherever it sits on the slide. A key that resolves to
+ * nothing names no work, so it earns no line here — the sidebar is where an
+ * author learns a key did not resolve, not the deck.
+ */
+function citationLinesFor(slide: Draft, resolution: CitationResolution | undefined): FootLine[] {
+  if (resolution === undefined) return [];
+  const cited: Inline[] = [];
+  for (const inline of walkInlines(slide.headlineInlines)) {
+    if (inline.kind === "citation") cited.push(inline);
+  }
+  const carried = [...slide.face, ...(slide.authored ?? slide.generated)];
+  for (const block of carried) {
+    for (const inline of walkInlines(block.inlines)) {
+      if (inline.kind === "citation") cited.push(inline);
+    }
+  }
+  const lines: FootLine[] = [];
+  const seen = new Set<string>();
+  for (const node of cited) {
+    for (const key of node.keys ?? []) {
+      if (seen.has(key)) continue;
+      const reference = resolution.byKey.get(key);
+      if (reference === undefined) continue;
+      seen.add(key);
+      lines.push({
+        kind: "citation",
+        label: null,
+        blocks: [],
+        inlines: [],
+        text: shortReference(reference.entry),
+      });
+    }
+  }
+  return lines;
+}
+
 /** Turn a finished draft into a slide, or nothing when it holds nothing. */
-function finish(slide: Draft, chapter: Chapter, taken: Set<string>): Slide | null {
+function finish(
+  slide: Draft,
+  chapter: Chapter,
+  taken: Set<string>,
+  citations: CitationResolution | undefined,
+): Slide | null {
   const notes = slide.authored ?? slide.generated;
-  const foot = [...slide.foot, ...footLinesFor(slide, chapter)];
+  const foot = [
+    ...slide.foot,
+    ...footLinesFor(slide, chapter),
+    ...citationLinesFor(slide, citations),
+  ];
   if (slide.headline === "" && slide.face.length === 0 && notes.length === 0 && foot.length === 0) {
     return null;
   }
@@ -471,7 +536,7 @@ function columnsOf(
   const columns: Column[] = [];
   for (const drafts of build.columns) {
     const slides = drafts
-      .map((slide) => finish(slide, chapter, taken))
+      .map((slide) => finish(slide, chapter, taken, options.citations))
       .filter((slide): slide is Slide => slide !== null);
     // A Section of one paragraph yields exactly one slide: nothing empty
     // beneath it, and no blank column after it.

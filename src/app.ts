@@ -14,8 +14,15 @@
 
 import type { EditorView } from "@codemirror/view";
 
+import {
+  EMPTY_BIBLIOGRAPHY,
+  parseBibliography,
+  unresolvedCitationKeysIn,
+  type Bibliography,
+} from "./core/bibliography";
 import { outlineOf, type Outline, type OutlineNode } from "./core/outline";
 import { parseChapter } from "./core/parse";
+import { setBibliography } from "./citations";
 import { createDropRouter, type DropRouter, type DropTargets } from "./drop";
 import { createEditor, documentText, revealLine, setDocument } from "./editor";
 import { createFocusModel, type FocusModel, type PanelFocus } from "./focus";
@@ -79,7 +86,7 @@ import {
   upHeading,
   widenSection,
 } from "./outline-commands";
-import { createSidebar, type Sidebar } from "./sidebar";
+import { createSidebar, type ChapterFacts, type Sidebar } from "./sidebar";
 import {
   setTextScale,
   textScaleMessage,
@@ -103,6 +110,14 @@ export interface AppServices {
   addChapter?(part: string, nonce: string): Promise<readonly Chapter[]>;
   /** Read the open document's `document.yaml`. */
   readDocumentMetadata?(): Promise<DocumentMetadata>;
+  /**
+   * The bibliography file the document names, or null where it names none.
+   *
+   * Read once per redraw, beside every chapter's own text, so the sidebar
+   * can list a chapter's unresolved citation keys (itd-2609051335502171).
+   * Absent outside the shell, where there is no bibliography to read.
+   */
+  readBibliography?(): Promise<string | null>;
   /** Ask whether unsaved edits may be thrown away; false keeps them. */
   confirmDiscard(question: string): Promise<boolean>;
   /**
@@ -441,13 +456,16 @@ export function createApp(root: HTMLElement, services: AppServices): App {
 
   // -------------------------------------------------------- document session
 
-  /** Read every chapter of a tree and derive its outline. */
-  async function readOutlines(
-    next: DocumentTree,
-  ): Promise<Map<string, Outline>> {
+  /** Every chapter's own outline, and the facts the sidebar reports beside it. */
+  async function readSidebarData(next: DocumentTree): Promise<{
+    outlines: Map<string, Outline>;
+    facts: Map<string, ChapterFacts>;
+    bibliography: Bibliography;
+  }> {
     const chapters = chaptersOf(next.root);
-    const built = new Map<string, Outline>();
-    if (chapters.length === 0) return built;
+    const outlines = new Map<string, Outline>();
+    const facts = new Map<string, ChapterFacts>();
+    if (chapters.length === 0) return { outlines, facts, bibliography: EMPTY_BIBLIOGRAPHY };
 
     const paths = chapters.map((chapter) => chapter.path);
     let batch: ChapterBatch;
@@ -467,20 +485,39 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       }
       batch = { reads, failures };
     }
+    // A document with no bibliography at all is ordinary: every citation key
+    // still resolves to nothing, which is exactly what an empty bibliography
+    // reads back as, so a chapter that cites one is reported the same way a
+    // chapter with a typo'd key against a real bibliography would be.
+    const bibliographyText = services.readBibliography
+      ? await services.readBibliography().catch((error: unknown) => {
+          console.warn(`bibliography: ${String(error)}`);
+          return null;
+        })
+      : null;
+    const bibliography = parseBibliography(bibliographyText ?? "");
     for (const read of batch.reads) {
-      built.set(read.path, outlineOf(parseChapter(read.text)));
+      const chapter = parseChapter(read.text);
+      outlines.set(read.path, outlineOf(chapter));
+      const unresolved = unresolvedCitationKeysIn(chapter, bibliography);
+      if (unresolved.length > 0) facts.set(read.path, { unresolvedCitations: unresolved });
     }
     for (const failure of batch.failures) {
       console.warn(`outline: ${failure}`);
     }
-    return built;
+    return { outlines, facts, bibliography };
   }
 
-  /** Draw a tree, with the outlines the sidebar needs for its lower levels. */
+  /** Draw a tree, with the outlines and the citation facts the sidebar needs. */
   async function showTree(next: DocumentTree): Promise<void> {
     tree = next;
-    outlines = await readOutlines(next);
-    sidebar.show(tree, outlines);
+    const data = await readSidebarData(next);
+    outlines = data.outlines;
+    // The same bibliography the sidebar's facts were read against, so the
+    // editor completes and hovers a citation against what the sidebar
+    // reports about it (itd-2609051335502171).
+    setBibliography(view, data.bibliography);
+    sidebar.show(tree, outlines, data.facts);
     sidebar.select(openChapterPath, openNodeId);
     // The tree is the second pane, and a tree with no rows is not a pane at
     // all. Redrawing it can empty it — a folder opened that holds no chapters

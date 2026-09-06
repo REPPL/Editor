@@ -20,9 +20,10 @@
  */
 
 import { pathResolver, type Resolver } from "../assets";
+import type { CitationResolution } from "../bibliography";
 import { placementOf } from "../canon";
 import { outlineOf, slugify, type OutlineNode } from "../outline";
-import { hasClass, type Block, type Chapter, type FootnoteDefinition, type Inline } from "../tree";
+import { hasClass, walkChapterBlocks, type Block, type Chapter, type FootnoteDefinition, type Inline } from "../tree";
 import { walkInlines } from "../tree";
 import {
   attributes,
@@ -63,6 +64,18 @@ export interface ArticleOptions {
    * to the first one. The build gives each chapter its own prefix.
    */
   readonly idPrefix?: string;
+  /**
+   * The document's citations, resolved once by `bibliography.ts`.
+   *
+   * Absent is the phase-1 fallback a caller testing this module in isolation
+   * may still choose: a citation renders the literal text the author wrote,
+   * exactly as `html.ts`'s own default does. Every production caller —
+   * `preview.ts`, `publish/build.ts` — resolves the whole document's chapters
+   * once and hands the same [`CitationResolution`] to every chapter it
+   * renders, which is what keeps one key's marker, its margin note, and the
+   * generated reference list in agreement.
+   */
+  readonly citations?: CitationResolution | undefined;
 }
 
 /** The anchor a footnote's marker points at. */
@@ -292,15 +305,45 @@ function strippedOfMarginSpans(block: Block): Block {
  *
  * Any inline node or any block can call it: `article.css` carries exactly one
  * selector, `.margin-note`, for the appearance every one of them shares, and
- * `kind` is the extra class — `footnote`, `margin`, `credit`, or `citation
- * unresolved` — a later rule or a later map tells them apart by. This is the
- * seam spc-2609061318090042 states for map #11: an unresolved citation's body
- * is the key exactly as the author wrote it, and the map that resolves a
- * citation against a bibliography replaces that body and touches neither this
- * function nor where its result sits on the page.
+ * `kind` is the extra class — `footnote`, `margin`, `credit`, `citation`, or
+ * `citation unresolved` — a stylesheet rule tells them apart by. A resolved
+ * citation's body is the same reference text the generated list carries; an
+ * unresolved one's is the key exactly as the author wrote it, which is also
+ * what the sidebar lists against the chapter (itd-2609051335502171, map #11).
  */
 export function renderMarginNote(kind: string, body: string, id: string | null = null): string {
   return `<aside${attributes([["id", id]])} class="margin-note ${escapeAttribute(kind)}">${body}</aside>`;
+}
+
+/**
+ * The margin notes one citation inline node produces, one per key.
+ *
+ * itd-2609051335502171 (map #11) resolves what spc-2609061318090042 left as a
+ * seam: a key that resolves gets the same reference text the generated
+ * reference list carries, so a reader beside the paragraph and a reader at
+ * the end of the page are told the same thing about the same work; a key that
+ * does not resolve keeps the placeholder [`renderMarginNote`] always offered
+ * — the key alone, marked unresolved — which is also what the sidebar lists
+ * against the chapter.
+ */
+function citationMarginNotes(node: Inline, article: Article): string[] {
+  const citations = article.context.citations;
+  if (citations === undefined) {
+    // No resolution was handed to this rendering: the phase-1 placeholder,
+    // the key exactly as written, kept for a caller testing this module
+    // without a bibliography.
+    return [renderMarginNote("citation unresolved", escapeText(node.text))];
+  }
+  const notes: string[] = [];
+  for (const key of node.keys ?? []) {
+    const reference = citations.byKey.get(key);
+    notes.push(
+      reference === undefined
+        ? renderMarginNote("citation unresolved", escapeText(key))
+        : renderMarginNote("citation", `<p>${escapeText(reference.text)}</p>`),
+    );
+  }
+  return notes;
 }
 
 /**
@@ -318,7 +361,7 @@ function inlineMarginNotes(block: Block, article: Article): string {
   for (const node of walkInlines(block.inlines)) {
     if (!inlineInVariant(node, article.variant)) continue;
     if (node.kind === "citation") {
-      notes.push(renderMarginNote("citation unresolved", escapeText(node.text)));
+      notes.push(...citationMarginNotes(node, article));
     } else if (node.kind === "footnote-inline") {
       const label = node.label ?? "";
       notes.push(
@@ -364,6 +407,12 @@ function renderOneBlock(block: Block, article: Article): string {
       // A `.credit` div is a margin note, beside the block it follows — the
       // same shape a footnote and a citation render through.
       return renderMarginNote("credit", renderBlocks(block.children, article));
+    case "appendix":
+      // A `.refs` heading is where Alice asked the generated reference list
+      // to sit; the heading itself renders as an ordinary heading and the
+      // list follows it, so a document that writes one gets its appendix
+      // there rather than appended a second time after the last chapter.
+      return renderHeading(clean, article) + renderReferenceList(article.context.citations);
     case "callout":
       return renderCallout(block, article);
     case "honoured":
@@ -399,6 +448,40 @@ function renderBlocks(blocks: readonly Block[], article: Article): string {
     .join("");
 }
 
+/**
+ * The generated reference list: one entry per cited key that resolved, in
+ * first-citation order, and no others.
+ *
+ * "Every reference list is generated; none is typed" (`04-surfaces.md`
+ * section 3). A resolution with nothing cited — no bibliography, or no
+ * citation in the chapters it was built from — writes nothing at all, which
+ * is what keeps a document with no bibliography ordinary rather than an empty
+ * heading with nothing beneath it.
+ */
+export function renderReferenceList(citations: CitationResolution | undefined): string {
+  const references = citations?.references ?? [];
+  if (references.length === 0) return "";
+  const items = references
+    .map((reference) => `<li id="ref-${String(reference.number)}">${escapeText(reference.text)}</li>`)
+    .join("");
+  return `<ol class="reference-list">${items}</ol>`;
+}
+
+/**
+ * Whether a chapter writes a `## Sources {.refs}` heading anywhere in it.
+ *
+ * The document-level composer (`preview.ts`, `publish/build.ts`) calls this
+ * across every chapter before appending a reference list of its own: a
+ * document that placed the heading itself gets the list there, through
+ * [`renderOneBlock`]'s `appendix` case, and nowhere a second time.
+ */
+export function chapterHasRefsHeading(chapter: Chapter): boolean {
+  for (const block of walkChapterBlocks(chapter)) {
+    if (block.kind === "heading" && hasClass(block, "refs")) return true;
+  }
+  return false;
+}
+
 /** A `.columns` div in the article: the fence is gone, the content is not. */
 function renderColumnsInFlow(block: Block, article: Article): string {
   const children = block.children.flatMap((child) =>
@@ -430,6 +513,7 @@ export function renderArticle(
       footnoteHref: footnoteHrefWith(idPrefix),
       variant,
       idPrefix,
+      citations: options.citations,
     },
     variant,
     anchors: anchorsByLine(chapter, idPrefix),

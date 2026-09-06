@@ -185,6 +185,21 @@ async fn read_document_metadata(
     .map_err(|error| format!("cannot read the document metadata: {error}"))?
 }
 
+/// Read the bibliography file `document.yaml` names, if it names one.
+///
+/// `None` for a document that names no bibliography — an ordinary document,
+/// not a failure (itd-2609051335502171). Reads the whole file: the resolver
+/// that reads BibTeX, resolves keys and generates reference lists is
+/// `src/core/bibliography.ts`, and this command's only job is handing it the
+/// bytes, from disk, with no network call.
+#[tauri::command]
+async fn read_bibliography(root: tauri::State<'_, DocumentRoot>) -> Result<Option<String>, String> {
+    let root = root.get()?;
+    tauri::async_runtime::spawn_blocking(move || metadata::read_bibliography(&root))
+        .await
+        .map_err(|error| format!("cannot read the bibliography: {error}"))?
+}
+
 /// Read one Chapter's Markdown.
 #[tauri::command]
 async fn read_chapter(
@@ -280,6 +295,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_folder,
             read_document_metadata,
+            read_bibliography,
             read_chapter,
             read_chapters,
             write_chapter,

@@ -23,6 +23,13 @@ export interface DocumentForPublish {
   readonly title: string;
   readonly variant: string;
   readonly tree: DocumentSource;
+  /**
+   * The bibliography file's own text, or `null` where the document names
+   * none. Read once, here, and resolved once against every chapter in
+   * `tree` by `renderVariant`, so the article, the deck and the export all
+   * agree on what a citation names (itd-2609051335502171).
+   */
+  readonly bibliography: string | null;
 }
 
 /** The application, as the publish load sees it. */
@@ -33,7 +40,7 @@ export interface PublishSource {
   readonly chapters: readonly { readonly path: string; readonly title: string }[];
 }
 
-/** The two reads a publish makes, as functions a test can stand in for. */
+/** The reads a publish makes, as functions a test can stand in for. */
 export interface PublishReaders {
   readChapters(paths: readonly string[]): Promise<{
     readonly reads: readonly { readonly path: string; readonly text: string }[];
@@ -44,6 +51,12 @@ export interface PublishReaders {
     readonly variants: readonly string[];
     readonly default_variant: string | null;
   }>;
+  /**
+   * The bibliography file's own text, or `null` where the document names
+   * none. Optional, so a test written before itd-2609051335502171 still
+   * satisfies this interface; its absence is read the same as `null`.
+   */
+  readBibliography?(): Promise<string | null>;
 }
 
 /**
@@ -79,6 +92,7 @@ export async function documentForPublish(
   const batch = await readers.readChapters(chapters.map((chapter) => chapter.path));
   const byPath = new Map(batch.reads.map((read) => [read.path, read.text]));
   const metadata = await readers.readDocumentMetadata();
+  const bibliography = (await readers.readBibliography?.()) ?? null;
   const prefix = documentRoot.endsWith("/") ? documentRoot : `${documentRoot}/`;
   const inputs = [];
   const missing: string[] = [];
@@ -111,6 +125,7 @@ export async function documentForPublish(
   return {
     title: metadata.title ?? chapters[0]?.title ?? "Untitled",
     variant,
+    bibliography,
     tree: { chapters: inputs },
   };
 }
@@ -140,6 +155,7 @@ export function createPublishServices(
           title: document.title,
           // The site build: its chrome is the one kept at the site root.
           host: "site",
+          bibliography: document.bibliography,
         }),
       });
       return {

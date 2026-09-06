@@ -12,13 +12,20 @@
 import { describe, expect, it } from "vitest";
 
 import { pathResolver } from "../assets";
+import { parseBibliography, resolveCitations } from "../bibliography";
 import { CANON_ROWS, placementOf } from "../canon";
 import { parseChapter } from "../parse";
-import { renderArticle, renderDocumentContents } from "./article";
+import {
+  chapterHasRefsHeading,
+  renderArticle,
+  renderDocumentContents,
+  renderReferenceList,
+  type ArticleOptions,
+} from "./article";
 
 /** The article for one chapter. */
-function article(source: string, resolve = pathResolver()): string {
-  return renderArticle(parseChapter(source), resolve);
+function article(source: string, resolve = pathResolver(), options: ArticleOptions = {}): string {
+  return renderArticle(parseChapter(source), resolve, options);
 }
 
 /** The article's visible text, tags gone. */
@@ -105,18 +112,39 @@ describe("what the article carries", () => {
     expect(html).not.toContain("<section class=\"footnotes\">");
   });
 
-  it("writes a citation as the unresolved key the author wrote, and as a margin note beside it", () => {
+  it("writes a citation as the literal text the author wrote when no bibliography is given", () => {
+    // A caller exercising this module in isolation, with no
+    // `CitationResolution` at all — `html.ts`'s own phase-1 fallback.
     const html = article("As shown [@smith2020, p. 4] and by @jones2019.\n");
     expect(html).toContain('<span class="citation">[@smith2020, p. 4]</span>');
     expect(html).toContain('<span class="citation">@jones2019</span>');
-    // The seam map #11 replaces: the body is the key exactly as written,
-    // marked unresolved, until a bibliography resolves it.
     expect(html).toContain(
       '<aside class="margin-note citation unresolved">[@smith2020, p. 4]</aside>',
     );
     expect(html).toContain('<aside class="margin-note citation unresolved">@jones2019</aside>');
-    // Nothing here resolves a key or generates a reference list.
-    expect(html).not.toContain("References");
+    expect(html).not.toContain("<ol class=\"reference-list\">");
+  });
+
+  it("writes a resolved citation as a numbered marker, with the full reference in the margin", () => {
+    const source = "As shown [@smith2020, p. 4].\n";
+    const citations = resolveCitations(
+      [parseChapter(source)],
+      parseBibliography(
+        "@article{smith2020, author = {Smith, Alice}, title = {The Lantern Papers}, year = {2020}}",
+      ),
+    );
+    const html = article(source, pathResolver(), { citations });
+    expect(html).toContain('<span class="citation">[1, p. 4]</span>');
+    expect(html).toContain('<aside class="margin-note citation"><p>Smith, Alice. 2020. The Lantern Papers.</p></aside>');
+  });
+
+  it("marks a key that resolves to nothing, never as the literal brackets the author wrote", () => {
+    const source = "As shown [@nosuchkey].\n";
+    const citations = resolveCitations([parseChapter(source)], parseBibliography(""));
+    const html = article(source, pathResolver(), { citations });
+    expect(html).not.toContain("[@nosuchkey]");
+    expect(html).toContain('<span class="citation-key unresolved">nosuchkey</span>');
+    expect(html).toContain('<aside class="margin-note citation unresolved">nosuchkey</aside>');
   });
 
   it("puts a citation and a footnote from the same paragraph in the margin, in source order, beside it rather than at the foot", () => {
@@ -370,5 +398,48 @@ describe("one source", () => {
     const absolute = article("![A lantern](/Users/someone/lantern.jpg)\n"); // abcd-lint:allow illustrative refusal path
     expect(absolute).not.toContain("/Users/someone"); // abcd-lint:allow illustrative refusal path
     expect(absolute).toContain('class="missing-image"');
+  });
+});
+
+describe("the generated reference list (itd-2609051335502171)", () => {
+  const BIB = [
+    "@article{smith2020,",
+    "  author = {Smith, Alice},",
+    "  title = {The Lantern Papers},",
+    "  year = {2020},",
+    "}",
+    "@book{carroll1999,",
+    "  author = {Carroll, Carol},",
+    "  title = {Reading by Lamplight},",
+    "  year = {1999},",
+    "}",
+  ].join("\n");
+
+  it("writes one entry per cited key, numbered in first-citation order, and no others", () => {
+    const source = "First [@carroll1999], then [@smith2020].\n";
+    const citations = resolveCitations([parseChapter(source)], parseBibliography(BIB));
+    expect(renderReferenceList(citations)).toBe(
+      '<ol class="reference-list">' +
+        '<li id="ref-1">Carroll, Carol. 1999. Reading by Lamplight.</li>' +
+        '<li id="ref-2">Smith, Alice. 2020. The Lantern Papers.</li>' +
+        "</ol>",
+    );
+  });
+
+  it("writes nothing when nothing was cited, and nothing for no resolution at all", () => {
+    expect(renderReferenceList(resolveCitations([], parseBibliography(BIB)))).toBe("");
+    expect(renderReferenceList(undefined)).toBe("");
+  });
+
+  it("renders the list beneath a `.refs` heading the document writes itself", () => {
+    const source = ["A claim [@smith2020].", "", "## Sources {.refs}", ""].join("\n");
+    const citations = resolveCitations([parseChapter(source)], parseBibliography(BIB));
+    const html = article(source, pathResolver(), { citations });
+    expect(html).toContain('<h2 id="sources" class="refs">Sources</h2><ol class="reference-list">');
+    expect(chapterHasRefsHeading(parseChapter(source))).toBe(true);
+  });
+
+  it("reports no `.refs` heading for a chapter that writes none", () => {
+    expect(chapterHasRefsHeading(parseChapter("A claim [@smith2020].\n"))).toBe(false);
   });
 });

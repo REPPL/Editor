@@ -181,6 +181,18 @@ export async function readDocumentMetadata(): Promise<DocumentMetadata> {
   return invoke<DocumentMetadata>("read_document_metadata");
 }
 
+/**
+ * Read the bibliography file the document names, or `null` when it names
+ * none — an ordinary document, not a failure (itd-2609051335502171).
+ *
+ * Read from disk, with no network call: the file is read once, here, and
+ * `src/core/bibliography.ts` is the one place that parses what comes back.
+ */
+export async function readBibliography(): Promise<string | null> {
+  requireShell("Reading the bibliography");
+  return invoke<string | null>("read_bibliography");
+}
+
 /** Read many Chapters' Markdown in one round trip. */
 export async function readChapters(
   paths: readonly string[],
@@ -331,6 +343,14 @@ export interface PreviewSource {
   readonly title: string;
   readonly variant: string;
   readonly chapters: readonly PreviewChapter[];
+  /**
+   * The bibliography file's own text, or `null` (or absent) where the
+   * document names none. Read once by the editing window, the same way it
+   * reads a chapter, so the preview resolves citations the same way a
+   * publish does (itd-2609051335502171). Optional so a caller that predates
+   * this field — a test's own fixture, say — still constructs one.
+   */
+  readonly bibliography?: string | null;
 }
 
 /** The event the shell emits when a new document is waiting to be previewed. */

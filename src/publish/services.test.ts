@@ -55,6 +55,17 @@ describe("the document a publish is given", () => {
     ]);
   });
 
+  it("carries the bibliography's own text through, or null where a reader gives none", async () => {
+    const withOne = await documentForPublish(
+      source(),
+      readers({ readBibliography: vi.fn(() => Promise.resolve("@misc{a, year = {2020}}")) }),
+    );
+    expect(withOne.bibliography).toBe("@misc{a, year = {2020}}");
+    // No `readBibliography` at all: a reader written before itd-2609051335502171.
+    const withNone = await documentForPublish(source(), readers());
+    expect(withNone.bibliography).toBeNull();
+  });
+
   it("refuses while the buffer differs from the file", async () => {
     // The publish reads the files; the buffer is what the author is looking at.
     // Publishing over an unsaved edit would put a version at a public link that

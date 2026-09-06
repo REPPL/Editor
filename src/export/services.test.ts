@@ -6,22 +6,13 @@
  * exactly the files its folder needs.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { invoke } from "@tauri-apps/api/core";
 
 import { parseChapter } from "../core/parse";
 import { DECK_ENGINE_FILES } from "../core/render/slides";
-import {
-  ARTICLE_PATH,
-  DECK_PATH,
-  buildVersion,
-  renderVariant,
-  type DocumentSource,
-} from "../publish/build";
+import { ARTICLE_PATH, DECK_PATH, buildVersion, renderVariant } from "../publish/build";
 import type { DocumentForPublish } from "../publish/services";
 import {
   FOLDER_CHROME_FILES,
@@ -48,22 +39,53 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 const invoked = vi.mocked(invoke);
 
-const EXAMPLES = join(__dirname, "..", "..", "examples");
 const ROOT = "/documents/presentation";
 
-function chapterOf(document: string, path: string): DocumentSource["chapters"][number] {
-  const text = readFileSync(join(EXAMPLES, document, path), "utf8");
-  return { path, chapter: parseChapter(text) };
-}
-
+/**
+ * A synthetic two-chapter talk, one Part, invented for this file alone.
+ *
+ * A real one used to live on disk until iss-2609061418065651 untracked that
+ * folder; this no longer reads it. Two chapters, each with one image, is
+ * everything the tests below ask of a document with more than one asset to
+ * copy.
+ */
 function document(): DocumentForPublish {
   return {
     title: "Macromarketing 2026",
     variant: "talk",
+    bibliography: null,
     tree: {
       chapters: [
-        chapterOf("presentation", "01-slides/01-technology-impact-assessment.md"),
-        chapterOf("presentation", "01-slides/02-where-im-coming-from.md"),
+        {
+          path: "01-slides/01-opening.md",
+          chapter: parseChapter(
+            [
+              "# Why Macromarketing Matters",
+              "",
+              "## The scale of the problem",
+              "",
+              "A claim the talk opens with.",
+              "",
+              "![A chart of the trend](assets/trend.svg)",
+              "",
+            ].join("\n"),
+          ),
+        },
+        {
+          path: "01-slides/02-closing.md",
+          chapter: parseChapter(
+            [
+              "# Where I'm Coming From",
+              "",
+              "## A closing argument",
+              "",
+              "A claim the talk closes with.",
+              "",
+              "![A photograph of the site](assets/site.svg)",
+              "",
+            ].join("\n"),
+          ),
+        },
       ],
     },
   };

@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { parseBibliography, resolveCitations, type CitationResolution } from "./bibliography";
 import { buildChapterDecks, buildDeck, buildDocumentDeck, walkSlides, type DeckPlan } from "./deck";
 import { parseChapter } from "./parse";
 
@@ -324,5 +325,71 @@ describe("variants", () => {
       ["Beginnings"],
       ["Findings"],
     ]);
+  });
+});
+
+describe("a citation's credit line (itd-2609051335502171)", () => {
+  // A synthetic bibliography, invented for this test alone — no fixture here
+  // is a real `.bib` file (iss-2609061418065651).
+  const BIB = [
+    "@article{carroll1999,",
+    "  author = {Carroll, Carol},",
+    "  title = {Reading by Lamplight},",
+    "  year = {1999},",
+    "}",
+  ].join("\n");
+
+  function citationsFor(...sources: string[]): CitationResolution {
+    return resolveCitations(sources.map((source) => parseChapter(source)), parseBibliography(BIB));
+  }
+
+  it("names the cited work at the foot of the Section's slide", () => {
+    const source = "## Beginnings\n\nAs shown [@carroll1999, p. 4].\n";
+    const plan = buildDeck(parseChapter(source), { citations: citationsFor(source) });
+    const slide = plan.columns[0]?.slides[0];
+    expect(slide?.foot).toEqual([
+      { kind: "citation", label: null, blocks: [], inlines: [], text: "Carroll, 1999" },
+    ]);
+  });
+
+  it("names nothing when the document carries no resolved citation", () => {
+    const source = "## Beginnings\n\nPlain prose, no citation at all.\n";
+    const plan = buildDeck(parseChapter(source), { citations: citationsFor(source) });
+    expect(plan.columns[0]?.slides[0]?.foot).toEqual([]);
+  });
+
+  it("names nothing for a key that resolves to nothing", () => {
+    const source = "## Beginnings\n\nAs shown [@nosuchkey].\n";
+    const plan = buildDeck(parseChapter(source), { citations: citationsFor(source) });
+    expect(plan.columns[0]?.slides[0]?.foot).toEqual([]);
+  });
+
+  it("names a key once even when the Section cites it twice", () => {
+    const source = "## Beginnings\n\nFirst [@carroll1999], then again [@carroll1999].\n";
+    const plan = buildDeck(parseChapter(source), { citations: citationsFor(source) });
+    expect(plan.columns[0]?.slides[0]?.foot).toHaveLength(1);
+  });
+
+  it("adds nothing when the deck is built with no citations option at all", () => {
+    const source = "## Beginnings\n\nAs shown [@carroll1999].\n";
+    // The same document with no bibliography configured: a citation supplies
+    // no credit line, exactly as a document with none at all is ordinary.
+    expect(buildDeck(parseChapter(source)).columns[0]?.slides[0]?.foot).toEqual([]);
+  });
+
+  it("puts a citation's credit line after an authored .credit line", () => {
+    const source = [
+      "## Beginnings",
+      "",
+      "::: {.credit}",
+      "Photograph by Carol, used with permission.",
+      ":::",
+      "",
+      "As shown [@carroll1999].",
+      "",
+    ].join("\n");
+    const plan = buildDeck(parseChapter(source), { citations: citationsFor(source) });
+    const foot = plan.columns[0]?.slides[0]?.foot ?? [];
+    expect(foot.map((line) => line.kind)).toEqual(["credit", "citation"]);
   });
 });

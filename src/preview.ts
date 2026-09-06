@@ -16,8 +16,14 @@
  */
 
 import { dataResolver, referencesOf } from "./core/assets";
+import { parseBibliography, resolveCitations, type CitationResolution } from "./core/bibliography";
 import { parseChapter } from "./core/parse";
-import { renderArticle, renderDocumentContents } from "./core/render/article";
+import {
+  chapterHasRefsHeading,
+  renderArticle,
+  renderDocumentContents,
+  renderReferenceList,
+} from "./core/render/article";
 import type { Chapter } from "./core/tree";
 import {
   inShell,
@@ -86,6 +92,7 @@ async function renderChapter(
   source: PreviewChapter,
   index: number,
   variant: string | null,
+  citations: CitationResolution | undefined,
 ): Promise<RenderedChapter> {
   const chapter = parseChapter(source.text);
   const assets = await readAssets(source.text, source.path);
@@ -94,18 +101,46 @@ async function renderChapter(
     chapter,
     idPrefix,
     part: partTitleOf(folderOf(source.path)),
-    html: renderArticle(chapter, dataResolver(assets), { variant, contents: false, idPrefix }),
+    html: renderArticle(chapter, dataResolver(assets), {
+      variant,
+      contents: false,
+      idPrefix,
+      citations,
+    }),
   };
+}
+
+/**
+ * The document's citations, resolved once against every chapter's own text.
+ *
+ * `undefined` for a document that names no bibliography at all — an ordinary
+ * document (itd-2609051335502171's own Assumption) — so a citation in it
+ * still renders, as the literal text `html.ts`'s own fallback shows.
+ */
+function citationsFor(source: PreviewSource): CitationResolution | undefined {
+  const bibliography = source.bibliography;
+  if (bibliography === null || bibliography === undefined) return undefined;
+  const chapters = source.chapters.map((chapter) => parseChapter(chapter.text));
+  return resolveCitations(chapters, parseBibliography(bibliography));
 }
 
 /** The whole document's article: one contents list, every chapter in order. */
 export async function articleOf(source: PreviewSource): Promise<string> {
   const variant = source.variant === "" ? null : source.variant;
+  const citations = citationsFor(source);
   const rendered = await Promise.all(
-    source.chapters.map((chapter, index) => renderChapter(chapter, index, variant)),
+    source.chapters.map((chapter, index) => renderChapter(chapter, index, variant, citations)),
   );
   const contents = renderDocumentContents(rendered);
-  return [contents, ...rendered.map((entry) => entry.html)].filter((part) => part !== "").join("\n");
+  // A `.refs` heading writes the reference list where the document asked for
+  // it, through `renderArticle`'s own "appendix" placement; a document that
+  // wrote none gets it once, after the last chapter, rather than not at all.
+  const appendix = rendered.some((entry) => chapterHasRefsHeading(entry.chapter))
+    ? ""
+    : renderReferenceList(citations);
+  return [contents, ...rendered.map((entry) => entry.html), appendix]
+    .filter((part) => part !== "")
+    .join("\n");
 }
 
 /** Say why there is nothing to show, on the page rather than in a console. */

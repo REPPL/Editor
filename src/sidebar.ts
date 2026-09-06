@@ -9,11 +9,27 @@
  * Rows wrap rather than scroll: a sixty-character title takes a second line
  * and the pane never scrolls sideways. Every row carries an empty badge slot,
  * so the variant, asset, and citation marks of later maps add data rather than
- * a redesign.
+ * a redesign. The citation mark is the first of the three, from
+ * itd-2609051335502171 (map #11): a chapter that cites a key its
+ * bibliography does not carry lists that key beside it, the same way an
+ * unresolved variant or an unresolved egg would.
  */
 
 import type { Outline, OutlineNode } from "./core/outline";
 import type { Chapter, DocumentTree, Part } from "./doctree";
+
+/**
+ * What a chapter carries, beyond its outline.
+ *
+ * One field so far — the citation keys it cites that resolve to nothing —
+ * because that is the one fact map #11 asks the sidebar to report; the
+ * variant and asset badges the header comment reserves room for are later
+ * maps' own facts, not this shape's to guess at.
+ */
+export interface ChapterFacts {
+  /** Every key this chapter cites that is in no entry of its bibliography, first-citation order. */
+  readonly unresolvedCitations: readonly string[];
+}
 
 /** What the sidebar asks the application to do. */
 export interface SidebarHooks {
@@ -47,10 +63,15 @@ export interface SidebarRow {
 /** The sidebar element and the calls that drive it. */
 export interface Sidebar {
   readonly element: HTMLElement;
-  /** Replace the tree. `outlines` is keyed by chapter path. */
+  /**
+   * Replace the tree. `outlines` and `facts` are both keyed by chapter path;
+   * a chapter absent from `facts` is drawn with no badge, exactly as one
+   * absent from `outlines` draws with no headings beneath it.
+   */
   show(
     tree: DocumentTree | null,
     outlines?: ReadonlyMap<string, Outline>,
+    facts?: ReadonlyMap<string, ChapterFacts>,
   ): void;
   /** Mark one chapter, and optionally one of its headings, as the open one. */
   select(path: string | null, nodeId?: string | null): void;
@@ -113,10 +134,23 @@ function nodeKey(chapter: Chapter, node: OutlineNode): string {
   return `node:${chapter.path}#${node.id}`;
 }
 
-/** An empty slot for the marks later maps compute. */
-function badgeSlot(): HTMLSpanElement {
+/**
+ * The badge slot beside a row, populated when `facts` carries something to
+ * report and left empty — `.tree-badges:empty` collapses to nothing — for
+ * every row `facts` says nothing about, which is every row but a chapter's
+ * until a later map's own fact joins the citation one here.
+ */
+function badgeSlot(facts?: ChapterFacts): HTMLSpanElement {
   const slot = document.createElement("span");
   slot.className = "tree-badges";
+  const unresolved = facts?.unresolvedCitations ?? [];
+  if (unresolved.length > 0) {
+    const badge = document.createElement("span");
+    badge.className = "tree-badge tree-badge-citation";
+    badge.textContent = unresolved.length === 1 ? "1 unresolved" : `${String(unresolved.length)} unresolved`;
+    badge.title = `Unresolved citation key${unresolved.length === 1 ? "" : "s"}: ${unresolved.join(", ")}`;
+    slot.append(badge);
+  }
   return slot;
 }
 
@@ -183,6 +217,7 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
   let openedForFocus = false;
   let tree: DocumentTree | null = null;
   let outlines: ReadonlyMap<string, Outline> = new Map();
+  let facts: ReadonlyMap<string, ChapterFacts> = new Map();
   let selectedPath: string | null = null;
   let selectedNode: string | null = null;
   let open = true;
@@ -291,7 +326,7 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
     button.addEventListener("click", () => {
       hooks.onOpenChapter(chapter);
     });
-    row.append(button, badgeSlot());
+    row.append(button, badgeSlot(facts.get(chapter.path)));
     item.append(row);
     rowList.push({
       key,
@@ -535,9 +570,10 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
   return {
     element,
 
-    show(next, nextOutlines) {
+    show(next, nextOutlines, nextFacts) {
       tree = next;
       outlines = nextOutlines ?? new Map();
+      facts = nextFacts ?? new Map();
       // A document just opened shows its Parts; nothing else is guessed at.
       if (tree) expandParts(tree.root);
       draw();

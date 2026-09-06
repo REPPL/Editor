@@ -25,6 +25,12 @@ import {
   rectangularSelection,
 } from "@codemirror/view";
 
+import {
+  bibliographyField,
+  citationCompletionField,
+  citationCompletionKeymap,
+  citationHoverTooltip,
+} from "./citations";
 import { emacsKeymap } from "./emacs";
 import {
   bindingById,
@@ -281,7 +287,19 @@ function editorExtensions(hooks: EditorHooks = {}, textScale = 0): Extension[] {
     // The suppressed chords are taken out of CodeMirror's own keymaps as well
     // as out of the Emacs one, so a chord Editor declines to answer falls
     // through to the browser wherever it was bound.
-    Prec.highest([...searchCancel, markdownReturn, emacsKeymap()]),
+    //
+    // The citation keymap sits ahead of the Emacs one for the same reason
+    // `markdownReturn` does: `Tab` is already the table's own chord for
+    // "fold or unfold this section" (`src/keys.ts`), claimed unconditionally
+    // by the Emacs plugin, so completing a citation on `Tab` has to be asked
+    // first and decline when no citation is being typed — which is exactly
+    // what `citationCompletionKeymap` does (`itd-2609051335502171`).
+    Prec.highest([
+      ...searchCancel,
+      markdownReturn,
+      keymap.of(citationCompletionKeymap),
+      emacsKeymap(),
+    ]),
     keymap.of([
       ...withoutSuppressed(defaultKeymap),
       ...withoutSuppressed(historyKeymap),
@@ -293,6 +311,11 @@ function editorExtensions(hooks: EditorHooks = {}, textScale = 0): Extension[] {
     // (`itd-2609061318091323`). Neither writes a document change; both are
     // views over the untouched text, so they carry no byte-fidelity risk.
     ...outlineExtensions(),
+    // The bibliography Alice completes and hovers citations against
+    // (`src/citations.ts`), and the tooltip machinery both read from it.
+    bibliographyField,
+    citationCompletionField,
+    citationHoverTooltip,
     theme,
     // After the base theme, and highest in precedence inside itself, so the
     // scale's own rule outranks the size the surface opens at.

@@ -9,7 +9,8 @@
 import { describe, expect, it } from "vitest";
 
 import { pathResolver } from "../assets";
-import { buildDeck } from "../deck";
+import { parseBibliography, resolveCitations } from "../bibliography";
+import { buildDeck, type DeckOptions } from "../deck";
 import { parseChapter } from "../parse";
 import { isLinkable } from "./html";
 import {
@@ -20,8 +21,8 @@ import {
 } from "./slides";
 
 /** The fragment for one chapter. */
-function markup(source: string, resolve = pathResolver()): string {
-  return renderSlides(buildDeck(parseChapter(source)), resolve);
+function markup(source: string, resolve = pathResolver(), options: DeckOptions = {}): string {
+  return renderSlides(buildDeck(parseChapter(source), options), resolve);
 }
 
 describe("the fragment", () => {
@@ -193,6 +194,19 @@ describe("the fragment", () => {
   it("keeps a citation as the literal text the author wrote", () => {
     const html = markup("## Beginnings\n\nAs shown [@smith2020, p. 4].\n");
     expect(html).toContain('<span class="citation">[@smith2020, p. 4]</span>');
+  });
+
+  it("names the cited work at the foot of the slide, with no reference list anywhere", () => {
+    const source = "## Beginnings\n\nAs shown [@carroll1999].\n";
+    const bibliography = parseBibliography(
+      "@book{carroll1999, author = {Carroll, Carol}, title = {Reading by Lamplight}, year = {1999}}",
+    );
+    const citations = resolveCitations([parseChapter(source)], bibliography);
+    const html = markup(source, undefined, { citations });
+    expect(html).toContain('<footer class="slide-foot"><p class="citation">Carroll, 1999</p></footer>');
+    // itd-2609051336019782's own row: "none; the deck carries credit lines
+    // only" — a numbered reference list is an article and PDF construct.
+    expect(html).not.toMatch(/reference-list|class="refs"/);
   });
 
   it("escapes the author's text rather than trusting it", () => {

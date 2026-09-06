@@ -132,6 +132,23 @@ body {
   display: none;
 }
 
+/* A chapter's unresolved citation keys (itd-2609051335502171, map #11), the
+   first of the marks the header comment above reserves this slot for. */
+.tree-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-inline-start: 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tree-badge-citation {
+  color: var(--warning-text, #7a4b00);
+  background: var(--warning-bg, #fff1d6);
+}
+
 .tree-part-label {
   flex: 1 1 auto;
   min-width: 0;

@@ -569,3 +569,69 @@ describe("the outline the sidebar draws", () => {
     expect(bob?.textContent).toBe("bob");
   });
 });
+
+describe("the sidebar's citation facts (itd-2609051335502171, map #11)", () => {
+  it("lists a chapter's unresolved citation keys, from the shell's own bibliography read", async () => {
+    const citingText = "# Citing\n\nAs shown [@nosuchkey].\n";
+    const citingTexts = new Map(texts);
+    citingTexts.set("book/01-first/01-alice.md", citingText);
+    const withBibliography: AppServices = {
+      ...services,
+      readChapter: (path) => {
+        const text = citingTexts.get(path);
+        return text === undefined
+          ? Promise.reject(new Error(`cannot read ${path}`))
+          : Promise.resolve(text);
+      },
+      readChapters: (paths) => {
+        const batch: ChapterBatch = {
+          reads: paths
+            .filter((path) => citingTexts.has(path))
+            .map((path) => ({ path, text: citingTexts.get(path)! })),
+          failures: [],
+        };
+        return Promise.resolve(batch);
+      },
+      readBibliography: () => Promise.resolve(""),
+    };
+    app.destroy();
+    app = createApp(host, withBibliography);
+    await app.openFolder("book");
+    expandAll();
+    const badge = host.querySelector(".tree-badge-citation");
+    expect(badge?.textContent).toBe("1 unresolved");
+    expect(badge?.getAttribute("title")).toContain("nosuchkey");
+  });
+
+  it("lists nothing when the shell offers no bibliography read at all", async () => {
+    const citingText = "# Citing\n\nAs shown [@nosuchkey].\n";
+    const citingTexts = new Map(texts);
+    citingTexts.set("book/01-first/01-alice.md", citingText);
+    const withoutBibliography: AppServices = {
+      ...services,
+      readChapter: (path) => {
+        const text = citingTexts.get(path);
+        return text === undefined
+          ? Promise.reject(new Error(`cannot read ${path}`))
+          : Promise.resolve(text);
+      },
+      readChapters: (paths) => {
+        const batch: ChapterBatch = {
+          reads: paths
+            .filter((path) => citingTexts.has(path))
+            .map((path) => ({ path, text: citingTexts.get(path)! })),
+          failures: [],
+        };
+        return Promise.resolve(batch);
+      },
+    };
+    app.destroy();
+    app = createApp(host, withoutBibliography);
+    await app.openFolder("book");
+    expandAll();
+    // No `readBibliography` service at all is the phase before this map: the
+    // citation still resolves to nothing, since there is nothing to resolve
+    // it against, but nothing here throws over its absence.
+    expect(host.querySelector(".tree-badge-citation")?.textContent).toBe("1 unresolved");
+  });
+});

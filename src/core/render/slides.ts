@@ -183,6 +183,9 @@ function renderFoot(lines: readonly FootLine[], context: RenderContext): string 
           line.blocks.length > 0 ? oneLine(line.blocks, context) : renderInlines(line.inlines, context);
         return `<p class="footnote">${label}${body}</p>`;
       }
+      if (line.kind === "citation") {
+        return `<p class="citation">${escapeText(line.text ?? "")}</p>`;
+      }
       return `<p class="credit">${oneLine(line.blocks, context)}</p>`;
     })
     .join("");

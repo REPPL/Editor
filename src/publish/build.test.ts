@@ -17,19 +17,48 @@ import {
 import { versionLinks } from "./links";
 import { DECK_CONFIG } from "../core/render/slides";
 
-const EXAMPLES = join(__dirname, "..", "..", "examples");
-
-/** One chapter of an example document, parsed, with its document-relative path. */
-function chapterOf(document: string, path: string): DocumentSource["chapters"][number] {
-  const text = readFileSync(join(EXAMPLES, document, path), "utf8");
-  return { path, chapter: parseChapter(text) };
-}
-
+/**
+ * A synthetic two-chapter talk, one Part, invented for this file alone.
+ *
+ * A real one used to live on disk until iss-2609061418065651 untracked that
+ * folder; this no longer reads it. Two chapters, each with its own title,
+ * one Section and one image, is everything the tests below ask of a talk of
+ * more than one chapter — a contents list spanning both, an asset copied
+ * from each, and slide ids that must not collide across them.
+ */
 function presentation(): DocumentSource {
   return {
     chapters: [
-      chapterOf("presentation", "01-slides/01-technology-impact-assessment.md"),
-      chapterOf("presentation", "01-slides/02-where-im-coming-from.md"),
+      {
+        path: "01-slides/01-opening.md",
+        chapter: parseChapter(
+          [
+            "# Why Macromarketing Matters",
+            "",
+            "## The scale of the problem",
+            "",
+            "A claim the talk opens with.",
+            "",
+            "![A chart of the trend](assets/trend.svg)",
+            "",
+          ].join("\n"),
+        ),
+      },
+      {
+        path: "01-slides/02-closing.md",
+        chapter: parseChapter(
+          [
+            "# Where I'm Coming From",
+            "",
+            "## A closing argument",
+            "",
+            "A claim the talk closes with.",
+            "",
+            "![A photograph of the site](assets/site.svg)",
+            "",
+          ].join("\n"),
+        ),
+      },
     ],
   };
 }
@@ -72,7 +101,6 @@ describe("buildVersion", () => {
       // An RFC 3339 stamp, in any year.
       expect(file.text).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
       // Nothing that names the machine the build ran on.
-      expect(file.text).not.toContain(EXAMPLES);
       expect(file.text).not.toContain("/Users/");
     }
   });
@@ -471,7 +499,140 @@ describe("the folder host", () => {
     for (const page of [folder.article, folder.deck]) {
       expect(page).not.toContain("file:");
       expect(page).not.toContain("/Users/");
-      expect(page).not.toContain(EXAMPLES);
     }
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * Citations (itd-2609051335502171, map #11): one resolver, every rendering.
+ *
+ * Every fixture below is synthetic — a `.bib` file and two chapters invented
+ * for this test alone, never a document from disk (iss-2609061418065651 is
+ * why: a test naming a document on a shared, untracked path would fail for
+ * everyone else).
+ * ------------------------------------------------------------------------- */
+
+describe("citations, resolved once and shared by the article and the deck", () => {
+  const BIB = [
+    "@book{carroll1999,",
+    "  author = {Carroll, Carol},",
+    "  title = {Reading by Lamplight},",
+    "  year = {1999},",
+    "}",
+    "@article{smith2020,",
+    "  author = {Smith, Alice},",
+    "  title = {The Lantern Papers},",
+    "  year = {2020},",
+    "}",
+  ].join("\n");
+
+  function twoChapters(): DocumentSource {
+    return {
+      chapters: [
+        {
+          path: "01-part/01-beginnings.md",
+          chapter: parseChapter("# A Paper\n\n## Beginnings\n\nAs shown [@carroll1999].\n"),
+        },
+        {
+          path: "01-part/02-findings.md",
+          chapter: parseChapter(
+            "## Findings\n\nAlso [@smith2020], and once more [@nosuchkey].\n",
+          ),
+        },
+      ],
+    };
+  }
+
+  it("numbers the article's reference list in first-citation order, one entry per cited key", () => {
+    const built = renderVariant(twoChapters(), "full", {
+      title: "A Paper",
+      host: "site",
+      bibliography: BIB,
+    });
+    expect(built.article).toContain('<span class="citation">[1]</span>');
+    expect(built.article).toContain('<span class="citation">[2]</span>');
+    expect(built.article).toContain(
+      '<li id="ref-1">Carroll, Carol. 1999. Reading by Lamplight.</li>',
+    );
+    expect(built.article).toContain(
+      '<li id="ref-2">Smith, Alice. 2020. The Lantern Papers.</li>',
+    );
+  });
+
+  it("marks the unresolved key rather than printing its brackets, anywhere in the article", () => {
+    const built = renderVariant(twoChapters(), "full", {
+      title: "A Paper",
+      host: "site",
+      bibliography: BIB,
+    });
+    expect(built.article).not.toContain("[@nosuchkey]");
+    expect(built.article).toContain('<span class="citation-key unresolved">nosuchkey</span>');
+  });
+
+  it("writes the resolved reference beside each citation and the same text at the end of the page", () => {
+    const built = renderVariant(twoChapters(), "full", {
+      title: "A Paper",
+      host: "site",
+      bibliography: BIB,
+    });
+    expect(built.article).toContain(
+      '<aside class="margin-note citation"><p>Carroll, Carol. 1999. Reading by Lamplight.</p></aside>',
+    );
+    expect(built.article).toContain('<ol class="reference-list">');
+  });
+
+  it("gives every deck slide whose Section cites a resolved key a credit line naming it, and no reference list", () => {
+    const built = renderVariant(twoChapters(), "full", {
+      title: "A Paper",
+      host: "site",
+      bibliography: BIB,
+    });
+    expect(built.deck).toContain('<footer class="slide-foot"><p class="citation">Carroll, 1999</p></footer>');
+    expect(built.deck).toContain('<footer class="slide-foot"><p class="citation">Smith, 2020</p></footer>');
+    expect(built.deck).not.toMatch(/reference-list|class="refs"/);
+  });
+
+  it("agrees: the article's reference list and the deck's credit lines name the same works, in the same order", () => {
+    const built = renderVariant(twoChapters(), "full", {
+      title: "A Paper",
+      host: "site",
+      bibliography: BIB,
+    });
+    const articleEntries = [...built.article.matchAll(/<li id="ref-\d+">([^<]*)<\/li>/g)].map(
+      (match) => match[1],
+    );
+    expect(articleEntries).toEqual([
+      "Carroll, Carol. 1999. Reading by Lamplight.",
+      "Smith, Alice. 2020. The Lantern Papers.",
+    ]);
+    const creditLines = [...built.deck.matchAll(/<p class="citation">([^<]*)<\/p>/g)].map(
+      (match) => match[1],
+    );
+    // The deck names each work by author and year, the article by its full
+    // reference — the two are the same works, first cited in the same order,
+    // never one the other omits.
+    expect(creditLines).toEqual(["Carroll, 1999", "Smith, 2020"]);
+    expect(creditLines).toHaveLength(articleEntries.length);
+  });
+
+  it("renders and generates nothing when the document names no bibliography", () => {
+    const built = renderVariant(
+      { chapters: [{ path: "01-part/01-a.md", chapter: parseChapter("As shown [@carroll1999].\n") }] },
+      "full",
+      { title: "A Paper", host: "site" },
+    );
+    expect(built.article).toContain('<span class="citation">[@carroll1999]</span>');
+    expect(built.article).not.toContain('class="reference-list"');
+    expect(built.deck).not.toContain('class="slide-foot"');
+  });
+
+  it("renders a chapter with neither a citation nor a bibliography as an ordinary chapter", () => {
+    const tree: DocumentSource = {
+      chapters: [{ path: "01-part/01-a.md", chapter: parseChapter("# A Paper\n\nPlain prose.\n") }],
+    };
+    const built = renderVariant(tree, "full", { title: "A Paper", host: "site" });
+    expect(built.article).toContain("Plain prose.");
+    expect(built.article).not.toContain("reference-list");
+    expect(built.deck).not.toContain("slide-foot");
   });
 });

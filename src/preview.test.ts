@@ -98,3 +98,50 @@ describe("articleOf", () => {
     expect(html).not.toContain("Only the readers see this.");
   });
 });
+
+describe("articleOf, with a bibliography (itd-2609051335502171)", () => {
+  const BIB = [
+    "@article{smith2020,",
+    "  author = {Smith, Alice},",
+    "  title = {The Lantern Papers},",
+    "  year = {2020},",
+    "}",
+  ].join("\n");
+
+  it("numbers a resolved citation and appends the generated reference list", async () => {
+    const source: PreviewSource = {
+      title: "A Paper",
+      variant: "full",
+      bibliography: BIB,
+      chapters: [
+        { path: "01-part/01-a.md", text: "# A Paper\n\nAs shown [@smith2020].\n" },
+      ],
+    };
+    const html = await articleOf(source);
+    expect(html).toContain('<span class="citation">[1]</span>');
+    expect(html).toContain('<li id="ref-1">Smith, Alice. 2020. The Lantern Papers.</li>');
+  });
+
+  it("marks an unresolved key rather than printing its brackets", async () => {
+    const source: PreviewSource = {
+      title: "A Paper",
+      variant: "full",
+      bibliography: BIB,
+      chapters: [{ path: "01-part/01-a.md", text: "As shown [@nosuchkey].\n" }],
+    };
+    const html = await articleOf(source);
+    expect(html).not.toContain("[@nosuchkey]");
+    expect(html).toContain('<span class="citation-key unresolved">nosuchkey</span>');
+  });
+
+  it("renders an ordinary document when it names no bibliography, even with a citation in it", async () => {
+    const source: PreviewSource = {
+      title: "A Paper",
+      variant: "full",
+      chapters: [{ path: "01-part/01-a.md", text: "As shown [@smith2020].\n" }],
+    };
+    const html = await articleOf(source);
+    expect(html).toContain('<span class="citation">[@smith2020]</span>');
+    expect(html).not.toContain("reference-list");
+  });
+});

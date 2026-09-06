@@ -197,3 +197,7 @@ proof-reading pass that goes with them.
 ## Audit Notes
 
 _Empty. Populated by intent-auditor when intent moves to shipped/._
+
+## Grounds
+
+- pursued: a citation resolves against a document's bibliography the same way in the article's numbered marker and margin note, the article's generated reference list, and the deck's per-slide credit line, all read from one resolveCitations call per document; an unresolved key never prints as literal brackets anywhere and is listed against its chapter in the sidebar; the editor completes and hovers a citation key from the same bibliography with no new dependency. This would be shown wrong by: the deck's credit line naming a work the article's reference list omits or numbers differently, an unresolved key appearing as [@key] text in the article, or the editor's completion list missing a key the bibliography carries.

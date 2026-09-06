@@ -74,6 +74,24 @@ pub fn read_metadata(path: &Path) -> Result<DocumentMetadata, String> {
     parse_metadata(&text)
 }
 
+/// Read the bibliography file `document.yaml` names, if it names one.
+///
+/// `Ok(None)` for a document that names no bibliography at all — an ordinary
+/// document, not a failure (itd-2609051335502171's own Assumption). A file
+/// the document *does* name but that cannot be read is a failure, named,
+/// because a typo in that one line of metadata is a fact the author needs to
+/// see rather than a silently empty reference list.
+pub fn read_bibliography(root: &Path) -> Result<Option<String>, String> {
+    let metadata = read_metadata(&root.join(METADATA_FILE))?;
+    let Some(name) = metadata.bibliography else {
+        return Ok(None);
+    };
+    let path = crate::document::confine_path(root, &name)?;
+    fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|error| format!("cannot read {name}: {error}"))
+}
+
 /// Parse the text of a `document.yaml`.
 ///
 /// An empty file parses to empty metadata: YAML reads it as null, which serde
@@ -96,26 +114,45 @@ pub fn parse_metadata(text: &str) -> Result<DocumentMetadata, String> {
 mod tests {
     use super::*;
 
-    /// The three documents under `examples/`, which are the fixtures the specs
-    /// name and the only real `document.yaml` files in the repository.
-    fn example(document: &str) -> DocumentMetadata {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("examples")
-            .join(document)
-            .join(METADATA_FILE);
-        read_metadata(&path).expect("the example parses")
-    }
+    /// A synthetic `document.yaml`, close in shape to a talk deck: a title,
+    /// an affiliation, a theme, and a single variant. Invented content, not a
+    /// copy of any real document — see iss-2609061418065651.
+    const TALK_METADATA: &str = "title: The Lantern Papers
+subtitle: A Talk in One Sitting
+author: Alice
+affiliation: Royal Holloway Business School
+theme: plenary
+variants: [talk]
+default_variant: talk
+asset_threshold_bytes: 8388608
+";
+
+    /// A synthetic `document.yaml` for a paper, with a folded block-scalar
+    /// abstract, a bibliography and a numeric citation style.
+    ///
+    /// Written with real embedded newlines rather than `\n\` continuations:
+    /// a backslash-newline in a Rust string literal strips the following
+    /// line's leading whitespace along with the newline, which would have
+    /// flattened the block scalar's indentation and broken the YAML.
+    const PAPER_METADATA: &str = "title: Notes from the Lantern
+subtitle: On Reading Slowly
+author: Alice
+abstract: |
+  Bob and Carol read the same chapter on different evenings and compare
+  what they underlined. This paper asks what the difference says about
+  attention, and it reports nothing in particular.
+variants: [full]
+default_variant: full
+bibliography: references.bib
+citation_style: numeric
+";
 
     #[test]
-    fn reads_the_macro_talk_metadata() {
-        let metadata = example("presentation");
+    fn reads_talk_metadata() {
+        let metadata = parse_metadata(TALK_METADATA).expect("parses");
         assert!(metadata.present);
-        assert_eq!(metadata.title.as_deref(), Some("Macromarketing 2026"));
-        assert_eq!(
-            metadata.subtitle.as_deref(),
-            Some("Technology Impact Assessment")
-        );
+        assert_eq!(metadata.title.as_deref(), Some("The Lantern Papers"));
+        assert_eq!(metadata.subtitle.as_deref(), Some("A Talk in One Sitting"));
         assert_eq!(metadata.author.as_deref(), Some("Alice"));
         assert_eq!(
             metadata.affiliation.as_deref(),
@@ -133,13 +170,13 @@ mod tests {
 
     #[test]
     fn reads_a_block_scalar_abstract() {
-        let metadata = example("manuscript");
+        let metadata = parse_metadata(PAPER_METADATA).expect("parses");
         let abstract_text = metadata.abstract_text.expect("the paper carries one");
         assert!(
-            abstract_text.starts_with("Vibe coding lets people without programming"),
+            abstract_text.starts_with("Bob and Carol read the same chapter"),
             "the block scalar is folded into one string: {abstract_text}"
         );
-        assert!(abstract_text.ends_with("professional developers.\n"));
+        assert!(abstract_text.ends_with("nothing in particular.\n"));
         assert!(
             !abstract_text.contains('|'),
             "the block scalar marker is not part of the value"
@@ -151,13 +188,13 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_vibe_coding_talk_metadata() {
-        let metadata = example("talk");
-        assert_eq!(metadata.title.as_deref(), Some("Example Document"));
-        assert_eq!(
-            metadata.subtitle.as_deref(),
-            Some("An A Worked Example")
-        );
+    fn reads_a_second_documents_metadata() {
+        let metadata = parse_metadata(
+            "title: Reading Aloud\nsubtitle: A Shorter Sitting\ncitation_style: author-date\n",
+        )
+        .expect("parses");
+        assert_eq!(metadata.title.as_deref(), Some("Reading Aloud"));
+        assert_eq!(metadata.subtitle.as_deref(), Some("A Shorter Sitting"));
         assert_eq!(metadata.citation_style.as_deref(), Some("author-date"));
         assert_eq!(metadata.theme, None);
         assert_eq!(metadata.abstract_text, None);
@@ -188,7 +225,7 @@ mod tests {
         // Absent, not zero: the default belongs to the command that fills, so
         // a document that states nothing must be distinguishable from one that
         // states a column.
-        let metadata = example("manuscript");
+        let metadata = parse_metadata(PAPER_METADATA).expect("parses");
         assert_eq!(metadata.fill_column, None);
         assert_eq!(DocumentMetadata::default().fill_column, None);
     }
@@ -220,5 +257,51 @@ mod tests {
     fn refuses_a_file_that_is_not_yaml() {
         let message = parse_metadata("title: [unclosed\n").expect_err("a broken file is named");
         assert!(message.contains(METADATA_FILE), "{message}");
+    }
+
+    /// A synthetic `.bib` file, invented for this test alone.
+    const BIB: &str = "@article{carroll1999, author = {Carroll, Carol}, year = {1999}}";
+
+    /// A minimal `document.yaml` naming a bibliography, on one line so a test
+    /// of [`read_bibliography`] does not also depend on the block-scalar
+    /// abstract `PAPER_METADATA` carries (iss-2609061437127301).
+    const NAMES_A_BIBLIOGRAPHY: &str = "title: A Paper\nbibliography: references.bib\n";
+
+    #[test]
+    fn reads_the_bibliography_a_document_names() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = crate::document::canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join(METADATA_FILE), NAMES_A_BIBLIOGRAPHY).expect("wrote document.yaml");
+        fs::write(base.join("references.bib"), BIB).expect("wrote the bibliography");
+        let text = read_bibliography(&base)
+            .expect("reads")
+            .expect("the document names one");
+        assert_eq!(text, BIB);
+    }
+
+    #[test]
+    fn reports_no_bibliography_for_a_document_that_names_none() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = crate::document::canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join(METADATA_FILE), TALK_METADATA).expect("wrote document.yaml");
+        assert_eq!(read_bibliography(&base).expect("reads"), None);
+    }
+
+    #[test]
+    fn reports_no_bibliography_for_a_folder_with_no_document_yaml_at_all() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = crate::document::canonical_root(&root.path().to_string_lossy()).expect("root");
+        assert_eq!(read_bibliography(&base).expect("reads"), None);
+    }
+
+    #[test]
+    fn refuses_a_bibliography_the_document_names_but_does_not_carry() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = crate::document::canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join(METADATA_FILE), NAMES_A_BIBLIOGRAPHY).expect("wrote document.yaml");
+        // No `references.bib` written: the metadata names a file that is not
+        // there, which is a fact the author needs to see, not a silent gap.
+        let message = read_bibliography(&base).expect_err("the file is missing");
+        assert!(message.contains("references.bib"), "{message}");
     }
 }

@@ -24,6 +24,7 @@ import {
   pasteReference,
   presentChapter,
   previewDocument,
+  readBibliography,
   readChapter,
   readChapters,
   readDocumentMetadata,
@@ -79,6 +80,7 @@ const services: AppServices = {
   writeChapter,
   addChapter,
   readDocumentMetadata,
+  readBibliography,
   confirmDiscard(question) {
     return confirm(question, { title: "Editor", kind: "warning" });
   },
@@ -141,17 +143,20 @@ function loadForPreview(): Promise<PreviewSource> {
   return (others.length === 0 ? Promise.resolve({ reads: [], failures: [] }) : readChapters(others))
     .then((batch) => {
       const byPath = new Map(batch.reads.map((read) => [read.path, read.text]));
-      return readDocumentMetadata().then((metadata) => ({
-        title: metadata.title ?? chapters[0]?.title ?? "Untitled",
-        variant: metadata.default_variant ?? metadata.variants[0] ?? "",
-        chapters: chapters.map((chapter) => ({
-          path: relative(chapter.path),
-          text:
-            chapter.path === activePath
-              ? documentText(app.view)
-              : (byPath.get(chapter.path) ?? ""),
-        })),
-      }));
+      return Promise.all([readDocumentMetadata(), readBibliography()]).then(
+        ([metadata, bibliography]) => ({
+          title: metadata.title ?? chapters[0]?.title ?? "Untitled",
+          variant: metadata.default_variant ?? metadata.variants[0] ?? "",
+          bibliography,
+          chapters: chapters.map((chapter) => ({
+            path: relative(chapter.path),
+            text:
+              chapter.path === activePath
+                ? documentText(app.view)
+                : (byPath.get(chapter.path) ?? ""),
+          })),
+        }),
+      );
     });
 }
 
@@ -194,7 +199,7 @@ function loadForPublish(): Promise<DocumentForPublish> {
       dirty: app.dirty,
       chapters: app.chapters,
     },
-    { readChapters, readDocumentMetadata },
+    { readChapters, readDocumentMetadata, readBibliography },
   );
 }
 
