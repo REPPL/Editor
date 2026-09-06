@@ -49,6 +49,7 @@ Three kinds:
 | 30 | Move between the editor and the sidebar without the mouse | standalone | — | 1 |
 | 31 | Export what I have made to a folder I choose | standalone | — | 1 |
 | 32 | Edit prose with the Emacs commands my hands already know | standalone | — | 1 |
+| 33 | Make the text bigger or smaller from the keyboard | standalone | — | 1 |
 
 ## The intents
 
@@ -175,6 +176,27 @@ sentence, transposing two words, completing a word from the text. It is
 tier one of `../research/notes/2026-09-05-emacs-vocabulary-gap.md`; that
 note's outline vocabulary is a later intent, decided with the chord
 conflicts it lists.
+
+**33. Make the text bigger or smaller from the keyboard** — standalone.
+Surfaces: the editor (the editing surface's type size, the modeline's
+report of it).
+Overlaps: intent 2, which owns the binding table's shape, the keys panel,
+and the cancel contract — the boundary is that 2 owns the table and 33
+owns three rows in it and what each does to the surface; intent 32, which
+owns the prose commands and the `M-x` command palette — these three rows
+are listed and run there as every row is, and 32 owns the palette itself;
+intent 27, which owns the settings panel — the boundary is the moment: 27
+owns setting a number and naming a place in the panel, and 33 writes the
+scale through the same per-machine settings store with no field in that
+panel; and intent 5, which owns the deck's typography — the present
+window's type scale is untouched.
+Plumbing excluded: the settings file and its commands, the key table's
+data shape, and the shell's claim on `C-x` as a prefix.
+Order: phase 1, with 2 and 32. Amended into the map after the maintainer
+used the app and found no way to match the text to their eyes and screen
+short of the operating system's own zoom, which scales the sidebar and
+the panels with it. The chords are Emacs's own text-scale commands, taken
+behind the `C-x` prefix so that `C--` keeps redo and `C-=` stays free.
 
 ### Bundle: The deck (phase 1)
 
