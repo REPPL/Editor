@@ -9,6 +9,10 @@ found_during: "maintainer-review"
 origin: researcher-authored
 production_mode: dictated-and-formatted
 found_at: "src/present.ts"
+resolution: "Engine imported as a module; bundle guard covers the present chunk; proven on the built binary"
+impact: fix
+resolved_by:
+  commit: "8ffb370"
 ---
 
 In the 0.2.0 release app C-c C-p shows a single page with no navigation: no arrow moves to another slide (maintainer's report on a real window)
@@ -24,3 +28,7 @@ exports it as a module instead of assigning the global, so the page's
 The dev server serves the raw file, where the global branch runs, which is
 why the window worked there and the jsdom test (which evaluates the file
 into the global itself) passed.
+
+## Grounds
+
+- pursued: one module import means the same thing to the dev server, the bundler, and the test runner; wrong if a future engine version ships no module build
