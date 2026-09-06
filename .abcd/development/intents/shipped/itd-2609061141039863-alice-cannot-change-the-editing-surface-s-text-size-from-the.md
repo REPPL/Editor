@@ -187,9 +187,141 @@ in one chord.
 
 ## Audit Notes
 
-<!-- abcd-review: OWED receipt=rcp-3bbfe1df5bc4 -->
-Fidelity review OWED (receipt rcp-3bbfe1df5bc4).
+<!-- abcd-review: INGESTED receipt=rcp-3bbfe1df5bc4 -->
+Fidelity review — receipt rcp-3bbfe1df5bc4 (verifier abcd:intent-auditor claude-fable-5-1).
 
+Provenance: abcd:intent-auditor@claude-fable-5-1 · rubric_hash sha256:542ed2cd51ff938717a3f47b2b332e8d47910beec0ca7ecdfd238ae7edf5ced5 · prompt_hash sha256:b40b127d7fd99c5184c860f6de24eec0783ddf0ac1387b6c01dbb091aed30242
+Input attestations: diff:6c7062a^..HEAD (2a88a9e..1dae945)@sha256:a4943ed7b3c7373d43871c9634042865a069e5e01d1ce92120eed9544018aae0; intent:.abcd/development/intents/shipped/itd-2609061141039863-alice-cannot-change-the-editing-surface-s-text-size-from-the.md@-; spec:.abcd/development/specs/closed/spc-2609061145242761-alice-cannot-change-the-editing-surface-s-text-size-from-the.md@-; manual-checklist:.abcd/.work.local/logs/acceptance/spc-2609061145242761.md@-; test-run:npx vitest run src/text-scale.test.ts (24 passed); cargo test --manifest-path src-tauri/Cargo.toml settings (10 passed)@-;
+
+Acceptance rollup: MET 6 · MET_WITH_CONCERNS 2 · NOT_MET 0 · INCONCLUSIVE 1
+
+Per-criterion verdicts:
+- ac-1 — MET: Three editor rows with labels and chords sit in the binding table; the test opens the keys panel and reads commandEntries, finding each row by id with its label in both, and runEntry on each M-x entry moves the step exactly as the chord does (2 up, 1 down, reset to 14px).
+  evidence: src/keys.ts:426-442 — "id: "text-scale-increase", label: "Bigger text", chords: ["C-x C-="] ... "Smaller text" ["C-x C--"] ... "Default text size" ["C-x C-0"]"
+  evidence: src/emacs.ts:78-80 — ""text-scale-increase", "text-scale-decrease", "text-scale-reset","
+  evidence: src/text-scale.test.ts:501-511 — "const row = panel.element.querySelector(`[data-binding="${id}"]`); expect(row?.textContent, id).toBe(bindingById(id)?.label); ... expect(entry?.label, id).toBe(bindingById(id)?.label);"
+  evidence: src/text-scale.test.ts:513-532 — "runEntry(app.view, entryFor("text-scale-increase")); ... expect(textScaleStep(app.view)).toBe(2); ... runEntry(app.view, entryFor("text-scale-reset")); expect(sizeOf(app.view.dom)).toBe("14px");"
+- ac-2 — MET: The scale is a Prec.highest theme on the `&` (.cm-editor) selector held in a compartment; the test records the computed font size of every element outside the surface, presses C-x C-=, sees the surface go 14px to 16.8px (ratio 1.2 to 10 places) and every recorded element unchanged, and checks that every stylesheet rule setting 16.8px matches the editor element and not the sidebar or modeline.
+  evidence: src/text-scale.ts:89-93 — "return Prec.highest(EditorView.theme({ "&": { fontSize: fontSizeFor(step) } }));"
+  evidence: src/text-scale.test.ts:259-283 — "const beside = Array.from(document.querySelectorAll("*")).filter((element) => element !== surface && !surface.contains(element)); ... expect(sizeOf(surface)).toBe("16.8px"); ... for (const [element, size] of before) { expect(sizeOf(element), ...).toBe(size); }"
+  evidence: src/text-scale.test.ts:288-294 — "const rules = rulesSetting("16.8px"); ... expect(app.view.dom.matches(rule.selectorText)).toBe(true); expect(app.sidebar.element.matches(rule.selectorText)).toBe(false);"
+- ac-3 — MET: After two enlargements and one shrink, C-x C-0 is answered by the swallowed-chord guard (the package otherwise reads C-0 as a numeric argument) and the surface returns to exactly 14px == fontSizeFor(0); announceBriefly puts 'Text scale 120%' in the message cell and clears it after 1500 ms under fake timers while the position cell reads L1:C1 throughout.
+  evidence: src/text-scale.test.ts:303-315 — "expect(pressSequence(app.view, "C-x C-0")).toBe(true); expect(textScaleStep(app.view)).toBe(0); expect(sizeOf(app.view.dom)).toBe("14px");"
+  evidence: src/emacs.ts:136-152 — "const swallowed = swallowedChord(this, event); if (swallowed !== null) { ... data.keyChain = ""; data.count = 0; EmacsHandler.execCommand("
+  evidence: src/app.ts:333-340 — "function announceBriefly(text: string): void { announce(text); ... transient = setTimeout(() => { transient = null; if (message === text) announce(""); }, TRANSIENT_MESSAGE_MS);"
+  evidence: src/text-scale.test.ts:388-397 — "expect(saying(app)).toBe("Text scale 120%"); expect(position(app)).toBe("L1:C1"); vi.advanceTimersByTime(1500); expect(saying(app)).toBe(""); expect(position(app)).toBe("L1:C1");"
+- ac-4 — MET_WITH_CONCERNS: Both halves are tested and wired: the page reads the stored step on mount and applies it silently (test mounts with readTextScale=2 and sees fontSizeFor(2) and an empty modeline); the Rust Settings struct carries text_scale so get_settings returns it, set_text_scale resolves through path_for -> app_config_dir, and the Rust test asserts the file lands at < config_dir>/settings.json with "text_scale": 2. Concern: no test spans the Tauri invoke seam between createTextScaleServices and the Rust command, and the actual quit-and-relaunch is only manual row M33-3, which is unticked.
+  evidence: src/app.ts:924-935 — "if (services.readTextScale) { void services.readTextScale().then((step) => { ... setTextScale(view, step); })"
+  evidence: src/text-scale.test.ts:563-571 — "app = mount(2); ... expect(textScaleStep(app.view)).toBe(2); expect(sizeOf(app.view.dom)).toBe(fontSizeFor(2)); expect(saying(app)).toBe("");"
+  evidence: src/settings.ts:39-47 — "async readTextScale() { const settings = await invoke< Settings>("get_settings"); return settings.text_scale; }, async writeTextScale(steps) { await invoke< Settings>("set_text_scale", { steps }); }"
+  evidence: src/main.ts:84 — "...(inShell() ? { quit: quitWindow, ...createTextScaleServices() } : {}),"
+  evidence: src-tauri/src/settings.rs:64 — "pub text_scale: i32,"
+  evidence: src-tauri/src/settings.rs:274-281 — "let config = app.path().app_config_dir() ...; Ok(settings_path(&config))"
+  evidence: src-tauri/src/settings.rs:407-422 — "assert_eq!(path, dir.path().join(SETTINGS_FILE)); ... assert!(text.contains("\"text_scale\": 2"), "{text}");"
+  evidence: src-tauri/src/lib.rs:292 — "settings::set_text_scale,"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061145242761.md:36-41 — "- [ ] Enlarge the surface two steps. Quit the app and start it again. - [ ] The surface opens at that size"
+- ac-5 — MET: Over the hazardous fixture (544-char line, tab, trailing space, no final newline) the test presses all three chords, then sees documentText identical to the fixture, app.dirty false, writeChapter never called, and the scale routed only to writeTextScale; the only Rust file that writes text_scale is settings.rs, and none of the document.yaml writers (metadata.rs, document.rs) reference a scale.
+  evidence: src/text-scale.test.ts:446-465 — "expect(documentText(app.view)).toBe(HAZARDOUS); expect(app.dirty).toBe(false); expect(written).toBeNull(); expect(scaleWrites).toEqual([1, 0]);"
+  evidence: src/app.ts:368-393 — "function rememberScale(step: number): void { const write = services.writeTextScale; if (!write) return;"
+  evidence: src-tauri/src/settings.rs:223-228 — "pub fn set_text_scale_at(path: &Path, steps: i32) -> Result< Settings, String> { ... settings.text_scale = clamp_text_scale(steps); write_settings(path, &settings)?;"
+- ac-6 — MET: The table keeps C-- on redo and binds no row to C-= or C-0; the test edits, undoes with C-/, presses bare C-- and sees the edit redone with the surface at its previous size and step 0, then presses bare C-= and sees size and step unchanged. Whether the web view zooms its own window on a bare C-= is outside this criterion's wording and is unticked manual row M33-2.
+  evidence: src/text-scale.test.ts:181-188 — "expect(bindingById("redo")?.chords).toContain("C--"); ... expect(claimed).not.toContain("C-="); expect(claimed).not.toContain("C-0");"
+  evidence: src/text-scale.test.ts:428-444 — "press(app.view, "C--"); expect(documentText(app.view)).toContain("Bob "); expect(sizeOf(app.view.dom)).toBe(size); ... press(app.view, "C-="); expect(sizeOf(app.view.dom)).toBe(size); expect(textScaleStep(app.view)).toBe(0);"
+  evidence: src/emacs.ts:178-195 — "const chain = handler.$data.keyChain; if (!chain) return null; ... const name = ownChords.get(`${chain} C-Digit${digit[1] ?? ""}`);"
+- ac-7 — MET: setTextScale clamps to +-5 and returns false when the step did not move; textScaleMessage then names the bound. The tests drive five steps each way, press once more, and see the step, the computed size and the write count unchanged with the modeline reading 'Text scale 249%, the largest step' and 'Text scale 40%, the smallest step'.
+  evidence: src/text-scale.ts:117-124 — "const wanted = clampStep(step); if (wanted === textScaleStep(view)) return false;"
+  evidence: src/text-scale.ts:127-133 — "if (step >= TEXT_SCALE_LIMIT) return `${scale}, the largest step`; if (step <= -TEXT_SCALE_LIMIT) return `${scale}, the smallest step`;"
+  evidence: src/text-scale.test.ts:399-413 — "expect(sizeOf(app.view.dom)).toBe(size); expect(saying(app)).toBe("Text scale 249%, the largest step"); expect(scaleWrites.length).toBe(writes);"
+  evidence: src/text-scale.test.ts:415-426 — "expect(saying(app)).toBe("Text scale 40%, the smallest step");"
+- ac-8 — INCONCLUSIVE: The only automated evidence is that the cm-lineWrapping class stays on the content element after each of two enlargements over a 544-character line; jsdom has no layout engine, so whether anything scrolls sideways or needs pinching at 390 CSS px is assigned to manual row M33-1, and every M33-1 row is unticked. The criterion is unverified, not failed.
+  evidence: src/text-scale.test.ts:484-499 — "expect(longest).toBe(544); ... expect(app.view.contentDOM.classList.contains("cm-lineWrapping")).toBe(true);"
+  evidence: src/text-scale.test.ts:494-496 — "jsdom has no layout engine, so the manual check at 390 CSS pixels is what proves the rest."
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061145242761.md:12-18 — "- [ ] At 390: the same, and no text needs a pinch to read."
+- ac-9 — MET_WITH_CONCERNS: Three of the four inherited disciplines have automated proof: no machine in the document (scale goes only to the config-directory settings file, never to a chapter), round-trip byte-fidelity (hazardous fixture unchanged across three chords), and network only on publish (fetch/XHR stubbed, zero attempts across nine chords). Concern: legibility on three device classes rests solely on manual row M33-1, which is unticked, so that discipline is unverified for this delivery.
+  evidence: src-tauri/src/settings.rs:417-422 — "In the application's own configuration directory, never in a document folder ... assert_eq!(path, dir.path().join(SETTINGS_FILE));"
+  evidence: src/text-scale.test.ts:446-465 — "expect(documentText(app.view)).toBe(HAZARDOUS); ... expect(written).toBeNull();"
+  evidence: src/text-scale.test.ts:600-638 — "globalThis.fetch = ((input: unknown) => { attempts.push(...) ... expect(attempts).toEqual([]);"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061145242761.md:9-18 — "## M33-1 — legible at 390, 820, and 1280 CSS pixels ... - [ ] At 1280 ... - [ ] At 820 ... - [ ] At 390"
+
+Gap audit:
+- honoured:
+  - Three rows behind the C-x prefix, so C-- stays redo and C-= stays free
+    evidence: src/keys.ts:426-442 — "chords: ["C-x C-="] ... ["C-x C--"] ... ["C-x C-0"]"
+    evidence: src/text-scale.test.ts:181-188 — "expect(bindingById("redo")?.chords).toContain("C--");"
+  - Only the editing surface scales; the sidebar, modeline and panels keep their size
+    evidence: src/text-scale.ts:89-93 — "EditorView.theme({ "&": { fontSize: fontSizeFor(step) } })"
+    evidence: src/text-scale.test.ts:281-283 — "for (const [element, size] of before) { expect(sizeOf(element), ...).toBe(size); }"
+  - Steps of 1.2, five either way, and a bound that says so instead of doing nothing
+    evidence: src/text-scale.ts:27-33 — "BASE_FONT_SIZE_PX = 14; TEXT_SCALE_STEP = 1.2; TEXT_SCALE_LIMIT = 5;"
+    evidence: src/text-scale.test.ts:199-203 — "expect(percentOf(TEXT_SCALE_LIMIT)).toBe(249); expect(percentOf(-TEXT_SCALE_LIMIT)).toBe(40);"
+  - Restore lands on the default to the pixel, including C-x C-0 which the package's key reader swallowed
+    evidence: src/text-scale.test.ts:311-313 — "expect(pressSequence(app.view, "C-x C-0")).toBe(true); ... expect(sizeOf(app.view.dom)).toBe("14px");"
+    evidence: src/text-scale.test.ts:317-345 — "spends the numeric argument the chord's own reader took"
+  - The modeline reads the scale as a percentage for a moment and then returns to the position
+    evidence: src/app.ts:333-340 — "function announceBriefly(text: string): void"
+    evidence: src/text-scale.test.ts:388-397 — "vi.advanceTimersByTime(1500); expect(saying(app)).toBe("");"
+  - Nothing is written to the chapter or document.yaml; the scale goes only to the per-machine settings store, clamped on the way in and out
+    evidence: src/text-scale.test.ts:457-464 — "expect(written).toBeNull(); expect(scaleWrites).toEqual([1, 0]);"
+    evidence: src-tauri/src/settings.rs:426-437 — "fs::write(&path, "{\"text_scale\": 40}"); assert_eq!(read_settings(&path).expect("read back").text_scale, 5);"
+  - The scale survives opening another chapter and is applied on mount without a modeline message
+    evidence: src/editor.ts:371-374 — "stateFor(doc, hooksByView.get(view) ?? {}, textScaleStep(view))"
+    evidence: src/text-scale.test.ts:476-482 — "carries the scale across a chapter change"
+    evidence: src/text-scale.test.ts:563-571 — "expect(saying(app)).toBe("");"
+  - Nothing about the scale appears in the settings panel
+    evidence: src/settings-panel.ts:36-43 — "The panel shows no field for it ... readonly text_scale: number;"
+  - The how-to documents the three chords, the step, the range and the per-machine store
+    evidence: docs/how-to-find-and-change-the-keys.md:99-114 — "## Make the text bigger or smaller"
+- diverged:
+  - The intent owns nothing of the table, the panel, or the prefix/cancel contract (intent 2's territory); the delivery had to add a guard inside the Emacs handler wrapper that resolves C-x C-digit chords and spends the numeric argument, a piece of prefix machinery now owned here for Editor's own chords
+    evidence: src/emacs.ts:136-152 — "const swallowed = swallowedChord(this, event); if (swallowed !== null) { ... data.keyChain = ""; data.count = 0;"
+    evidence: src/emacs.ts:164-195 — "const ownChords = new Map< string, string>(); ... function swallowedChord("
+  - The spec's module table scoped settings.rs to text_scale, clamp_text_scale, set_text_scale_at and the command; the fix commit also added a process-wide write lock over every setter (set_publish_target_at, set_asset_root_at) and a page-side write queue, widening the change into the shared store
+    evidence: src-tauri/src/settings.rs:106-114 — "static WRITING: Mutex<()> = Mutex::new(()); ... fn writing() -> MutexGuard<'static, ()>"
+    evidence: src-tauri/src/settings.rs:181 — "let _writing = writing();"
+    evidence: src/app.ts:368-393 — "one write is in flight at a time and the steps that arrive while it is are collapsed to the last of them"
+  - The delivered range also carries unrelated present-window work (81caa12, 7689c2a, three captures) that belongs to no criterion of this intent
+    evidence: src/present.ts:1 — "30 lines changed in 6c7062a^..HEAD by 'fix: place every slide over the stage and hide by visibility, not display'"
+    evidence: src/core/render/slides.css:1 — "100 lines changed in the same range, not by the text-scale commits"
+- missing:
+  - Real-window proof that enlarged lines wrap at 390 CSS px with nothing scrolling sideways or needing a pinch
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061145242761.md:12-18 — "- [ ] At 390: the same, and no text needs a pinch to read."
+  - Real-window proof that the web view does not take C-x C-= / C-x C-- before the page, and does not zoom its own chrome on bare C-=
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061145242761.md:20-33 — "## M33-2 — the chords reach the page ... This is the one the web view can refuse"
+  - An actual quit-and-relaunch showing the surface reopen at the stored scale with settings.json carrying "text_scale": 2
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061145242761.md:36-44 — "- [ ] `settings.json` in the application's configuration directory carries `"text_scale": 2`."
+  - Proof that the deck presented after two enlargements is at its own type size
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061145242761.md:53-56 — "## M33-5 — the deck is untouched - [ ] Enlarge the surface two steps, then present with `C-c C-p`."
+
+Scope-condition dispositions:
+- cond-2609061145247985 — survived: The scale is a compartment-held theme on the CodeMirror view's own element and a StateField in its EditorState, not a property of the window or the document; the delivered test proves the rule reaches .cm-editor and nothing beside it.
+  evidence: src/text-scale.ts:64-78 — "const setStep = StateEffect.define< number>(); const textScaleField = StateField.define< number>({ ... const scaleCompartment = new Compartment();"
+  evidence: src/text-scale.test.ts:288-294 — "expect(app.view.dom.matches(rule.selectorText)).toBe(true); expect(app.sidebar.element.matches(rule.selectorText)).toBe(false);"
+- cond-2609061145241167 — survived: The step is stored only in the settings file resolved from the application's config directory on the machine running it, and no chapter or folder write carries it, so a second machine reads its own file and nothing travels with the folder, as assumed.
+  evidence: src-tauri/src/settings.rs:274-281 — "app.path().app_config_dir()"
+  evidence: src-tauri/src/settings.rs:417-422 — "In the application's own configuration directory, never in a document folder"
+  evidence: src/text-scale.test.ts:467-474 — "expect(scaleWrites).toEqual([1, 2]); expect(written).toBeNull();"
+- cond-2609061145247418 — survived: TEXT_SCALE_LIMIT is 5 in both the page and the shell, percentOf(+-5) is 249 and 40, and a chord at either bound leaves the size unchanged and says which limit was reached rather than wrapping or staying silent.
+  evidence: src/text-scale.test.ts:199-203 — "expect(percentOf(TEXT_SCALE_LIMIT)).toBe(249); expect(percentOf(-TEXT_SCALE_LIMIT)).toBe(40);"
+  evidence: src/text-scale.test.ts:407-410 — "expect(sizeOf(app.view.dom)).toBe(size); expect(saying(app)).toBe("Text scale 249%, the largest step");"
+  evidence: src-tauri/src/settings.rs:79-86 — "pub const TEXT_SCALE_LIMIT: i32 = 5; ... steps.clamp(-TEXT_SCALE_LIMIT, TEXT_SCALE_LIMIT)"
+- cond-2609061145244537 — narrowed: The table's shape, the keys panel and the cancel contract were left alone (keyspanel.ts and the table's structure are untouched; only three rows were appended), but the delivery could not stay out of the prefix machinery: C-x C-0 is unreachable through the package's chain, so the handler wrapper in src/emacs.ts gained a guard that resolves Control-digit chords when the chain is open and spends the numeric argument, which the spec itself flags as a second mechanism beside the prefix machinery.
+  narrowing: Holds for the binding table's shape, the keys panel and the cancel contract; it does not hold for the prefix key reader, where this intent now owns the swallowed-chord guard (src/emacs.ts:136-152, 164-195) for the chords Editor registers itself.
+  evidence: src/keys.ts:422-442 — "The editing surface's type size. Emacs's own chords, each behind the `C-x` prefix"
+  evidence: src/emacs.ts:136-152 — "const swallowed = swallowedChord(this, event); if (swallowed !== null) { // Resolved the way `findCommand` resolves a chord of its own"
+  evidence: src/emacs.ts:166-177 — "`findCommand` reads Control-and-a-digit as the start of a numeric argument *before* it consults its own key chain"
+- cond-2609061145241018 — survived: The three rows reach M-x solely by being editor rows in APP_COMMAND_IDS; the palette module was not changed in the range and the test reaches the rows through the palette's own commandEntries and runEntry.
+  evidence: src/emacs.ts:76-80 — "// The type scale. `C-x C-0` needs the guard below to reach its command ... "text-scale-increase", "text-scale-decrease", "text-scale-reset","
+  evidence: src/text-scale.test.ts:15 — "import { commandEntries, runEntry } from "./command-palette";"
+  evidence: src/text-scale.test.ts:513-532 — "runs each row from M-x with the effect of its chord"
+- cond-2609061145240749 — survived: The scale is read through get_settings and written through a new set_text_scale command on the same store; the settings panel gained only the text_scale field on the Settings interface, no form control, and the text-scale services are kept apart from SettingsServices.
+  evidence: src/settings-panel.ts:36-43 — "The panel shows no field for it: it is set by pressing a key ... readonly text_scale: number;"
+  evidence: src/settings.ts:32-38 — "The panel shows no field for it, so these are separate from `SettingsServices`"
+  evidence: src/settings.ts:41-46 — "invoke< Settings>("get_settings") ... invoke< Settings>("set_text_scale", { steps })"
+- cond-2609061145245151 — untested: No test presents a deck after an enlargement and the only proof named is manual row M33-5, which is unticked; the present.ts and slides.css changes in the range come from a separate present-window fix, not from the scale, so nothing exercised or contradicted the assumption.
+- cond-2609061145242133 — survived: The application drives one view, the settings store holds one integer, and every delivered test scales that single surface; the step is carried across setDocument on the same view rather than reconciled between views.
+  evidence: src/app.ts:348-356 — "const step = to(textScaleStep(view)); const moved = setTextScale(view, step);"
+  evidence: src-tauri/src/settings.rs:64 — "pub text_scale: i32,"
+  evidence: src/editor.ts:371-374 — "stateFor(doc, hooksByView.get(view) ?? {}, textScaleStep(view))"
 ## Grounds
 
 - pursued: Emacs's own text-scale chords let Alice fit the surface to her eyes without leaving the keyboard; wrong if the web view's own zoom on the unprefixed chords fights them
