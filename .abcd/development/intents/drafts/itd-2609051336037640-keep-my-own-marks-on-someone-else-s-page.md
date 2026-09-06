@@ -43,6 +43,16 @@ her chapters, and sends them to her however he likes. That is where his
 part ends: the files are his, and what Alice does with them is her
 business.
 
+Later, when Alice has reviewed a reading someone sent her and published it
+as a layer, Carol finds a control on the page for it: off until she
+chooses it, on once she does, and gone again when she turns it off.
+Turning it on shows that person's highlights and notes against her own
+reading of the text; turning it off leaves the page exactly as it was.
+Nothing about her choice travels anywhere — the same browser-only rule
+that keeps Carol's own marks private keeps which layers she has open
+private too, and a reload of the page restores her choice from her own
+browser rather than from the site.
+
 ## Why This Matters
 
 A reader who cannot mark a page reads it once and loses everything they
@@ -103,9 +113,12 @@ file the reader chooses to hand over.
   format into his own storage. One file format, two writers: neither
   member is worth building alone.
 - Boundary with map #24 | itd-2609051336040242 (Publish someone else's
-  annotations as a layer): 23 ends when Bob has a file. Alice loading it,
-  reading it beside her own, and publishing it as a layer readers can show
-  or hide belongs to 24 — including the toggle on the page.
+  annotations as a layer): 23 ends when Bob has a file, and resumes at the
+  reader-facing side of a layer Alice publishes — the control on the page
+  that shows or hides it, on or off in the reader's own browser. Alice
+  loading Bob's file, reviewing it beside her own, the layer itself and
+  the name it carries, and the guarantee that her own private marks never
+  reach the site unless she publishes them the same way, all belong to 24.
 - Boundary with map #10 | itd-2609051335492327 (Read it the way I like
   it): both keep state in the reader's browser, and the boundary is what
   is kept. 10 owns display preferences — theme, text size, measure. 23
@@ -152,6 +165,22 @@ file the reader chooses to hand over.
   note read in the flow of the text with no horizontal scrolling and no
   pinch zoom, and the same holds at iPad width (820 CSS px) and desktop
   width (1280 CSS px).
+- Given a published version carrying a layer Alice has published (map
+  #24), when Carol opens the stable link, then the article offers a
+  control to show and hide that layer, off until she chooses it, and
+  turning it on shows the layer's highlights and notes against the
+  passages they resolve to; turning it off returns the page to how it was
+  before she chose it.
+- Given Carol has turned a layer on and reloads the page, when it loads
+  again, then her choice is restored from her own browser, and the files
+  served for that version are unchanged — the site has recorded nothing
+  about her.
+- Given Carol reading at iPhone width (390 CSS px) turns a layer on, when
+  its highlights and notes render, then they are legible with no
+  horizontal scrolling and no pinch zoom, the notes folding into the flow
+  the way margin content does at that width; and at iPad width (820 CSS
+  px) and desktop width (1280 CSS px) they sit in the margin beside the
+  passages they belong to.
 - Inherits: nothing is stored about a reader (`itd-2609051336145770`);
   legible on three device classes (`itd-2609051336128348`), at 390, 820,
   and 1280 CSS px; no machine in the document (`itd-2609051336080960`);

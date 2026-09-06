@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildDeck, buildDocumentDeck, walkSlides, type DeckPlan } from "./deck";
+import { buildChapterDecks, buildDeck, buildDocumentDeck, walkSlides, type DeckPlan } from "./deck";
 import { parseChapter } from "./parse";
 
 /** Build a deck from chapter text. */
@@ -233,13 +233,57 @@ describe("the default mapping", () => {
 });
 
 describe("a whole document", () => {
-  it("concatenates each chapter's columns in order, ids still unique", () => {
-    const one = parseChapter("# One\n\n## Beginnings\n\nA.\n");
-    const two = parseChapter("# Two\n\n## Beginnings\n\nB.\n");
+  // The maintainer's question (iss-2609061210010975): the level that runs
+  // horizontally is the top level present in what is being presented. One
+  // chapter alone runs its Sections horizontally (below); a document of more
+  // than one chapter runs its chapters horizontally instead, so the mapping
+  // shifts down one level for every chapter in it.
+  const ONE = [
+    "# One",
+    "",
+    "## Beginnings",
+    "",
+    "A.",
+    "",
+    "### Detail",
+    "",
+    "Detail text.",
+    "",
+  ].join("\n");
+  const TWO = "# Two\n\n## Beginnings\n\nB.\n";
+
+  it("runs chapters horizontally, their Sections vertically, and folds a Sub-section into notes", () => {
+    const one = parseChapter(ONE);
+    const two = parseChapter(TWO);
     const plan = buildDocumentDeck([one, two]);
-    expect(shape(plan)).toEqual([["One"], ["Beginnings"], ["Two"], ["Beginnings"]]);
+    expect(shape(plan)).toEqual([
+      ["One", "Beginnings"],
+      ["Two", "Beginnings"],
+    ]);
+    const beginnings = plan.columns[0]?.slides[1];
+    expect(beginnings?.kind).toBe("subsection");
+    expect(textOf(beginnings?.notes ?? [])).toEqual(["A.", "Detail", "Detail text."]);
     const ids = [...walkSlides(plan)].map((slide) => slide.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("presents a document of one chapter exactly as buildDeck presents it alone", () => {
+    const one = parseChapter(ONE);
+    expect(buildDocumentDeck([one])).toEqual(buildDeck(one));
+  });
+
+  it("shifts buildChapterDecks the same way, one column per chapter", () => {
+    const one = parseChapter(ONE);
+    const two = parseChapter(TWO);
+    const plans = buildChapterDecks([one, two]);
+    expect(plans.map((plan) => shape(plan))).toEqual([[["One", "Beginnings"]], [["Two", "Beginnings"]]]);
+    const ids = plans.flatMap((plan) => [...walkSlides(plan)].map((slide) => slide.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("presents buildChapterDecks of one chapter exactly as buildDeck presents it alone", () => {
+    const one = parseChapter(ONE);
+    expect(buildChapterDecks([one])).toEqual([buildDeck(one)]);
   });
 });
 

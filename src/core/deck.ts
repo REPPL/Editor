@@ -1,5 +1,5 @@
 /**
- * The slide plan: one chapter's tree read as a talk.
+ * The slide plan: one chapter's tree read as a talk, or a whole document's.
  *
  * The default mapping is `04-surfaces.md` section 5 — the chapter's title is
  * the opening slide, a Section is a horizontal slide, a Sub-section hangs
@@ -7,6 +7,14 @@
  * slide of its own — and everything that overrides it is a row in `canon.ts`
  * rather than a branch this module invented. Nothing here renders: a plan is
  * blocks in places, and `render/slides.ts` turns places into markup.
+ *
+ * A whole document of more than one chapter shifts that mapping down one
+ * level, because the chapter is now the unit that runs horizontally: a
+ * chapter's title is a horizontal slide, its Sections hang vertically beneath
+ * it, and its Sub-sections fold into notes the way a Sub-sub-section does for
+ * one chapter alone (`iss-2609061210010975`). A document of exactly one
+ * chapter is not shifted, so it presents exactly as that chapter would on its
+ * own — see `buildDocumentDeck` and `buildChapterDecks`.
  *
  * The plan is a value with no identity of its own. Building it twice from the
  * same text gives the same plan, and building it from new text gives the new
@@ -191,24 +199,32 @@ function toFace(build: Build, block: Block): void {
   currentSlide(build, block.line).face.push(block);
 }
 
-/** The heading kind for a level, once the divider class has been read. */
-function headingKind(level: number, divider: boolean): SlideKind {
+/**
+ * The heading kind for a level, once the divider class has been read.
+ *
+ * `verticalFrom` is the level at which a heading hangs vertically rather than
+ * running horizontally: 3 for one chapter (a Sub-section beneath its
+ * Section), 2 for a whole document of more than one chapter (a Section
+ * beneath its chapter). Nothing else about the mapping changes shape; only
+ * where the horizontal line ends moves.
+ */
+function headingKind(level: number, divider: boolean, verticalFrom: number): SlideKind {
   if (divider) return "divider";
   if (level <= 1) return "title";
-  return level === 2 ? "section" : "subsection";
+  return level < verticalFrom ? "section" : "subsection";
 }
 
 /** Open the slide a heading opens, and set the axis it puts in force. */
-function openHeading(build: Build, block: Block): void {
+function openHeading(build: Build, block: Block, verticalFrom: number): void {
   const level = block.level ?? 1;
   const divider = hasClass(block, "divider");
-  const slide = draft(headingKind(level, divider), block.line, "notes");
+  const slide = draft(headingKind(level, divider, verticalFrom), block.line, "notes");
   slide.headline = block.text;
   slide.headlineInlines = block.inlines;
   slide.level = level;
   slide.classes = block.attributes.classes;
   build.folding = false;
-  if (level >= 3) {
+  if (level >= verticalFrom) {
     build.axis = "vertical";
     hangBeneath(build, slide);
   } else {
@@ -265,7 +281,12 @@ function inVariant(block: Block, variant: string | null): boolean {
 }
 
 /** Put one block where the canon says it goes. */
-function placeBlock(build: Build, block: Block, variant: string | null): void {
+function placeBlock(
+  build: Build,
+  block: Block,
+  variant: string | null,
+  verticalFrom: number,
+): void {
   if (!inVariant(block, variant)) return;
   const placement: Placement | undefined = placementOf(block, "slides");
 
@@ -274,7 +295,7 @@ function placeBlock(build: Build, block: Block, variant: string | null): void {
       // A variant block that survived the filter is transparent: what it holds
       // is placed as if the fence were not there, which is what lets a Section
       // belong to one variant alone.
-      for (const child of block.children) placeBlock(build, child, variant);
+      for (const child of block.children) placeBlock(build, child, variant, verticalFrom);
       return;
 
     case "split":
@@ -286,7 +307,7 @@ function placeBlock(build: Build, block: Block, variant: string | null): void {
     // `.refs` is not seeded in phase 1, so its heading is an ordinary heading
     // and carries its class through to the slide.
     case "slide-of-sources":
-      openHeading(build, block);
+      openHeading(build, block, verticalFrom);
       return;
 
     case "notes": {
@@ -411,20 +432,41 @@ function unique(id: string, taken: Set<string>): string {
   return next;
 }
 
+/**
+ * The level from which a heading hangs vertically, for one chapter read alone.
+ *
+ * A Sub-section (level 3) hangs beneath its Section; a Sub-sub-section
+ * (level 4) has no slide of its own and folds into notes instead.
+ */
+const SINGLE_CHAPTER_VERTICAL_FROM = 3;
+
+/**
+ * The level from which a heading hangs vertically, for a whole document of
+ * more than one chapter.
+ *
+ * The mapping shifts down one level because the chapter itself now runs
+ * horizontally: a Section (level 2) hangs beneath its chapter, and a
+ * Sub-section (level 3) has no slide of its own and folds into notes —
+ * `iss-2609061210010975`.
+ */
+const DOCUMENT_VERTICAL_FROM = 2;
+
 /** Build one chapter's columns, sharing an id pool with the rest of a deck. */
 function columnsOf(
   chapter: Chapter,
   options: DeckOptions,
   taken: Set<string>,
+  verticalFrom: number = SINGLE_CHAPTER_VERTICAL_FROM,
 ): Column[] {
   const build: Build = { columns: [], current: null, axis: "horizontal", folding: false };
   const variant = options.variant ?? null;
+  const foldFrom = verticalFrom + 1;
   for (const block of chapter.blocks) {
-    if (block.kind === "heading" && (block.level ?? 1) >= 4) {
+    if (block.kind === "heading" && (block.level ?? 1) >= foldFrom) {
       if (inVariant(block, variant)) foldHeading(build, block);
       continue;
     }
-    placeBlock(build, block, variant);
+    placeBlock(build, block, variant, verticalFrom);
   }
   const columns: Column[] = [];
   for (const drafts of build.columns) {
@@ -453,19 +495,39 @@ export function buildDeck(chapter: Chapter, options: DeckOptions = {}): DeckPlan
 }
 
 /**
+ * The level from which a heading hangs vertically, for a document holding
+ * this many chapters.
+ *
+ * One chapter presents exactly as `buildDeck` presents it alone — the
+ * chapter's title opens the deck, a Section runs horizontally, a Sub-section
+ * hangs beneath it. More than one chapter shifts the mapping down one level,
+ * because the chapter is now the unit that runs horizontally: the chapter's
+ * title is the horizontal slide, its Sections hang vertically beneath it, and
+ * its Sub-sections fold into notes (`iss-2609061210010975`).
+ */
+function documentVerticalFrom(chapterCount: number): number {
+  return chapterCount > 1 ? DOCUMENT_VERTICAL_FROM : SINGLE_CHAPTER_VERTICAL_FROM;
+}
+
+/**
  * Build one deck for a whole document, its chapters in order.
  *
- * The published deck holds the whole document; Present in the app holds the
- * chapter Alice is in. Both are the same plan, built by the same walk, so the
- * deck at the link is the deck she rehearsed.
+ * Present in the app holds the chapter Alice is in, mapped by `buildDeck`.
+ * This is the same walk applied to every chapter of the document, with the
+ * mapping shifted down one level once there is more than one chapter to
+ * run horizontally — see `documentVerticalFrom`. A document of one chapter
+ * is not shifted, so the deck at the link is the deck she rehearsed.
  */
 export function buildDocumentDeck(
   chapters: readonly Chapter[],
   options: DeckOptions = {},
 ): DeckPlan {
   const taken = new Set<string>();
+  const verticalFrom = documentVerticalFrom(chapters.length);
   const columns: Column[] = [];
-  for (const chapter of chapters) columns.push(...columnsOf(chapter, options, taken));
+  for (const chapter of chapters) {
+    columns.push(...columnsOf(chapter, options, taken, verticalFrom));
+  }
   const first = chapters[0];
   return { title: first === undefined ? null : titleOf(first), columns };
 }
@@ -479,16 +541,20 @@ export function buildDocumentDeck(
  * "Why this matters" would otherwise both claim `#why-this-matters`, and the
  * link Alice sends would land on whichever the browser found first. So the
  * plans are built in one pass over a shared pool, exactly as
- * [`buildDocumentDeck`] does, and only the columns are kept apart.
+ * [`buildDocumentDeck`] does, and only the columns are kept apart — including
+ * the same level shift once the document holds more than one chapter, so a
+ * chapter's plan is one column (its title, with its Sections nested beneath
+ * it) rather than one column per Section.
  */
 export function buildChapterDecks(
   chapters: readonly Chapter[],
   options: DeckOptions = {},
 ): DeckPlan[] {
   const taken = new Set<string>();
+  const verticalFrom = documentVerticalFrom(chapters.length);
   return chapters.map((chapter) => ({
     title: titleOf(chapter),
-    columns: columnsOf(chapter, options, taken),
+    columns: columnsOf(chapter, options, taken, verticalFrom),
   }));
 }
 

@@ -31,9 +31,9 @@ she can see what he meant instead of losing it.
 Alice reads his file beside her own, deletes one remark that was meant
 for her alone, and marks the rest to publish. She presses Publish. The
 version that goes up carries Bob's annotations as a layer beside the
-document, and the page offers readers a control for it. Carol opens the
-link, turns the layer on, and reads the chapter with Bob's highlights
-and notes in place; she turns it off and the page is the page again.
+document, named for him and ready for a reader to find; what a reader
+does with that layer — the control on the page, and turning it on or off
+— is Carol's story to tell, not this one's.
 
 Alice's own marks are not there. They stay in the sidecar beside the
 chapter on her machine, and the only way one of them reaches the site is
@@ -70,11 +70,11 @@ with one decision — without her private working notes going up with it.
   on an individual mark to forget. Falsifiable: publish with one file
   chosen and search everything the publish wrote for anything from the
   files that were not.
-- We expect readers to accept a toggle where they would not accept a
-  merge, because a published layer is the same JSON the reader exported,
-  rendered over the article by the article's script, so the text
-  underneath is unchanged whether the layer is on or off
-  (`adr-2609051324177479`).
+- We expect the reader-facing toggle (owned by 23, `itd-2609051336037640`)
+  to be safe to build on a static layer, because a published layer is the
+  same JSON the reader exported, rendered over the article by the
+  article's script, so the text underneath is unchanged whether the layer
+  is on or off (`adr-2609051324177479`).
 - We expect a layer to age correctly, because it is written beneath one
   version hash and old version paths are never rewritten
   (`05-internals.md` section 9). A layer published in June therefore
@@ -87,12 +87,14 @@ with one decision — without her private working notes going up with it.
 ## Scope Conditions
 
 - Platform: review and publication happen in the desktop app; the
-  published layer renders in the online article on the presenter site at
-  desktop, iPad, and iPhone widths — 1280, 820, and 390 CSS px. Slides
-  and the PDF carry no layer.
+  published layer is written beside the document for the online article
+  on the presenter site. Slides and the PDF carry no layer. The control a
+  reader uses to show or hide it, and how it renders at desktop, iPad, and
+  iPhone widths, are specified in 23.
 - Population: Alice reviews and publishes; Bob supplies a file he
-  exported from the published page; Carol reads with the layer on or
-  off. No account exists for any of them.
+  exported from the published page. Carol's reading of a layer she is
+  shown, and her choice to turn it on or off, belong to 23. No account
+  exists for any of them.
 - Assumption: the file Alice loads is an annotation sidecar in the shape
   `05-internals.md` section 7 gives, holding marks of the four kinds. A
   file that is not is refused with a reason and nothing is loaded from
@@ -106,15 +108,18 @@ with one decision — without her private working notes going up with it.
   one published layer at once. Alice's own marks are a layer like any
   other if she chooses to publish them, and are not published otherwise.
 - Boundary with map #23, itd-2609051336037640: 23 owns Bob's marking of
-  the published page in his browser and his export, and ends when he has
-  a file. 24 begins when Alice opens that file. Nothing in 24 sends
-  anything from Bob's browser to Alice; the file changes hands by her
-  and Bob's own means.
+  the published page in his browser and his export, and owns the
+  reader-facing toggle that shows or hides a layer 24 publishes. 24 begins
+  when Alice opens Bob's file and ends at the layer itself and the name it
+  carries; the control Carol uses to turn it on or off, and what her
+  choice does and does not send anywhere, are specified in 23. Nothing in
+  24 sends anything from Bob's browser to Alice; the file changes hands by
+  her and Bob's own means.
 - Boundary with map #7, itd-2609051335468596: 7 owns the publish action
   itself — the stable id, the version hash, the push, the link, and the
   empty presenter. 24 owns only the layer that action carries into the
-  version and the control readers get for it. A publish with no layer
-  selected behaves exactly as 7 specifies.
+  version and its name; the control readers get for it belongs to 23. A
+  publish with no layer selected behaves exactly as 7 specifies.
 - Boundary with map #22, itd-2609051336025064: 22 owns the sidecar
   format, the anchor model, and its behaviour under editing. 24 consumes
   that model unchanged and adds no anchor behaviour of its own; what 24
@@ -147,30 +152,19 @@ with one decision — without her private working notes going up with it.
   and it is neither discarded nor attached to another passage. (Negative
   case.)
 - Given Alice has selected Bob's file to publish and has left her own
-  marks unselected, when she publishes and Carol turns the layer on, then
-  Bob's three marks appear and not one of Alice's does; and when every
-  file the publish wrote for that version is searched, then nothing from
-  her own marks is anywhere in it — not the text of a note, not the words
-  a highlight covers, and not a mark's identity. (Negative case.)
+  marks unselected, when she publishes, then every file the publish wrote
+  for that version carries Bob's three marks; when those same files are
+  searched for anything from her own marks — the text of a note, the
+  words a highlight covers, or a mark's identity — nothing is found.
+  (Negative case.)
 - Given Alice selects her own marks to publish as a layer as well, when
   she publishes, then both layers are offered on the page as separate
   layers, each under its own label, and a reader can show either, both,
   or neither.
-- Given a published version carrying Bob's layer, when Carol opens the
-  stable link, then the article offers a control to show and hide that
-  layer, off until she chooses it, and turning it on shows his highlights
-  in the colours he chose and his notes against the passages his marks
-  resolve to.
-- Given Carol reading at iPhone width (390 CSS px), when she turns the
-  layer on, then the highlights and the notes are legible with no
-  horizontal scrolling and no pinch zoom, the notes folding into the flow
-  the way margin content does at that width; and at iPad width (820 CSS
-  px) and desktop width (1280 CSS px) they sit in the margin beside the
-  passages they belong to.
-- Given Carol has turned the layer on and reloads the page, when it
-  loads again, then her choice is restored from her own browser, and the
-  files served for that version are byte-identical to those the publish
-  wrote — the site has recorded nothing about her.
+- Given a published version carrying Bob's layer, when its files are
+  inspected, then the layer is present under its own label beside the
+  version, ready for the control specified in 23 to show or hide it; how
+  that control renders and behaves is proven there, not here.
 - Given Alice deletes one of Bob's annotations and publishes again, when
   she opens the earlier version link, then that version's layer still
   carries the deleted annotation and the new version's layer does not.

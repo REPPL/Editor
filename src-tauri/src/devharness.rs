@@ -280,6 +280,30 @@ mod tests {
     }
 
     #[test]
+    fn takes_a_path_inside_either_confined_root() {
+        // `allowed_roots` gathers the temporary directory and the
+        // application's cache directory into one list, and the harness
+        // promises a key log is refused unless it lands in one *or* the
+        // other. Every other test here passes a single-root list, which
+        // cannot tell an OR from a preference for whichever root happens to
+        // be checked first — this one gives `confine_log_path` two roots
+        // that are not the real temporary directory and shows a path inside
+        // the second is accepted on its own, not because it is also inside
+        // the first.
+        let first = scratch("either-root-first");
+        let second = scratch("either-root-second");
+        let roots = vec![
+            first.canonicalize().expect("first root is unreadable"),
+            second.canonicalize().expect("second root is unreadable"),
+        ];
+        let wanted = second.join("keys.jsonl");
+        let resolved =
+            confine_log_path(&wanted, &roots).expect("the second root should be allowed too");
+        assert!(resolved.starts_with(&roots[1]));
+        assert!(!resolved.starts_with(&roots[0]));
+    }
+
+    #[test]
     fn refuses_a_path_outside_every_root() {
         let error =
             confine_log_path(Path::new("/etc/passwd"), &roots()).expect_err("outside every root");

@@ -50,6 +50,7 @@ Three kinds:
 | 31 | Export what I have made to a folder I choose | standalone | — | 1 |
 | 32 | Edit prose with the Emacs commands my hands already know | standalone | — | 1 |
 | 33 | Make the text bigger or smaller from the keyboard | standalone | — | 1 |
+| 34 | Move through and reshape the book by heading | standalone | — | 1 |
 
 ## The intents
 
@@ -197,6 +198,32 @@ used the app and found no way to match the text to their eyes and screen
 short of the operating system's own zoom, which scales the sidebar and
 the panels with it. The chords are Emacs's own text-scale commands, taken
 behind the `C-x` prefix so that `C--` keeps redo and `C-=` stays free.
+
+**34. Move through and reshape the book by heading** — standalone.
+Surfaces: the editor (heading movement, folding, promote and demote,
+moving a section, narrowing, occur, switching chapters).
+Overlaps: intent 2, which owns the binding table's shape, the keys panel,
+and the cancel contract — the boundary is that 2 owns the table and 34
+owns twenty-one rows in it, settling the four chord conflicts the table
+already carried; intent 32, which owns the prose vocabulary and the `M-x`
+palette — 34's rows are listed and run there like every other row, and 32's
+sentence and paragraph commands are untouched; intent 30, which owns
+reaching the sidebar tree from the keyboard — 34's switch-chapter and
+chapter-list moments open a chapter from the text and never move focus
+into the tree; intent 1, which owns the sidebar tree itself — 34 reaches
+the same chapters and headings without drawing a second tree; and intent
+26, which decides which of this vocabulary a reading view answers, if any.
+Plumbing excluded: the binding table's data shape, the fill algorithm and
+the completion index (intent 32's), and CodeMirror's own fold state.
+Order: phase 1, with 2 and 32. Amended into the map after the maintainer
+used the app and found the table carried the sentence and the paragraph
+but not the heading — no way to move by section, fold a chapter down to
+its outline, promote or demote a heading with its subtree, or narrow to
+one section, all of which Markdown mode and Org mode answer without
+thinking. It is tier two of
+`../research/notes/2026-09-05-emacs-vocabulary-gap.md`, and the intent
+that settles the four chord conflicts the note recorded against `C-c
+C-p`, `C-c C-l`, `C-x k` and `M-s`.
 
 ### Bundle: The deck (phase 1)
 
@@ -442,8 +469,10 @@ Order: phase 7.
 **23. Keep my own marks on someone else's page** — bundle-member.
 Surfaces: annotations (reader side, export), the online article.
 Overlaps: intent 10 (also browser state) and intent 24 (which receives the
-exported file). The boundary: 23 ends when Bob has a file; 24 begins when
-Alice opens it.
+exported file). The boundary: 23 ends when Bob has a file, and resumes at
+the reader-facing toggle for a layer 24 publishes — the control Carol uses
+to show or hide it; 24 begins when Alice opens the file and ends at the
+layer itself and its name.
 Plumbing excluded: browser storage, the export format.
 Order: with 22.
 
@@ -451,10 +480,11 @@ Order: with 22.
 
 **24. Publish someone else's annotations as a layer** — standalone.
 Surfaces: annotations (layers), publish.
-Overlaps: intent 23 (the file) and intent 7 (the publish action). The
-boundary: 24 owns review, the layer and its name, and the toggle readers
-see, and the guarantee that Alice's private marks are not published unless
-she chooses to publish them as a layer of her own the same way.
+Overlaps: intent 23 (the file, and the reader-facing toggle) and intent 7
+(the publish action). The boundary: 24 owns review, the layer and its
+name, and the guarantee that Alice's private marks are not published
+unless she chooses to publish them as a layer of her own the same way; the
+toggle readers see to show or hide a layer belongs to 23.
 Plumbing excluded: where a received file sits before it is published, and
 where a layer file sits beside the version.
 Order: phase 7.
@@ -489,6 +519,7 @@ and no spec is the owner of one: the discipline is.
 | **Nothing is stored about a reader** | Editor or the pages it publishes keeping any reader's marks, preferences, or identity. Reader state lives in the reader's browser and leaves only as a file they export | Phase 2 |
 | **Network only on publish** | Any request outside a publish Alice started. No background traffic, sync, telemetry, or build-time probe | Phase 1 |
 | **Orphan, never guess** | An annotation whose anchor no longer resolves being re-attached to different words instead of being reported as orphaned | Phase 7 |
+| **Reachable by assistive technology** | A control, panel, or overlay reachable only by an Emacs chord; a custom widget with no role, name, or state exposed to a screen reader; a state conveyed by colour alone | Phase 2 |
 
 ## The rule used to cut
 

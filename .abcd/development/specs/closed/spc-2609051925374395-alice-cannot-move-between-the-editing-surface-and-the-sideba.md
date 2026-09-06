@@ -87,6 +87,20 @@ publish and settings panels through the focus contract they hand to
 `registerPanel`. Where two could be open, the most recently opened wins, which
 the overlay contract already enforces for the two overlays.
 
+Leaving the third place is not the same act for the two kinds of panel it can
+hold. A registered panel's `release()` does nothing: cycling away is not
+cancelling it, and a publish or settings panel left behind keeps listening only
+to the keys that reach its own element, so the cycle comes back round to it —
+the three-step walk the press release describes. An overlay's `release()`
+closes it instead (`panelTarget.release`, `iss-2609052115254279`): an overlay
+holds the keyboard with a document-level listener that does not stop when the
+keyboard goes elsewhere, so a keys panel or insert palette left open behind the
+text would go on answering `Return` and every other chord invisibly. Cancelling
+it on the way out is the same answer `C-g` already gives, so the keys panel and
+the insert palette are never the third place `C-x o` cycles back to: leaving
+either one, the walk is editor, sidebar, editor, two steps rather than three,
+with the overlay gone rather than waiting.
+
 ### Hearing a chord in a pane the editing surface cannot hear
 
 The Emacs handler is a CodeMirror extension: it sees a keydown only while the
@@ -221,7 +235,7 @@ half-typed in the sidebar shows in the cell that already exists.
 | `C-n`, `C-p`, `C-f`, `C-b`, and Down, Up, Right, Left move the selection and expand and collapse; no chapter opens; the text is unchanged byte for byte | `src/focus.test.ts` › "walks the tree on the chord and on the arrow alike", "expands and collapses without opening anything", "changes not one byte of the open chapter while the tree has the keyboard" |
 | Return on a Sub-section opens that chapter at that heading, focus returns to the text with the cursor on the heading, and the modeline names the editor | `src/focus.test.ts` › "opens the chapter at the heading on Return and hands the keyboard back" |
 | `C-g` from the sidebar, and `C-x o` with no panel open, both return to the text with nothing opened and the cursor where she left it | `src/focus.test.ts` › "returns to the text on C-g having opened nothing", "cycles straight back to the editor when no panel is open" |
-| With the keys panel open, three presses visit sidebar, panel, editor in that order, the modeline naming each; the same holds for the palette, publish and settings | `src/focus.test.ts` › "cycles editor, sidebar, panel, editor in one fixed order", run as a table over the four panels |
+| With the publish panel or settings open, three presses visit sidebar, that panel, editor in that order, the modeline naming each, because a registered panel cycled away from stays open; with the keys panel or the insert palette open instead, two presses visit sidebar, editor, and the overlay itself has closed rather than holding a third place (negative case: a third press finding the overlay still open fails this criterion) | `src/focus.test.ts` › "cycles editor, sidebar, panel, editor in one fixed order", run as a table over the five panels, branching on `panel.overlay` |
 | In the text, `C-n`, `C-p`, `C-f`, `C-b` and Return run the editing surface's own actions and no node moves; in the sidebar, printable characters insert nothing and no editing chord fires | `src/focus.test.ts` › "leaves the tree alone while the cursor is in the text", "types nothing into the chapter while the tree has the keyboard" |
 | The keys panel lists every chord this flow answers with an id, a label and its chords; no chord the sidebar or a panel answers is absent from the table; no row this spec adds is answered by nothing | `src/focus.test.ts` › "answers every sidebar row and lists every chord it answers" — the sweep in both directions over `scopeOf(binding) === "sidebar"`; `src/emacs-keys.test.ts` › "gives no two rows the same chord", made scope-aware, and "answers no chord the table does not list" |
 | At 820 px the whole flow runs in the drawer: it opens with the keyboard, behaves as above, closes on Return and on cancel, nothing scrolls sideways, no step needs the pointer | `src/focus.test.ts` › "opens the drawer with the keyboard and closes it behind Return", "closes the drawer on cancel having changed nothing"; manual check M30-1 |

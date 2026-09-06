@@ -23,6 +23,9 @@ ones graduates to ADRs under `../decisions/adrs/`.
 - **Desktop shell is Tauri 2.** System web view (the Safari engine on
   macOS, matching iPad and iPhone), Rust for files, hashing, git, and the
   build. iOS is a possible later target for the tablet.
+- **Reachable by assistive technology.** From phase 2, every surface reads
+  and operates without the Emacs chords, exposes native or ARIA semantics
+  to a screen reader, and never conveys state by colour alone.
 
 ## Document model
 

@@ -165,11 +165,18 @@ combination becomes its precondition.
   and again in a fresh run with `C-x o` and no panel open, then focus
   returns to the editing surface with no chapter opened and the cursor
   where she left it.
-- Given the keys panel open, when Alice presses `C-x o` three times from
-  the editor, then focus visits the sidebar, then the keys panel, then the
-  editor, in that order every time, with the modeline naming each; and the
-  same three-step cycle holds with the insert palette, the publish panel or
-  settings open in the keys panel's place.
+- Given the publish panel or settings open, when Alice presses `C-x o`
+  three times from the editor, then focus visits the sidebar, then that
+  panel, then the editor, in that order every time, with the modeline
+  naming each, because a registered panel cycled away from stays open.
+  Given the keys panel or the insert palette open instead, when Alice
+  presses `C-x o` twice from the editor, then focus visits the sidebar and
+  then the editor, and the overlay itself has closed rather than waiting
+  in a third place: a modal overlay is closed the moment the keyboard
+  leaves it, so its cycle is editor, sidebar, editor rather than the
+  three-step cycle a registered panel holds. (Negative case: a third press
+  finding the overlay still open and holding the third place, rather than
+  the editor, fails this criterion.)
 - Given the cursor in the editing text, when Alice presses `C-n`, `C-p`,
   `C-f`, `C-b` or Return, then the editing surface's own actions run and no
   sidebar node moves, expands, collapses or opens; and given focus in the
