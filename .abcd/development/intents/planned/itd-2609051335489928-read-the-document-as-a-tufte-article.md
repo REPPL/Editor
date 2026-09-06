@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335489928
 slug: read-the-document-as-a-tufte-article
-spec_id: null
-kind: null
+spec_id: spc-2609061318090042
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -92,49 +92,49 @@ text.
 
 ## Scope Conditions
 
-- Bundle: this intent belongs to the bundle **The article** (phase 2) with
+- Bundle: this intent belongs to the bundle **The article** (phase 2) with <!-- cond: cond-2609061318099562 -->
   map #10, `itd-2609051335492327`, "Read it the way I like it". One spec
   covers both: a Tufte page with no way to change the measure is half the
   reading experience.
-- Platform: current Safari and Chromium engines at iPhone, iPad, and
+- Platform: current Safari and Chromium engines at iPhone, iPad, and <!-- cond: cond-2609061318091913 -->
   desktop widths — 390, 820, and 1280 CSS px — on the
   presenter site and in the desktop app's preview. Native reading apps are
   out.
-- Population: Bob and Carol reading a published document, and Alice
+- Population: Bob and Carol reading a published document, and Alice <!-- cond: cond-2609061318092215 -->
   reading her own draft. No authoring gesture belongs to this moment.
-- Assumption: in phase 2 the article renders the document's default
+- Assumption: in phase 2 the article renders the document's default <!-- cond: cond-2609061318096567 -->
   variant only. Variant marking and filtering are map #14 and the
   variant-fidelity discipline, in phase 3; from that phase the article
   renders whichever variant it is handed, and the discipline binds here.
-- Boundary with map #10 (`itd-2609051335492327`): #9 owns the default page
+- Boundary with map #10 (`itd-2609051335492327`): #9 owns the default page <!-- cond: cond-2609061318097929 -->
   — layout, measure, where a note sits, the contents list, the video rule.
   #10 owns the toolbar that changes theme, text size, and measure, and the
   persistence of those choices.
-- Boundary with map #11 (cite from a bibliography file): #11 owns the
+- Boundary with map #11 (cite from a bibliography file): #11 owns the <!-- cond: cond-2609061318091537 -->
   citation key, the bibliography file, resolution, and the generated
   reference list. #9 owns only where a resolved citation or footnote sits
   on the page and how it folds at narrow widths.
-- Boundary with map #12 (find what is hidden in the text): #12 owns the
+- Boundary with map #12 (find what is hidden in the text): #12 owns the <!-- cond: cond-2609061318092133 -->
   once-only opening quotation and the easter eggs — the marks, the tray,
   the collection, and the Konami reveal. #9 owns the page around them and
   implements none of that behaviour.
-- Boundary with map #16 (point a video at several sources): #16 owns the
+- Boundary with map #16 (point a video at several sources): #16 owns the <!-- cond: cond-2609061318090890 -->
   order in which sources are tried and what a reader sees when none is
   reachable. #9 owns only that the article honours that order and places
   the player, or the poster and link, in the flow at that point.
-- Boundary with map #5 and map #6 (the deck): each rendering owns its own
+- Boundary with map #5 and map #6 (the deck): each rendering owns its own <!-- cond: cond-2609061318097375 -->
   column of the construct table in `05-internals.md` section 3. #9 owns
   the Article column, including its obligation to ignore the slide
   constructs; #5 and #6 own the Slides column.
-- Boundary with map #17 (carry the document as one file): #17 owns
+- Boundary with map #17 (carry the document as one file): #17 owns <!-- cond: cond-2609061318099092 -->
   embedding this page, its assets, and its script into one offline file.
   #9 owns the page itself, wherever it is served from.
-- Boundary with map #26, `itd-2609051402083398` (Move through the article
+- Boundary with map #26, `itd-2609051402083398` (Move through the article <!-- cond: cond-2609061318090837 -->
   by keyboard): #26 owns moving through this page by keyboard — the
   chords, the contents list opened from a chord, search, and the cancel
   rule. #9 owns the page those chords move through, and asserts nothing
   about which chord does what.
-- In this moment, from the canon: the callout and the margin aside. The
+- In this moment, from the canon: the callout and the margin aside. The <!-- cond: cond-2609061318099438 -->
   article bundle owns what `::: {.callout kind="…"}` and
   `[…]{.margin}` look like on the page, because the article is the
   rendering where each of them has a form of its own; the deck and the

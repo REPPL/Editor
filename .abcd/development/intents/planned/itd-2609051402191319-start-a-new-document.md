@@ -1,8 +1,8 @@
 ---
 id: itd-2609051402191319
 slug: start-a-new-document
-spec_id: null
-kind: null
+spec_id: spc-2609061318158586
+kind: standalone
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
@@ -90,43 +90,43 @@ predictable place from the start or accumulate later by hand.
 
 ## Scope Conditions
 
-- Platform: the desktop app on macOS, Tauri 2 around the system web view.
+- Platform: the desktop app on macOS, Tauri 2 around the system web view. <!-- cond: cond-2609061318159118 -->
   Creating a folder on disk is a shell capability (`05-internals.md`
   section 5); the single HTML file creates no documents.
-- Population: Alice, the author, creating one document in a folder she
+- Population: Alice, the author, creating one document in a folder she <!-- cond: cond-2609061318150427 -->
   chooses. There is no account, no workspace, and no project registry.
-- Phase: phase 1. Everything else in phase 1 assumes an open document, so
+- Phase: phase 1. Everything else in phase 1 assumes an open document, so <!-- cond: cond-2609061318158892 -->
   this is where a document without a manuscript behind it begins.
-- Assumption: the document's metadata lives in one file at the document
+- Assumption: the document's metadata lives in one file at the document <!-- cond: cond-2609061318154636 -->
   root, and a chapter's own front matter carries chapter-level metadata
   only.
-- Assumption: what is written at creation is the title Alice typed plus
+- Assumption: what is written at creation is the title Alice typed plus <!-- cond: cond-2609061318152334 -->
   the design's own defaults. Variants, a bibliography, and a changed
   threshold are declared later, by the moments that own them.
-- Boundary with map #1, `itd-2609051335399446` (Open a folder and see the
+- Boundary with map #1, `itd-2609051335399446` (Open a folder and see the <!-- cond: cond-2609061318152083 -->
   book): 1 owns reading a folder that already exists and drawing the tree
   from it, including the folder this moment just wrote. 29 owns writing
   the smallest folder that 1 can read.
-- Boundary with map #13, `itd-2609051335529787` (Bring an old single-file
+- Boundary with map #13, `itd-2609051335529787` (Bring an old single-file <!-- cond: cond-2609061318159734 -->
   manuscript in): 13 owns the other route in — a flat manuscript split into
   a Part of chapters, with the metadata minted from what the manuscript
   carries. 29 owns the route in for an author with nothing written yet,
   and writes no chapter text at all.
-- Boundary with map #27, `itd-2609051402126424` (Set the size threshold
+- Boundary with map #27, `itd-2609051402126424` (Set the size threshold <!-- cond: cond-2609061318159508 -->
   and name an asset root): 29 writes the default threshold and no roots.
   Changing either afterwards is 27's.
-- Boundary with map #14, `itd-2609051335537470` (Write one text for two
+- Boundary with map #14, `itd-2609051335537470` (Write one text for two <!-- cond: cond-2609061318153050 -->
   audiences): the declared variants and the default variant live in the
   metadata this moment writes, but declaring them is 14's. A document
   created here declares none, and renders as it does with none.
-- Boundary with map #7, `itd-2609051335468596` (Publish and get a link I
+- Boundary with map #7, `itd-2609051335468596` (Publish and get a link I <!-- cond: cond-2609061318157197 -->
   can open from the lectern): 7 mints the stable id on first publish and
   writes it into the metadata. 29 writes the metadata without one.
-- Boundary with map #11, `itd-2609051335502171` (Cite from a bibliography
+- Boundary with map #11, `itd-2609051335502171` (Cite from a bibliography <!-- cond: cond-2609061318157252 -->
   file): 11 owns the bibliography and the citation style. A document
   created here names no bibliography file, and a document with none is an
   ordinary case rather than an error.
-- Excluded as plumbing: the metadata file's exact keys and the atomic file
+- Excluded as plumbing: the metadata file's exact keys and the atomic file <!-- cond: cond-2609061318158123 -->
   writes that create the folder (`05-internals.md` sections 1 and 5).
 
 ## Acceptance Criteria

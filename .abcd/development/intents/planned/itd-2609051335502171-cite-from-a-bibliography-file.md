@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335502171
 slug: cite-from-a-bibliography-file
-spec_id: null
-kind: null
+spec_id: spc-2609061318151591
+kind: standalone
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
@@ -84,40 +84,40 @@ proof-reading pass that goes with them.
 
 ## Scope Conditions
 
-- Platform: authoring happens in the desktop app, in the system web view;
+- Platform: authoring happens in the desktop app, in the system web view; <!-- cond: cond-2609061318155423 -->
   display happens in the online article, the deck, and the journal PDF.
   The bibliography is a BibTeX file inside the document folder, named in
   the document's metadata, and it is read from disk with no network call.
-- Population: Alice is the only person who writes a citation. Bob reads
+- Population: Alice is the only person who writes a citation. Bob reads <!-- cond: cond-2609061318154843 -->
   the article, Carol watches the deck or receives the PDF; neither is
   offered any control over how a reference is displayed.
-- Assumption: exactly one citation style is configured per document. Which
+- Assumption: exactly one citation style is configured per document. Which <!-- cond: cond-2609061318151558 -->
   styles ship first is open in `03-evidence.md`, so this intent covers the
   configured style resolving, generating, and agreeing across renderings,
   not the catalogue of styles.
-- Assumption: a chapter with no citations and a document with no
+- Assumption: a chapter with no citations and a document with no <!-- cond: cond-2609061318157278 -->
   bibliography file are both ordinary cases, not errors. The reference
   list is simply absent.
-- Boundary with map #9, itd-2609051335489928 (Read the document as a Tufte
+- Boundary with map #9, itd-2609051335489928 (Read the document as a Tufte <!-- cond: cond-2609061318153081 -->
   article): in scope here is the key, the file, the resolution, and the
   generated reference list; out of scope is where the margin note sits on
   the page, how it folds on a narrow screen, and what the navigation does
   with it — #9 owns the article's layout.
-- Boundary with map #5, itd-2609051335447894 (Present a chapter with no
+- Boundary with map #5, itd-2609051335447894 (Present a chapter with no <!-- cond: cond-2609061318153640 -->
   slide markup): in scope here is that a Section's citations resolve to a
   source credit for that slide; out of scope is the slide mapping itself
   and where the credit line sits on the slide — #5 owns the deck.
-- Boundary with map #21, itd-2609051336019782 (Receive a journal-style
+- Boundary with map #21, itd-2609051336019782 (Receive a journal-style <!-- cond: cond-2609061318153883 -->
   PDF with the document): in scope here is the entries the PDF is given
   and their agreement with the other two renderings; out of scope is the
   printed artefact — numbering style on the page, the foot-of-page rule,
   the contents list — which #21 owns.
-- Boundary with map #3, itd-2609051335415528 (Insert a construct I cannot
+- Boundary with map #3, itd-2609051335415528 (Insert a construct I cannot <!-- cond: cond-2609061318155500 -->
   remember): #3 owns only that choosing "citation" or "footnote" in the
   palette puts the canonical form at the cursor; this intent owns what
   happens to that form afterwards, including completion, hover, and
   resolution.
-- Out of scope: the BibTeX reader itself and the implementation of any
+- Out of scope: the BibTeX reader itself and the implementation of any <!-- cond: cond-2609061318154649 -->
   particular style, which are plumbing in `05-internals.md`; and the
   removal of a citation that sits inside a filtered variant block, which
   the *variant fidelity* discipline owns.

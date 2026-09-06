@@ -1,8 +1,8 @@
 ---
 id: itd-2609051402083398
 slug: move-through-the-article-by-keyboard
-spec_id: null
-kind: null
+spec_id: spc-2609061318158216
+kind: standalone
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
@@ -84,44 +84,44 @@ later reading surface something to inherit rather than invent.
 
 ## Scope Conditions
 
-- Platform: the published article on the presenter site, the same article
+- Platform: the published article on the presenter site, the same article <!-- cond: cond-2609061318150599 -->
   in the desktop app's preview, and the same article inside the single
   HTML file, in current Safari and Chromium engines at the three
   legibility widths — 390, 820, and 1280 CSS px.
-- Population: Bob and Carol reading with a keyboard attached, and Alice
+- Population: Bob and Carol reading with a keyboard attached, and Alice <!-- cond: cond-2609061318153674 -->
   reading her own draft. A reader with no keyboard loses nothing: touch
   and pointer keep working exactly as they do without this moment.
-- Assumption: the binding table exists and the reading views declare which
+- Assumption: the binding table exists and the reading views declare which <!-- cond: cond-2609061318158331 -->
   of its entries they honour. Which entries those are is the open question
   in `03-evidence.md` this moment closes for the reading views.
-- Boundary with map #2, `itd-2609051335406422` (Edit with the Emacs
+- Boundary with map #2, `itd-2609051335406422` (Edit with the Emacs <!-- cond: cond-2609061318158896 -->
   bindings I already know): 2 owns the editing surface's vocabulary, the
   binding table itself, and the shell claiming combinations back from the
   platform. 26 owns which of those entries a reading view honours and what
   each one does to a page that cannot be edited.
-- Boundary with map #9, `itd-2609051335489928` (Read the document as a
+- Boundary with map #9, `itd-2609051335489928` (Read the document as a <!-- cond: cond-2609061318159357 -->
   Tufte article): 9 owns the page — layout, margin notes, the contents
   list, images and video in the flow. 26 owns moving through that page by
   keyboard and nothing about how it is laid out.
-- Boundary with map #10, `itd-2609051335492327` (Read it the way I like
+- Boundary with map #10, `itd-2609051335492327` (Read it the way I like <!-- cond: cond-2609061318158883 -->
   it): 10 owns the reader controls and their persistence. 26 owns only
   that the toolbar is reachable and operable by keyboard; which controls
   it holds is 10's.
-- Boundary with map #5, `itd-2609051335447894` (Present a chapter with no
+- Boundary with map #5, `itd-2609051335447894` (Present a chapter with no <!-- cond: cond-2609061318156889 -->
   slide markup): 5 owns the deck and its movement between Sections and
   Sub-sections. 26 owns the vocabulary the deck draws its movement chords
   from, so that next, previous, and cancel mean the same thing at the
   lectern as on the page.
-- Boundary with map #25, `itd-2609051336055362` (Rehearse from cards built
+- Boundary with map #25, `itd-2609051336055362` (Rehearse from cards built <!-- cond: cond-2609061318153551 -->
   out of the headings): 25 owns the cards, the two modes, and the sitting.
   26 owns the chords the deck moves by, which 25 consumes rather than
   declares.
-- Boundary with map #12, `itd-2609051335518134` (Find what is hidden in
+- Boundary with map #12, `itd-2609051335518134` (Find what is hidden in <!-- cond: cond-2609061318153518 -->
   the text): 12 owns the once-only quotation, the hidden marks, the tray,
   and the Konami reveal. 26 owns that the panel an egg opens takes the
   keyboard while it is open and closes on the cancel chord, as every
   overlay does.
-- Excluded as plumbing: the key table's data shape, the event-to-chord
+- Excluded as plumbing: the key table's data shape, the event-to-chord <!-- cond: cond-2609061318155666 -->
   mapping, and the overlay handler (`05-internals.md` section 5).
 
 ## Acceptance Criteria

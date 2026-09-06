@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335492327
 slug: read-it-the-way-i-like-it
-spec_id: null
-kind: null
+spec_id: spc-2609061318154502
+kind: standalone
 suggested_kind: bundle-member
 reclassification_history: []
 builds_on: []
@@ -76,33 +76,33 @@ own browser.
 
 ## Scope Conditions
 
-- Bundle: this intent belongs to the bundle **The article** (phase 2) with
+- Bundle: this intent belongs to the bundle **The article** (phase 2) with <!-- cond: cond-2609061318154139 -->
   map #9, `itd-2609051335489928`, "Read the document as a Tufte article".
   One spec covers both: the page and the reader's control over it.
-- Platform: current Safari and Chromium engines at iPhone, iPad, and
+- Platform: current Safari and Chromium engines at iPhone, iPad, and <!-- cond: cond-2609061318154083 -->
   desktop widths — 390, 820, and 1280 CSS px — wherever the article
   renders: the presenter site and the desktop app's preview now, and the
   single HTML file from phase 5, where the controls travel with the file
   and remember per browser against that file. Where a browser makes
   storage unavailable, the controls still work for the visit and simply
   do not persist.
-- Population: Bob and Carol reading a published document, and Alice
+- Population: Bob and Carol reading a published document, and Alice <!-- cond: cond-2609061318151286 -->
   reading her own draft with the same controls. There is no author-facing
   setting in this moment.
-- Assumption: preferences are per browser and per device, and nothing
+- Assumption: preferences are per browser and per device, and nothing <!-- cond: cond-2609061318156570 -->
   synchronises them. A reader on two devices sets them twice.
-- Assumption: the choices are among built-in reader themes. Author themes
+- Assumption: the choices are among built-in reader themes. Author themes <!-- cond: cond-2609061318158871 -->
   are out of scope for the product (`06-delivery.md`, "Out of scope"), so
   no control here selects a style Alice supplied.
-- Boundary with map #9 (`itd-2609051335489928`): #9 owns the default page
+- Boundary with map #9 (`itd-2609051335489928`): #9 owns the default page <!-- cond: cond-2609061318156014 -->
   — the layout, the default measure, where a margin note sits, the
   contents list, images and video in the flow. #10 owns the toolbar, the
   three controls, the reset, and the persistence.
-- Boundary with map #23 (keep my own marks on someone else's page, phase
+- Boundary with map #23 (keep my own marks on someone else's page, phase <!-- cond: cond-2609061318158758 -->
   7): both keep state in Bob's browser. The boundary is what is kept —
   #10 keeps display preferences only; #23 keeps marks about the text and
   the file Bob exports them as.
-- Boundary with map #12 (find what is hidden in the text): #12 owns the
+- Boundary with map #12 (find what is hidden in the text): #12 owns the <!-- cond: cond-2609061318152897 -->
   once-only opening quotation and its per-browser memory of having been
   shown, and the collected easter eggs. #10 owns display preferences and
   nothing that remembers what a reader has read.

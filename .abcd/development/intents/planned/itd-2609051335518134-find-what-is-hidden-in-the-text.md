@@ -1,8 +1,8 @@
 ---
 id: itd-2609051335518134
 slug: find-what-is-hidden-in-the-text
-spec_id: null
-kind: null
+spec_id: spc-2609061318159422
+kind: standalone
 suggested_kind: standalone
 reclassification_history: []
 builds_on: []
@@ -86,51 +86,51 @@ hurried one, and that costs the reader nothing in privacy to enjoy.
 
 ## Scope Conditions
 
-- Platform: the published online article and the same article inside the
+- Platform: the published online article and the same article inside the <!-- cond: cond-2609061318156671 -->
   single HTML file, at desktop, iPad, and iPhone widths — 1280, 820, and
   390 CSS px. The deck omits
   both constructs entirely; the PDF prints their static forms. Alice sees
   the same behaviour in the app's preview.
-- Population: this is Bob and Carol's moment. Alice authors the
+- Population: this is Bob and Carol's moment. Alice authors the <!-- cond: cond-2609061318155455 -->
   constructs and checks them in preview, but the experience being
   specified is the reader's, and it requires no account, no sign-in, and
   no instruction.
-- Assumption: an egg's content is text, an image, or a video, and a video
+- Assumption: an egg's content is text, an image, or a video, and a video <!-- cond: cond-2609061318153365 -->
   inside an egg follows the ordinary video source rule rather than one of
   its own — including showing a poster and a link when no source is
   reachable.
-- Assumption: the Konami code reveals; it does not collect. A revealed
+- Assumption: the Konami code reveals; it does not collect. A revealed <!-- cond: cond-2609061318156143 -->
   mark is still uncollected until the reader opens it.
-- Assumption: an inline marker with no block, and a block no marker
+- Assumption: an inline marker with no block, and a block no marker <!-- cond: cond-2609061318152713 -->
   names, are both authoring mistakes rather than reader-facing features.
   Each renders harmlessly — the marker as ordinary text, the block as
   nothing — and each is listed against its chapter in the sidebar so
   Alice finds it while writing.
-- Assumption: the opening quotation belongs to the first chapter's first
+- Assumption: the opening quotation belongs to the first chapter's first <!-- cond: cond-2609061318151945 -->
   block. A document has one opening, not one per chapter.
-- Boundary with map #9, itd-2609051335489928 (Read the document as a
+- Boundary with map #9, itd-2609051335489928 (Read the document as a <!-- cond: cond-2609061318154625 -->
   Tufte article): #9 owns the page these things sit in — layout,
   navigation, margin notes, the video rule, and the reading views'
   keyboard vocabulary. In scope here is only the once-only quotation, the
   hidden marks, the tray, and the Konami reveal.
-- Boundary with map #21, itd-2609051336019782 (Receive a journal-style
+- Boundary with map #21, itd-2609051336019782 (Receive a journal-style <!-- cond: cond-2609061318155915 -->
   PDF with the document): in scope here is that the quotation and every
   egg's content reach print rather than vanishing; out of scope is what
   the epigraph and the static aside look like on the printed page, which
   #21 owns. The exact static fallback each interactive element renders is
   open in `03-evidence.md`.
-- Boundary with map #14, itd-2609051335537470 (Write one text for two
+- Boundary with map #14, itd-2609051335537470 (Write one text for two <!-- cond: cond-2609061318152835 -->
   audiences): #14 owns marking a block with a variant and previewing a
   variant. Whether an egg's content can itself be variant-marked is open
   in `03-evidence.md`; until it is settled, this intent assumes an egg
   block carries no variant attribute, and the *variant fidelity*
   discipline owns the obligation once it can.
-- Boundary with map #3, itd-2609051335415528 (Insert a construct I cannot
+- Boundary with map #3, itd-2609051335415528 (Insert a construct I cannot <!-- cond: cond-2609061318150131 -->
   remember): #3 owns only that choosing "easter egg" or "opening
   quotation" in the palette puts the canonical form at the cursor, with
   the cursor where the content goes. This intent owns what those forms do
   for a reader afterwards.
-- Boundary with map #10, itd-2609051335492327 (Read it the way I like
+- Boundary with map #10, itd-2609051335492327 (Read it the way I like <!-- cond: cond-2609061318157089 -->
   it): #10 keeps the reader's display preferences in their browser —
   theme, text size, measure. This intent keeps only two facts about
   hidden content: whether the quotation has been shown, and which marks
