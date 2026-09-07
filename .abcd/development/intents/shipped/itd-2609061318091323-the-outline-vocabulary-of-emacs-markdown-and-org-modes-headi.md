@@ -327,5 +327,141 @@ to assume the sidebar or the palette is its only caller.
 
 ## Audit Notes
 
-<!-- abcd-review: OWED receipt=rcp-d4b309cb708b -->
-Fidelity review OWED (receipt rcp-d4b309cb708b).
+<!-- abcd-review: INGESTED receipt=rcp-d4b309cb708b -->
+Fidelity review — receipt rcp-d4b309cb708b (verifier abcd:intent-auditor claude-fable-5-1).
+
+Provenance: abcd:intent-auditor@claude-fable-5-1 · rubric_hash sha256:542ed2cd51ff938717a3f47b2b332e8d47910beec0ca7ecdfd238ae7edf5ced5 · prompt_hash sha256:2e1b2a6492b17085fd11cf29aa35e90139e7d663a6f8e1e6b7df43301ddea49e
+Input attestations: diff:c1bcf7b..cae1734@sha256:4a5e182af9d3f4549b332eff9cf5e02954a79320d0844b9f6d74d8d0a15cfc16; intent:.abcd/development/intents/shipped/itd-2609061318091323-the-outline-vocabulary-of-emacs-markdown-and-org-modes-headi.md@-; spec:.abcd/development/specs/closed/spc-2609061341298538-the-outline-vocabulary-of-emacs-markdown-and-org-modes-headi.md@-; checklist:.abcd/.work.local/logs/acceptance/spc-2609061341298538.md (M34-1..M34-5, every row unticked)@-; test-run:npx vitest run src/core/render/article-keys.test.ts src/core/render/reading-keys.test.ts src/emacs-keys.test.ts src/local-documents.test.ts src/preview.test.ts src/export/services.test.ts src/new-document-panel.test.ts src/outline-commands.test.ts src/open-source.test.ts src/focus.test.ts — 10 files, 287 tests passed, 0 failed@-;
+
+Acceptance rollup: MET 9 · MET_WITH_CONCERNS 4 · NOT_MET 0 · INCONCLUSIVE 1
+
+Per-criterion verdicts:
+- ac-1 — MET: the test pins exactly 21 outline rows, each with a non-empty label, its one chord, owner editor and group outline, and a second test asserts no editor-scope chord has two claimants
+  evidence: src/outline-commands.test.ts:262 — "lists every outline command in the binding table with a label and a chord"
+  evidence: src/outline-commands.test.ts:263 — "expect(OUTLINE_ROWS).toHaveLength(21);"
+  evidence: src/outline-commands.test.ts:275 — "gives no chord in the editor scope to two rows"
+  evidence: src/keys.ts:989 — "id: "outline-next-heading","
+- ac-2 — MET_WITH_CONCERNS: next/previous, same-level forward/backward and up-heading land the cursor on the target heading's line from inside a body and refuse with a message at every end; concerns: the movement tests assert the cursor but not that the document is byte-unchanged (movement is revealLine, a selection-only dispatch), and the refusal is asserted as the returned string rather than on the modeline
+  evidence: src/outline-commands.test.ts:311 — "moves to the next and previous heading regardless of level"
+  evidence: src/outline-commands.test.ts:321 — "refuses movement with a message when no heading answers the direction"
+  evidence: src/outline-commands.test.ts:328 — "moves to the next and previous heading at the same level, refusing across a shallower one"
+  evidence: src/outline-commands.ts:139 — "export function nextHeading(view: EditorView): string | null {"
+- ac-3 — MET_WITH_CONCERNS: Tab folds and unfolds the section with documentText unchanged, and S-Tab cycles folded and open with documentText unchanged; concern: 'every outermost heading' is delivered as every level-two heading, a recorded decision, so a chapter with no level-two heading folds nothing
+  evidence: src/outline-commands.test.ts:363 — "folds and unfolds the section under a heading, changing no byte"
+  evidence: src/outline-commands.test.ts:384 — "cycles every level-two heading folded and back open, changing no byte"
+  evidence: src/outline-commands.ts:268 — "export function cycleOutline(view: EditorView): string | null {"
+  evidence: .abcd/work/DECISIONS.md:153 — "Departed from `spc-2609061341298538`'s first draft for `outline-cycle`"
+- ac-4 — MET: demote shifts the heading and both children together with the rest of the file byte-equal, promoting a level-one title is refused unchanged, and a Setext heading refuses both promote and demote unchanged
+  evidence: src/outline-commands.test.ts:398 — "demotes a heading and its subtree together"
+  evidence: src/outline-commands.test.ts:412 — "refuses to promote a chapter title past level one, unchanged"
+  evidence: src/outline-commands.test.ts:426 — "refuses to promote or demote a Setext heading, unchanged"
+- ac-5 — MET: moving down swaps the two adjacent sections in full, subtree included, matching a computed swap of exactly those line ranges; a section with no sibling at its level refuses and the document is unchanged
+  evidence: src/outline-commands.test.ts:437 — "moves a section down past its sibling, subtree included"
+  evidence: src/outline-commands.test.ts:449 — "refuses to move a section with no sibling at its level"
+  evidence: src/outline-commands.test.ts:440 — "expect(documentText(view)).toBe(swapped(OUTLINE_CHAPTER, 3, 14, 15, 18));"
+- ac-6 — MET: a selection is wrapped in ** and * markers with the rest of the line byte-equal, and with no selection an empty pair is opened with the cursor between the markers
+  evidence: src/outline-commands.test.ts:470 — "wraps a selection in bold and italic markers"
+  evidence: src/outline-commands.test.ts:482 — "opens empty markers with the cursor between them when nothing is selected"
+- ac-7 — MET: a selected word becomes the link or image label with the cursor between the parentheses, and with no selection the empty template is inserted with the cursor inside the square brackets
+  evidence: src/outline-commands.test.ts:489 — "inserts a link and an image template, using the selection as the label"
+  evidence: src/outline-commands.test.ts:502 — "inserts empty templates with the cursor inside the brackets when nothing is selected"
+- ac-8 — MET_WITH_CONCERNS: the overlay filters chapters by title and calls back with the chosen path, C-g cancels with nothing chosen, and app.ts wires the callback to app.openChapter; concerns: no test drives C-x b through the mounted application or asserts the cursor is restored to where it was left (the spec's own mapping names such a test and it does not exist), and M34-5 is unticked
+  evidence: src/outline-commands.test.ts:563 — "filters chapters by name and calls back with the chosen path"
+  evidence: src/outline-commands.test.ts:575 — "changes nothing when cancelled"
+  evidence: src/app.ts:984 — ""outline-switch-chapter": () => {"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061341298538.md:762 — "- [ ] `C-x b`, type part of a chapter's name, choose it"
+- ac-9 — INCONCLUSIVE: closeChapter in app.ts opens a confirm overlay when dirty and calls forgetChapter when clean, but no test anywhere in the range exercises it (test files reference only its binding row), the spec's promised app-level test is absent, and M34-5 is unticked
+  evidence: src/app.ts:699 — "function closeChapter(): void {"
+  evidence: src/outline-commands.test.ts:297 — "expect(bindingById("outline-close-chapter")?.chords).toEqual(["C-x C-k"]);"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061341298538.md:765 — "- [ ] With unsaved edits, `C-x C-k`: Editor asks before closing."
+- ac-10 — MET: narrowing hides the lines outside the section and widening restores them with documentText unchanged, and over a hazardous fixture (544-char line, tab indent, trailing spaces, no trailing newline) documentText while narrowed equals the whole file
+  evidence: src/outline-commands.test.ts:511 — "hides lines outside the section and restores them on widen, changing no byte"
+  evidence: src/outline-commands.test.ts:533 — "never truncates a save while narrowed, over the hazardous chapter"
+  evidence: src/outline-commands.ts:612 — "export function narrowToSection(view: EditorView): string | null {"
+- ac-11 — MET: occur lists matching lines, choosing one moves the cursor to that line, cancelling changes no byte, and the match is on the line's text not its number
+  evidence: src/outline-commands.test.ts:597 — "finds matching lines and moves the cursor to the chosen one"
+  evidence: src/outline-commands.test.ts:607 — "changes not one byte when cancelled"
+  evidence: src/outline-commands.ts:699 — "export function openOccur(view: EditorView, hooks: { host?: HTMLElement } = {}): Overlay {"
+- ac-12 — MET: queryReplaceRegex opens the search panel, sets regexp true on the query and focuses the replace field
+  evidence: src/outline-commands.test.ts:585 — "opens the search panel's replace field with the regular-expression option already on"
+  evidence: src/emacs.ts:332 — "export function queryReplaceRegex(view: EditorView): void {"
+  evidence: src/emacs.ts:343 — "regexp: true,"
+- ac-13 — MET: present, publish-open and toggle-key-log keep C-c C-p, C-c C-l and C-x k; previous-heading, insert-link and close-chapter take C-c p, C-c l and C-x C-k; center-selection is gone and no row claims bare M-s; pressing M-s alone changes nothing and M-s o opens occur over the mounted application; the sweep finds no double-claimed chord
+  evidence: src/outline-commands.test.ts:285 — "leaves the three incumbents exactly where they were"
+  evidence: src/outline-commands.test.ts:300 — "retires centre-selection rather than relocating it"
+  evidence: src/outline-commands.test.ts:693 — "presses M-s alone and finds nothing changed, then M-s o and finds occur open"
+  evidence: src/emacs-keys.test.ts:339 — "gives no two rows the same chord"
+  evidence: src/emacs-keys.test.ts:382 — "reserves the chords other specs will wire, and answers none of them"
+- ac-14 — MET_WITH_CONCERNS: byte-fidelity is asserted by documentText comparisons across promote, move, fold, narrow and occur, and one source holds because heading structure is read through core/parse's parseChapter and walkBlocks; concerns: the spec's named one-source test ('derives heading structure from the same parse the sidebar's outline uses') does not exist, and legibility rests on unticked M34-3
+  evidence: src/outline-commands.test.ts:553 — "expect(documentText(view)).toBe(hazardous);"
+  evidence: src/outline-commands.ts:43 — "import { parseChapter } from "./core/parse";"
+  evidence: src/outline-commands.ts:45 — "import { walkBlocks } from "./core/tree";"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061341298538.md:734 — "- [ ] At 390: open the switch-chapter list (`C-x b`)"
+
+Gap audit:
+- honoured:
+  - the twenty-one new rows are twenty-one more rows in the same table the keys panel already shows
+    evidence: src/outline-commands.test.ts:263 — "expect(OUTLINE_ROWS).toHaveLength(21);"
+  - C-c C-p, C-c C-l and C-x k still reach Present, Publish and the key log
+    evidence: src/outline-commands.test.ts:285 — "leaves the three incumbents exactly where they were"
+  - narrowing never touched the file, only what the window shows of it
+    evidence: src/outline-commands.test.ts:533 — "never truncates a save while narrowed, over the hazardous chapter"
+  - promote, demote and move rewrite only the heading lines and the lines they carry with them
+    evidence: src/outline-commands.test.ts:398 — "demotes a heading and its subtree together"
+    evidence: src/outline-commands.test.ts:440 — "expect(documentText(view)).toBe(swapped(OUTLINE_CHAPTER, 3, 14, 15, 18));"
+  - folding costs no new dependency and reads the one parse
+    evidence: src/editor.ts:313 — "...outlineExtensions(),"
+    evidence: src/outline-commands.ts:43 — "import { parseChapter } from "./core/parse";"
+- diverged:
+  - S-Tab folds every outermost heading — delivered as every level-two heading, so a chapter written one level deeper folds nothing
+    evidence: src/outline-commands.test.ts:384 — "cycles every level-two heading folded and back open"
+    evidence: .abcd/work/DECISIONS.md:153 — "Departed from `spc-2609061341298538`'s first draft for `outline-cycle`"
+  - retiring M-s needs no suppression entry (spec Design) — delivered with M-s added to SUPPRESSED and registerEditorChords reordered
+    evidence: src/keys.ts:1239 — "chord: "M-s","
+    evidence: .abcd/work/DECISIONS.md:152 — "retiring `center-selection`'s `M-s` required adding it to `src/keys.ts`'s `SUPPRESSED`"
+  - switch-chapter opens the chapter with the cursor where she last left it — wired to app.openChapter but the cursor restoration is not asserted
+    evidence: src/app.ts:984 — ""outline-switch-chapter": () => {"
+    evidence: src/outline-commands.test.ts:563 — "filters chapters by name and calls back with the chosen path"
+- missing:
+  - close-chapter asks before closing when dirty and closes silently when clean — no test exercises it
+    evidence: src/app.ts:699 — "function closeChapter(): void {"
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061341298538.md:765 — "- [ ] With unsaved edits, `C-x C-k`: Editor asks before closing."
+  - the spec's named one-source test 'derives heading structure from the same parse the sidebar's outline uses'
+    evidence: src/outline-commands.test.ts:261 — "describe("the keys panel", () => {"
+
+Scope-condition dispositions:
+- cond-2609061344229956 — narrowed: the command functions run only in the editor, but three of this vocabulary's rows (outline-next-heading, outline-previous-heading, outline-occur) are honoured on the article by map #26 in the same range, so the rows themselves do reach a rendering
+  narrowing: holds for the command functions in src/outline-commands.ts, which nothing outside the editor calls; the rows' chords and labels reach the reading views through READING_BINDING_IDS
+  evidence: src/keys.ts:1639 — ""outline-next-heading","
+  evidence: src/keys.ts:1643 — ""outline-occur","
+- cond-2609061344226878 — untested: nothing in the range exercises the shell claiming these chords back from the platform on a real keyboard; that is M34-1, unticked
+- cond-2609061344229690 — survived: the twenty-one rows cover the thirteen tier-two items and no register, rectangle or macro row was added
+  evidence: src/outline-commands.test.ts:263 — "expect(OUTLINE_ROWS).toHaveLength(21);"
+  evidence: src/keys.ts:1141 — "id: "query-replace-regex","
+- cond-2609061344225339 — survived: rows were added and pass under the existing sweep unchanged, and each conflict settlement is a dated decision line
+  evidence: src/emacs-keys.test.ts:339 — "gives no two rows the same chord"
+  evidence: .abcd/work/DECISIONS.md:151 — "Settled the four chord conflicts `itd-2609061318091323`"
+- cond-2609061344229975 — survived: switch-chapter opens a list overlay over app.chapters and calls app.openChapter; it never focuses the sidebar tree
+  evidence: src/outline-commands.ts:660 — "export function openSwitchChapter("
+  evidence: src/app.ts:747 — "openSwitchChapter("
+- cond-2609061344223634 — survived: the new ids join APP_COMMAND_IDS beside the prose vocabulary's and src/prose.ts is absent from the range's diff
+  evidence: src/emacs.ts:135 — ""outline-next-heading","
+  evidence: src/emacs.ts:130 — "`src/outline-commands.ts`, wired the same way the prose vocabulary is;"
+- cond-2609061344220963 — survived: the outline commands read headings through the one parse and reach chapters through app.chapters; no tree is drawn
+  evidence: src/app.ts:747 — "openSwitchChapter("
+  evidence: src/outline-commands.ts:60 — "for (const block of walkBlocks(chapter.blocks)) {"
+- cond-2609061344221674 — survived: which chords a reading view answers is declared by map #26's READING_BINDING_IDS, not by this module, which imports nothing from the render layer
+  evidence: src/keys.ts:1638 — "export const READING_BINDING_IDS: readonly string[] = ["
+  evidence: src/outline-commands.ts:43 — "import { parseChapter } from "./core/parse";"
+- cond-2609061344226854 — narrowed: the table's shape and the overlay cancel contract are reused (openListOverlay), but retiring M-s required a SUPPRESSED entry and a reordering of registerEditorChords, which the spec's own Design said would be neither needed nor correct
+  narrowing: holds for the table's row shape and the overlay cancel contract; the key-handling registration order in src/emacs.ts changed and M-s joined SUPPRESSED
+  evidence: src/keys.ts:1239 — "chord: "M-s","
+  evidence: .abcd/work/DECISIONS.md:152 — "reordering `src/emacs.ts`'s `registerEditorChords`"
+  evidence: src/outline-commands.ts:699 — "export function openOccur(view: EditorView, hooks: { host?: HTMLElement } = {}): Overlay {"
+- cond-2609061344223793 — survived: narrowing dispatches a decoration effect only; documentText is unchanged in both states and the cursor is unrestricted
+  evidence: src/outline-commands.ts:612 — "export function narrowToSection(view: EditorView): string | null {"
+  evidence: src/outline-commands.test.ts:511 — "hides lines outside the section and restores them on widen, changing no byte"
+- cond-2609061344224051 — survived: cycleOutline is two-state: unfold all when anything is folded, otherwise fold each level-two heading
+  evidence: src/outline-commands.ts:268 — "export function cycleOutline(view: EditorView): string | null {"
+  evidence: src/outline-commands.test.ts:384 — "cycles every level-two heading folded and back open, changing no byte"
+- cond-2609061344223035 — untested: nothing in the range attempts to rebind any chord, so the exclusion is neither exercised nor contradicted

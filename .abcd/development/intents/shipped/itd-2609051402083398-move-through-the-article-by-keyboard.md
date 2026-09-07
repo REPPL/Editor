@@ -178,9 +178,111 @@ later reading surface something to inherit rather than invent.
 
 ## Audit Notes
 
-<!-- abcd-review: OWED receipt=rcp-781d7ec9f9c8 -->
-Fidelity review OWED (receipt rcp-781d7ec9f9c8).
+<!-- abcd-review: INGESTED receipt=rcp-781d7ec9f9c8 -->
+Fidelity review — receipt rcp-781d7ec9f9c8 (verifier abcd:intent-auditor claude-fable-5-1).
 
+Provenance: abcd:intent-auditor@claude-fable-5-1 · rubric_hash sha256:542ed2cd51ff938717a3f47b2b332e8d47910beec0ca7ecdfd238ae7edf5ced5 · prompt_hash sha256:d53b5a8ac9a3f6c2450662e07edb27d8a661049b49f8e42c85832fecfec31c1c
+Input attestations: diff:c1bcf7b..cae1734@sha256:4a5e182af9d3f4549b332eff9cf5e02954a79320d0844b9f6d74d8d0a15cfc16; intent:.abcd/development/intents/shipped/itd-2609051402083398-move-through-the-article-by-keyboard.md@-; spec:.abcd/development/specs/closed/spc-2609061318158216-move-through-the-article-by-keyboard.md@-; checklist:.abcd/.work.local/logs/acceptance/spc-2609061318158216.md (M26-1..M26-5, every row unticked)@-; test-run:npx vitest run src/core/render/article-keys.test.ts src/core/render/reading-keys.test.ts src/emacs-keys.test.ts src/local-documents.test.ts src/preview.test.ts src/export/services.test.ts src/new-document-panel.test.ts src/outline-commands.test.ts src/open-source.test.ts src/focus.test.ts — 10 files, 287 tests passed, 0 failed@-; test-run:cargo test --manifest-path src-tauri/Cargo.toml article — 1 passed (export::tests::an_article_export_carries_only_the_article_s_stylesheet_and_its_scripts)@-;
+
+Acceptance rollup: MET 4 · MET_WITH_CONCERNS 4 · NOT_MET 0 · INCONCLUSIVE 1
+
+Per-criterion verdicts:
+- ac-1 — MET: the fixture is two Parts holding four Chapters; C-c C-n visits all six headings in document order and C-c p retraces them, reveal() focuses and scrolls the heading, and both ends refuse rather than wrap
+  evidence: src/core/render/article-keys.test.ts:204 — "moves to each heading in document order, and back, from the top of the page"
+  evidence: src/core/render/article-keys.test.ts:233 — "refuses past the last heading, matching the editor's own outline-next-heading"
+  evidence: src/core/render/article-keys.js:237 — "function moveSection(delta)"
+  evidence: src/core/render/article-keys.js:191 — "function reveal(element)"
+- ac-2 — MET_WITH_CONCERNS: M-s o opens the contents overlay read from nav.contents, C-n/C-p step its rows and Return jumps and closes; concern: the fixture's nav carries Parts, Chapters and Sections only, so the promised fourth level (Sub-sections) is never exercised
+  evidence: src/core/render/article-keys.test.ts:287 — "opens listing Parts, Chapters and Sections, moves with the movement chords, and Return jumps and closes"
+  evidence: src/core/render/article-keys.test.ts:30 — "< nav class="contents">< ol>"
+  evidence: src/core/render/article-keys.js:359 — "function contentsEntries()"
+- ac-3 — MET_WITH_CONCERNS: C-g closes the contents list keeping sectionIndex, Escape closes it too, and C-g on the search field closes search and restores the origin element; concern: the script holds one overlay at a time, so the criterion's combined state (contents open and a search in progress) is not representable and each cancel is proven separately
+  evidence: src/core/render/article-keys.test.ts:319 — "closes the contents list on C-g, keeping the reading position"
+  evidence: src/core/render/article-keys.test.ts:331 — "closes the contents list on Escape too"
+  evidence: src/core/render/article-keys.js:727 — "function handleOverlayKey(event, chord)"
+- ac-4 — MET: the word lantern appears in three paragraphs; C-s steps forward through all three, C-r steps back, and C-g returns focus to the element the search started from
+  evidence: src/core/render/article-keys.test.ts:341 — "steps forward and backward through three matches, and cancel returns to the paragraph it started from"
+  evidence: src/core/render/article-keys.js:479 — "function findMatches(query)"
+- ac-5 — MET: C-h b opens a panel with exactly nine dt rows carrying the honoured labels, and a real table row the page does not honour (Undo) is absent; the panel reads the same HONOURED array the data block was parsed into
+  evidence: src/core/render/article-keys.test.ts:384 — "lists every honoured action with its label and chords, and no other action"
+  evidence: src/core/render/article-keys.js:109 — "function loadHonoured()"
+  evidence: src/core/render/article-keys.js:604 — "function openKeysPanel()"
+- ac-6 — MET: C-k (kill-line, a table row the reading views do not honour) leaves state unchanged, opens no overlay, and the event is not defaultPrevented
+  evidence: src/core/render/article-keys.test.ts:414 — "does nothing: no overlay, no movement, and the event is left unclaimed"
+- ac-7 — INCONCLUSIVE: only structural stylesheet assertions exist (no bare px width, panels capped by calc(100vw)); jsdom has no layout engine, and the checklist row that would confirm legibility at 390/820/1280 (M26-1) is unticked
+  evidence: src/core/render/article-keys.test.ts:577 — "declares no width in map #26's own section as a bare pixel value"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318158216.md:628 — "- [ ] At 1280: open the keys panel"
+- ac-8 — MET_WITH_CONCERNS: with fetch stubbed and XMLHttpRequest.open spied, every action is exercised and neither is called, localStorage stays empty after a search, and the script contains no location/history/storage/sendBeacon write; concern: proven in jsdom only, the real network-panel check M26-2 is unticked
+  evidence: src/core/render/article-keys.test.ts:447 — "calls neither fetch nor XMLHttpRequest while every action is exercised"
+  evidence: src/core/render/article-keys.test.ts:470 — "keeps a search term in memory only"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318158216.md:640 — "- [ ] Open the browser's network panel before loading the article."
+- ac-9 — MET_WITH_CONCERNS: nothing stored (fetch/XHR spy, empty localStorage), one source (readingBindings resolves the table's own rows and the one data block is written by build.ts and preview.ts and shipped by services.ts and stage.rs), network only on publish (same spy); concern: legible on three device classes rests on unticked M26-1
+  evidence: src/keys.ts:1657 — "export function readingBindings(): Binding[]"
+  evidence: src/publish/build.ts:732 — "readingKeysDataScript(),"
+  evidence: src/preview.ts:276 — "articleKeys()?.boot();"
+  evidence: src-tauri/src/publish/stage.rs:140 — "include_str!("../../../src/core/render/article-keys.js")"
+  evidence: src/core/render/article-keys.test.ts:447 — "calls neither fetch nor XMLHttpRequest"
+
+Gap audit:
+- honoured:
+  - the reading views borrow the editor's vocabulary and claim no chord of their own invention
+    evidence: src/keys.ts:1638 — "export const READING_BINDING_IDS: readonly string[] = ["
+    evidence: src/emacs-keys.test.ts:2176 — "the reading views' own vocabulary (map #26)"
+  - one cancel chord closes whatever is open, and so does Escape
+    evidence: src/core/render/article-keys.test.ts:319 — "closes the contents list on C-g, keeping the reading position"
+    evidence: src/core/render/article-keys.test.ts:331 — "closes the contents list on Escape too"
+  - a keys panel one chord away lists what is live on the page
+    evidence: src/core/render/article-keys.test.ts:384 — "lists every honoured action with its label and chords, and no other action"
+  - nothing about where a reader has moved is recorded anywhere but the browser
+    evidence: src/core/render/article-keys.test.ts:447 — "calls neither fetch nor XMLHttpRequest while every action is exercised"
+  - the panel an egg opens takes the keyboard and closes on the cancel chord
+    evidence: src/core/render/article-keys.test.ts:426 — "does nothing but relay C-g as Escape while an egg panel is open"
+    evidence: src/core/render/article-keys.js:641 — "function eggPanelOpen()"
+- diverged:
+  - a reading view declares which table entries it honours and nothing else — delivered with a per-chord exclusion (s-f, Down, Up) so an honoured row's chords on the page are a subset of the table's
+    evidence: src/core/render/reading-keys.ts:45 — "const READING_EXCLUDED_CHORDS: ReadonlySet< string> = new Set(["s-f", "Down", "Up"]);"
+  - the contents list lists Parts, Chapters, Sections, and Sub-sections — the fourth level is never exercised
+    evidence: src/core/render/article-keys.test.ts:30 — "< nav class="contents">< ol>"
+  - the event-to-chord mapping is excluded as plumbing — delivered as a second, independent copy inside the reading script, proven against the original over a shared fixture
+    evidence: src/core/render/article-keys.js:76 — "function chordFromEvent(event)"
+    evidence: src/core/render/article-keys.test.ts:183 — "agrees with src/keys.ts's chordFromEvent over the shared fixture"
+- missing:
+  - the deck at the lectern, the article in the single file, and the rehearsal cards all move the same way — the single-file renderer references no article-keys script, the present window keeps its own keydown listener, and no rehearsal deck exists in the range
+    evidence: src/export/services.ts:95 — "`${FOLDER_CHROME}/article-keys.js`,"
+    evidence: src/present.ts:508 — "document.addEventListener("keydown", (event) => {"
+  - legibility at 390, 820 and 1280 CSS px confirmed on a real layout engine
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061318158216.md:628 — "- [ ] At 1280: open the keys panel"
+
+Scope-condition dispositions:
+- cond-2609061318150599 — narrowed: the script is wired into the presenter site, the folder export and the app's preview; the single-file renderer (html.ts) references no article script, and Safari/Chromium at the three widths are only reachable through the unticked M26-1
+  narrowing: holds for the presenter site, the folder export and the desktop preview only; the article inside the single HTML file carries no article-keys.js, and the three widths in real engines are unverified
+  evidence: src/publish/build.ts:733 — "< script src="${chrome}/article-keys.js" defer>< /script>"
+  evidence: src/export/services.ts:95 — "`${FOLDER_CHROME}/article-keys.js`,"
+  evidence: preview.html:42 — "< script type="module" src="/src/core/render/article-keys.js" defer>< /script>"
+- cond-2609061318153674 — survived: bare Down/Up are excluded from the honoured chords so the browser's own scroll is untouched, an unhonoured chord is left unclaimed, and the only visible addition is a native button reachable by touch or Tab
+  evidence: src/core/render/article-keys.test.ts:484 — "never prevents default on bare Down or Up, leaving the browser's own scroll alone"
+  evidence: src/core/render/article-keys.test.ts:401 — "opens the same panel from the visible help button, reachable by Tab alone"
+- cond-2609061318158331 — survived: the binding table exists and the reading views declare their honoured entries as nine ids resolved against it
+  evidence: src/keys.ts:1638 — "export const READING_BINDING_IDS: readonly string[] = ["
+  evidence: src/core/render/reading-keys.test.ts:22 — "names exactly the reading views' own ids, in the table's own order"
+- cond-2609061318158896 — narrowed: the table and src/keys.ts's chordFromEvent are unchanged in the range, and map #26 declares entries as the boundary says; but it also decides a fixed per-chord exclusion and carries its own copy of the event-to-chord mapping
+  narrowing: 26 decides which entries a reading view honours, and additionally which of an honoured row's chords it drops (s-f, Down, Up) and a duplicated chord mapping; map #2's own table and mapping are untouched
+  evidence: src/core/render/reading-keys.ts:45 — "READING_EXCLUDED_CHORDS"
+  evidence: src/core/render/article-keys.js:76 — "function chordFromEvent(event)"
+  evidence: src/keys.ts:1370 — "export function chordFromEvent(event: KeyboardEvent): string {"
+- cond-2609061318159357 — survived: the contents overlay reads the page's own nav.contents back as data and writes none of the page; the stylesheet additions sit in the section article.css reserved for this map
+  evidence: src/core/render/article-keys.js:359 — "function contentsEntries()"
+  evidence: src/core/render/article.css:711 — "keys panel `article-keys.js` builds"
+- cond-2609061318158883 — untested: nothing in the range exercises the reader-controls toolbar's reachability by keyboard; the spec records it as found slow rather than absent, and M26-3 is unticked
+- cond-2609061318156889 — untested: no code in the range makes the deck consume the reading vocabulary (READING_BINDING_IDS is referenced only by keys.ts, reading-keys.ts and article-keys.js); the deck's own movement is neither exercised nor contradicted here
+- cond-2609061318153551 — untested: no rehearsal deck exists in the range, so its consumption of these chords is neither exercised nor contradicted
+- cond-2609061318153518 — survived: while an egg panel is open every chord but cancel is left alone and C-g is relayed as the Escape keydown article-eggs.js listens for, guarded by a marker property against re-relay
+  evidence: src/core/render/article-keys.test.ts:426 — "does nothing but relay C-g as Escape while an egg panel is open"
+  evidence: src/core/render/article-keys.js:661 — "relayed.articleKeysRelayed = true;"
+- cond-2609061318155666 — narrowed: src/keys.ts's chordFromEvent and src/overlay.ts are unchanged in the range, so the excluded pieces were not redesigned; the event-to-chord mapping was nonetheless re-implemented inside the reading script as a proven copy
+  narrowing: holds for the originals in src/keys.ts and src/overlay.ts, which the range leaves untouched; the mapping itself is duplicated inside article-keys.js and proven equal over chord-mapping.fixture.ts
+  evidence: src/core/render/article-keys.js:76 — "function chordFromEvent(event)"
+  evidence: src/core/render/article-keys.test.ts:183 — "agrees with src/keys.ts's chordFromEvent over the shared fixture"
 ## Grounds
 
 - pursued: the reading views honour nine existing binding-table rows (heading movement, line movement, occur, isearch, cancel, keys-panel) with no invented chord, proven in article-keys.test.ts and reading-keys.test.ts; wrong would show as a chord live on the page absent from the table, or an honoured chord doing nothing.

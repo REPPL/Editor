@@ -196,9 +196,113 @@ proof-reading pass that goes with them.
 
 ## Audit Notes
 
-<!-- abcd-review: OWED receipt=rcp-54bb87ee6800 -->
-Fidelity review OWED (receipt rcp-54bb87ee6800).
+<!-- abcd-review: INGESTED receipt=rcp-54bb87ee6800 -->
+Fidelity review — receipt rcp-54bb87ee6800 (verifier abcd:intent-auditor claude-fable-5-1).
 
+Provenance: abcd:intent-auditor@claude-fable-5-1 · rubric_hash sha256:542ed2cd51ff938717a3f47b2b332e8d47910beec0ca7ecdfd238ae7edf5ced5 · prompt_hash sha256:19869a347b6317fa656e15acf262277f96fb5b47c0d826a5ebc4175b2a3a64e0
+Input attestations: diff:c1bcf7b..cae1734@sha256:4a5e182af9d3f4549b332eff9cf5e02954a79320d0844b9f6d74d8d0a15cfc16; intent:.abcd/development/intents/shipped/itd-2609051335502171-cite-from-a-bibliography-file.md@-; spec:.abcd/development/specs/closed/spc-2609061318151591-cite-from-a-bibliography-file.md@-; checklist:.abcd/.work.local/logs/acceptance/spc-2609061318151591.md (M11-1..M11-4, every row unticked)@-; test-run:npx vitest run --reporter=verbose: 50 files, 1017 passed, 0 failed (bibliography.test.ts 36, citations.test.ts 25, html.test.ts 11, deck.test.ts 27, slides.test.ts 20, sidebar.test.ts 10, document.test.ts 27, preview.test.ts 10, build.test.ts 34, publish/services.test.ts 7, export/services.test.ts 8)@-; test-run:cargo test --manifest-path src-tauri/Cargo.toml: 237 passed, 0 failed (metadata::reads_the_bibliography_a_document_names, metadata::reports_no_bibliography_for_a_document_that_names_none, metadata::refuses_a_bibliography_the_document_names_but_does_not_carry included)@-; probe:vite-node scratch script over parseChapter/buildDeck/renderSlides with a resolved bibliography: a rule-opened slide face rendered < span class="citation">[@nosuchkey]< /span> and < span class="citation">[@carroll1999]< /span> literally@-;
+
+Acceptance rollup: MET 3 · MET_WITH_CONCERNS 3 · NOT_MET 1 · INCONCLUSIVE 2
+
+Per-criterion verdicts:
+- ac-1 — MET: the preview numbers a resolved key, writes the full reference in the margin and appends a list holding one entry per cited key in first-citation order and no others
+  evidence: src/preview.test.ts:111 — "numbers a resolved citation and appends the generated reference list"
+  evidence: src/core/render/article.test.ts:128 — "writes a resolved citation as a numbered marker, with the full reference in the margin"
+  evidence: src/publish/build.test.ts:548 — "numbers the article's reference list in first-citation order, one entry per cited key"
+  evidence: src/core/bibliography.test.ts:236 — "numbers keys in first-citation order, one entry per key, no others"
+- ac-2 — MET_WITH_CONCERNS: the completion tooltip lists every key matching the typed prefix and the hover summary names author, title and date through a hoverTooltip in place; the concern is that the pointer-resting hover itself is jsdom-undrivable (M11-2 unticked) and Tab accepts only the first candidate
+  evidence: src/citations.test.ts:180 — "lists every matching key once a bibliography is set and the trigger is typed"
+  evidence: src/citations.test.ts:141 — "names a resolved key's author, title and date, plainly"
+  evidence: src/citations.ts:299 — "export const citationHoverTooltip = hoverTooltip((view, pos) => {"
+  evidence: src/citations.ts:288 — "{ key: "Tab", run: acceptFirstCandidate },"
+- ac-3 — MET_WITH_CONCERNS: the locator is carried inside the brackets, the inline footnote is a margin note, the entry appears once in the list, the deck slide carries a credit line and no list, and the article's list and the deck's credit lines are proven to agree; the PDF clause is deferred to phase 6 and nothing was compared against a paper
+  evidence: src/core/render/html.test.ts:47 — "carries a locator after the number, inside the brackets, the number still linked"
+  evidence: src/core/render/article.test.ts:150 — "puts a citation and a footnote from the same paragraph in the margin"
+  evidence: src/publish/build.test.ts:586 — "gives every deck slide whose Section cites a resolved key a credit line naming it, and no reference list"
+  evidence: src/publish/build.test.ts:597 — "agrees: the article's reference list and the deck's credit lines name the same works, in the same order"
+  evidence: .abcd/development/specs/closed/spc-2609061318151591-cite-from-a-bibliography-file.md:273 — "the paper does not exist until map #21 (phase 6). `src/core/render/print` is not seeded."
+- ac-4 — NOT_MET: the preview marks the key and the sidebar lists it, but the promise that no rendering prints [@nosuchkey] as literal bracketed text to a reader is contradicted by the deck: slides.ts builds a RenderContext with no citations, html.ts falls back to the literal text, slides.test asserts that fallback, and a probe over a rule-opened slide (prose on the face, which the audience reads) rendered < span class="citation">[@nosuchkey]< /span>
+  evidence: src/preview.test.ts:125 — "marks an unresolved key rather than printing its brackets"
+  evidence: src/document.test.ts:592 — "lists a chapter's unresolved citation keys, from the shell's own bibliography read"
+  evidence: src/core/render/slides.ts:102 — "return { resolve, rendering: "slides", variant };"
+  evidence: src/core/render/html.ts:275 — "return `<span class="citation">${escapeText(node.text)}</span>`;"
+  evidence: src/core/render/slides.test.ts:194 — "keeps a citation as the literal text the author wrote"
+  evidence: src/core/deck.ts:131 — "A slide opened by a rule sends it to the face"
+- ac-5 — MET: citationLinesFor adds a citation foot line per resolved key on the Section's slide, slides.ts renders it inside the slide foot, and the test asserts no reference list anywhere in the deck
+  evidence: src/core/deck.test.ts:346 — "names the cited work at the foot of the Section's slide"
+  evidence: src/core/render/slides.test.ts:199 — "names the cited work at the foot of the slide, with no reference list anywhere"
+  evidence: src/core/render/slides.ts:187 — "return `<p class="citation">${escapeText(line.text ?? "")}</p>`;"
+- ac-6 — MET: a document naming no bibliography reads back Ok(None) from the shell, the build and the resolver render an ordinary chapter with no list and throw nothing
+  evidence: src/publish/build.test.ts:693 — "renders a chapter with neither a citation nor a bibliography as an ordinary chapter"
+  evidence: src/core/bibliography.test.ts:312 — "resolves nothing against an empty bibliography, without throwing"
+  evidence: src-tauri/src/metadata.rs:84 — "pub fn read_bibliography(root: &Path) -> Result< Option< String>, String> {"
+- ac-7 — INCONCLUSIVE: the margin reference rides map #9's one fold rule and no new breakpoint was added, but no test renders a width and M11-1 is unticked
+  evidence: src/core/render/article.css:356 — "@media (min-width: 760px)"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318151591.md:610 — "[ ] At 390: the margin note folds into the flow directly beneath its"
+- ac-8 — INCONCLUSIVE: no delivered test opens a chapter in a plain Markdown tool; the claim rests on the forms being Pandoc's own, and M11-4 is unticked
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318151591.md:644 — "[ ] Open the same chapter in a plain Markdown viewer or in Emacs with no"
+- ac-9 — MET_WITH_CONCERNS: renderings agree (the worked test), network only on publish (the bibliography is read from disk and the app makes no request) and byte-fidelity (parse round-trip) are cited; the concern is that 'one resolution step' became two resolutions sharing one parse, and the plain-tool and three-width disciplines are unverified
+  evidence: src/publish/build.test.ts:597 — "agrees: the article's reference list and the deck's credit lines name the same works, in the same order"
+  evidence: src/publish/build.ts:635 — "const citations = citationsFor(tree, options.bibliography, "article");"
+  evidence: src/publish/build.ts:636 — "const deckCitations = citationsFor(tree, options.bibliography);"
+  evidence: src/document.test.ts:539 — "attempts no network request while a document is open"
+  evidence: src/local-documents.test.ts:546 — "parses and round-trips every chapter byte for byte"
+
+Gap audit:
+- honoured:
+  - a numbered marker in the paragraph and the full reference in the margin, with the list built from the keys the text uses
+    evidence: src/preview.test.ts:111 — "numbers a resolved citation and appends the generated reference list"
+  - the editor completes the key from the file as Alice types
+    evidence: src/citations.test.ts:180 — "lists every matching key once a bibliography is set and the trigger is typed"
+  - a short source line at the foot of the slide
+    evidence: src/core/deck.test.ts:346 — "names the cited work at the foot of the Section's slide"
+  - an unresolved key is marked in the preview and listed against the chapter in the sidebar
+    evidence: src/preview.test.ts:125 — "marks an unresolved key rather than printing its brackets"
+    evidence: src/document.test.ts:592 — "lists a chapter's unresolved citation keys"
+  - a document with no bibliography is an ordinary document
+    evidence: src/publish/build.test.ts:693 — "renders a chapter with neither a citation nor a bibliography as an ordinary chapter"
+- diverged:
+  - no rendering quietly prints the brackets as literal text; the deck's slide face does
+    evidence: src/core/render/slides.test.ts:194 — "keeps a citation as the literal text the author wrote"
+    evidence: src/core/render/slides.ts:102 — "return { resolve, rendering: "slides", variant };"
+  - one resolution step shared by every rendering; delivered as two resolutions (article-filtered and deck-unfiltered) over one parse
+    evidence: src/publish/build.ts:636 — "const deckCitations = citationsFor(tree, options.bibliography);"
+  - completion accepts only the first candidate on Tab, with no way to reach a second by keyboard
+    evidence: src/citations.ts:288 — "{ key: "Tab", run: acceptFirstCandidate },"
+- missing:
+  - the journal PDF's numbered reference and reference list
+    evidence: .abcd/development/specs/closed/spc-2609061318151591-cite-from-a-bibliography-file.md:273 — "`src/core/render/print` is not seeded."
+  - a rendered check of the margin reference at 390, 820 and 1280 CSS px
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061318151591.md:604 — "## M11-1 — legible at 390, 820, and 1280 CSS pixels"
+  - a plain-tool degrade check
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061318151591.md:642 — "## M11-4 — degrades in a plain tool"
+
+Scope-condition dispositions:
+- cond-2609061318155423 — narrowed: authoring happens in the app and the bibliography is read from disk with no network call, and display reaches the article and the deck; the journal PDF does not exist to display anything
+  narrowing: holds for authoring in the desktop app and display in the online article and the deck; the journal PDF is absent until phase 6
+  evidence: src-tauri/src/metadata.rs:84 — "pub fn read_bibliography(root: &Path) -> Result< Option< String>, String> {"
+  evidence: .abcd/development/specs/closed/spc-2609061318151591-cite-from-a-bibliography-file.md:273 — "the paper does not exist until map #21 (phase 6)"
+- cond-2609061318154843 — survived: the deck's credit line and the article's list are computed from the resolution with no reader-facing control, and the reader toolbar offers no reference control
+  evidence: src/core/deck.ts:424 — "function citationLinesFor(slide: Draft, resolution: CitationResolution | undefined): FootLine[] {"
+  evidence: src/core/render/article-controls.js:35 — "var CONTROLS = ["
+- cond-2609061318151558 — survived: exactly one style, numeric, is configured and an unrecognised style falls back to it rather than offering a choice
+  evidence: src/core/bibliography.ts:398 — "export const DEFAULT_CITATION_STYLE = "numeric";"
+- cond-2609061318157278 — survived: a chapter with no citations and a document with no bibliography both render as ordinary, with the list simply absent and nothing thrown
+  evidence: src/publish/build.test.ts:693 — "renders a chapter with neither a citation nor a bibliography as an ordinary chapter"
+  evidence: src/core/bibliography.test.ts:312 — "resolves nothing against an empty bibliography, without throwing"
+- cond-2609061318153081 — survived: the article's citation margin note reads the resolution into map #9's renderMarginNote and changes nothing about where it sits or folds
+  evidence: src/core/render/article.ts:416 — "function citationMarginNotes(node: Inline, article: Article): string[] {"
+  evidence: src/core/render/article.ts:401 — "export function renderMarginNote(kind: string, body: string, id: string | null = null): string {"
+- cond-2609061318153640 — survived: a Section's citations resolve to a FootLine of a new kind rendered inside the slide foot map #5 already owns; the slide mapping itself is untouched
+  evidence: src/core/deck.ts:46 — "readonly kind: "credit" | "footnote" | "citation";"
+  evidence: src/core/render/slides.ts:186 — "if (line.kind === "citation") {"
+- cond-2609061318153883 — untested: the PDF does not exist in this delivery, so which entries it is given and whether they agree was neither exercised nor contradicted
+- cond-2609061318155500 — survived: this delivery starts at the typed '[@' and owns completion, hover and resolution from there; the insert palette was not changed
+  evidence: src/citations.ts:66 — "export function citationTriggerAt(lineText: string, column: number): CitationTrigger | null {"
+- cond-2609061318154649 — falsified: the condition placed the BibTeX reader and the style implementation outside this intent as plumbing; this intent's own spec built both (parseBibliography and the numeric formatReference) inside its scope, while the variant-removal half stayed with the discipline
+  evidence: src/core/bibliography.ts:216 — "export function parseBibliography(text: string): Bibliography {"
+  evidence: src/core/bibliography.ts:371 — "export function formatReference(entry: BibEntry): string {"
+  evidence: .abcd/development/specs/closed/spc-2609061318151591-cite-from-a-bibliography-file.md:246 — "new: the BibTeX reader (`parseBibliography`)"
 ## Grounds
 
 - pursued: a citation resolves against a document's bibliography the same way in the article's numbered marker and margin note, the article's generated reference list, and the deck's per-slide credit line, all read from one resolveCitations call per document; an unresolved key never prints as literal brackets anywhere and is listed against its chapter in the sidebar; the editor completes and hovers a citation key from the same bibliography with no new dependency. This would be shown wrong by: the deck's credit line naming a work the article's reference list omits or numbers differently, an unresolved key appearing as [@key] text in the article, or the editor's completion list missing a key the bibliography carries.

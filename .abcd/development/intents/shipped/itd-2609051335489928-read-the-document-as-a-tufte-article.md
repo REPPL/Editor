@@ -216,9 +216,123 @@ text.
 
 ## Audit Notes
 
-<!-- abcd-review: OWED receipt=rcp-f251a03663ef -->
-Fidelity review OWED (receipt rcp-f251a03663ef).
+<!-- abcd-review: INGESTED receipt=rcp-f251a03663ef -->
+Fidelity review — receipt rcp-f251a03663ef (verifier abcd:intent-auditor claude-fable-5-1).
 
+Provenance: abcd:intent-auditor@claude-fable-5-1 · rubric_hash sha256:542ed2cd51ff938717a3f47b2b332e8d47910beec0ca7ecdfd238ae7edf5ced5 · prompt_hash sha256:60a6366288794e8e8e8ab2c2ee78f4d3b51a712fb4e6cfc22d00853a8cce8711
+Input attestations: diff:c1bcf7b..cae1734@sha256:4a5e182af9d3f4549b332eff9cf5e02954a79320d0844b9f6d74d8d0a15cfc16; intent:.abcd/development/intents/shipped/itd-2609051335489928-read-the-document-as-a-tufte-article.md@-; spec:.abcd/development/specs/closed/spc-2609061318090042-read-the-document-as-a-tufte-article.md@-; checklist:.abcd/.work.local/logs/acceptance/spc-2609061318090042.md (M9-1..M9-7, every row unticked)@-; test-run:npx vitest run --reporter=verbose: 50 files, 1017 passed, 0 failed (article.test.ts 44, article-video.test.ts 8, preview.test.ts 10, build.test.ts 34, export/services.test.ts 8, local-documents.test.ts 40)@-; test-run:cargo test --manifest-path src-tauri/Cargo.toml: 237 passed, 0 failed (preview::, export::, publish::stage:: included)@-;
+
+Acceptance rollup: MET 5 · MET_WITH_CONCERNS 4 · NOT_MET 0 · INCONCLUSIVE 1
+
+Per-criterion verdicts:
+- ac-1 — MET_WITH_CONCERNS: the whole document composes as one page with a Part-grouped four-level contents list whose every href resolves, but a Part's own entry is a label that moves nowhere, so 'choosing any entry moves the page' holds for Chapter, Section and Sub-section entries only
+  evidence: src/core/render/article.test.ts:328 — "carries the Parts, the Chapters, the Sections and the Sub-sections, and each entry points at that heading"
+  evidence: src/core/render/article.test.ts:352 — "choosing an entry moves the page to that heading: every href names an id the chapter's own rendering writes"
+  evidence: src/publish/build.test.ts:166 — "gives the whole document one contents list, chapter by chapter"
+  evidence: src/preview.test.ts:46 — "renders the whole document as one page, with a contents list carrying every chapter's own heading"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318090042.md:669 — "Choosing a Part's own label does nothing by itself"
+- ac-2 — MET: renderBlocks appends every citation and footnote as a margin-note aside directly after its paragraph, and the test asserts both sit beside the paragraph with no foot-of-page section
+  evidence: src/core/render/article.test.ts:150 — "puts a citation and a footnote from the same paragraph in the margin, in source order, beside it rather than at the foot"
+  evidence: src/core/render/article.test.ts:96 — "writes a footnote as a margin note beside its paragraph, not at the foot of the page"
+  evidence: src/core/render/article.ts:540 — ".map((block) => renderOneBlock(block, article) + inlineMarginNotes(block, article))"
+- ac-3 — MET: a .credit div and a .margin span each render through renderMarginNote as the block's next sibling, and article.css floats .margin-note into the reserved rail from 760px upward, which covers 1280
+  evidence: src/core/render/article.test.ts:403 — "writes a credit as a margin note, beside the block it follows"
+  evidence: src/core/render/article.test.ts:415 — "writes a `.margin` span as a margin note, and leaves no marker behind in the sentence"
+  evidence: src/core/render/article.css:356 — "@media (min-width: 760px)"
+  evidence: src/core/render/article.css:375 — "width: var(--article-margin-width);"
+- ac-4 — MET_WITH_CONCERNS: the callout renders as a div carrying data-kind that article.css labels, and .callout declares no fixed width, but the 390 CSS px clause (full measure, nothing scrolling sideways) has no test and M9-3 is unticked
+  evidence: src/core/render/article.test.ts:221 — "writes a callout as a box in the flow, carrying its kind"
+  evidence: src/core/render/article.ts:294 — "["data-kind", kind],"
+  evidence: src/core/render/article.css:245 — "body.article .callout {"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318090042.md:698 — "[ ] At 390 CSS px the callout keeps the full measure"
+- ac-5 — MET: renderOneBlock returns nothing for the absent placement, puts columns in the flow, renders a divider as an ordinary heading, and the page-break comment test passes
+  evidence: src/core/render/article.test.ts:372 — "puts columns in the flow, omits notes, keeps a divider an ordinary heading"
+  evidence: src/core/render/article.test.ts:424 — "ignores a page-break comment"
+  evidence: src/core/render/article.ts:477 — "case "absent":"
+  evidence: src/core/canon.ts:180 — "article: { placement: "absent", wording: "absent" },"
+- ac-6 — INCONCLUSIVE: the fold rule exists in article.css, but no test reads the stylesheet's breakpoint back (the spec's claimed 'stylesheet assertions' in article.test.ts do not exist: no test file references ARTICLE_STYLESHEET or 760) and the three-width look is M9-2, unticked
+  evidence: src/core/render/article.css:356 — "@media (min-width: 760px)"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318090042.md:684 — "[ ] At 390 CSS px: every one of the four notes has folded into the flow"
+  evidence: .abcd/development/specs/closed/spc-2609061318090042-read-the-document-as-a-tufte-article.md:547 — "article.css's own rules read back in article.test.ts's stylesheet assertions"
+- ac-7 — MET: the renderer writes the poster, caption and an ordered source list with no video element, and article-video.js inserts no player when every probe fails
+  evidence: src/core/render/article.test.ts:240 — "tries a video's sources in the order written, and inserts no player when they are all unreachable at render time"
+  evidence: src/core/render/article-video.test.ts:146 — "inserts no player and marks nothing when every source is unreachable"
+  evidence: src/core/render/html.ts:480 — "< figure class="video">${poster}${caption}< ul class="video-sources">${links}< /ul>< /figure>"
+- ac-8 — MET: the figure test asserts alt text as the caption span and the title as the credit span inside a figure.full-bleed, and article.css runs .full-bleed to the full measure
+  evidence: src/core/render/article.test.ts:230 — "runs a `.full-bleed` image the full measure"
+  evidence: src/core/render/html.ts:422 — "Alt text is the caption; the title attribute is the credit"
+  evidence: src/core/render/article.css:313 — "body.article .full-bleed {"
+- ac-9 — MET_WITH_CONCERNS: the site build and the preview call one exported composeArticle and are proven to emit the identical fragment, and the exported page is the staged page byte for byte; the concern is that the 'exported single file' is the folder export's index.html (map #17 undelivered) and the three-host comparison M9-6 is unticked
+  evidence: src/publish/build.test.ts:648 — "composes the identical article fragment preview.ts's articleOf renders for the same chapters (Fable F8)"
+  evidence: src/publish/build.test.ts:446 — "an exported page is the staged page with the chrome base substituted, byte for byte"
+  evidence: src/preview.ts:38 — "import { composeArticle, folderOf, partTitleOf, type ComposedChapter } from "./publish/build";"
+  evidence: src/export/services.ts:88 — "article: ["
+- ac-10 — MET_WITH_CONCERNS: one source (stage.rs include_str!s the core files and preview.html links them), renderings agree (composeArticle test), no machine in the document (PendingPreview in memory) and no-script markup are cited; legible on three device classes is manual and unticked, and variant fidelity is not yet binding
+  evidence: src-tauri/src/publish/stage.rs:116 — "include_str!("../../../src/core/render/article.css"),"
+  evidence: preview.html:13 — "< link rel="stylesheet" href="/src/core/render/article.css" />"
+  evidence: src-tauri/src/preview.rs:49 — "pub struct PendingPreview(Mutex< Option< PreviewSource>>);"
+  evidence: src/publish/build.test.ts:648 — "composes the identical article fragment"
+  evidence: .abcd/.work.local/logs/acceptance/spc-2609061318090042.md:672 — "## M9-2 — margin notes at 390, 820, and 1280 CSS px"
+
+Gap audit:
+- honoured:
+  - the whole document is one page with a contents list to four levels
+    evidence: src/core/render/article.test.ts:328 — "carries the Parts, the Chapters, the Sections and the Sub-sections"
+  - references sit in the margin level with the paragraph, never at a foot of the page
+    evidence: src/core/render/article.test.ts:150 — "beside it rather than at the foot"
+  - slide-only constructs leave no mark on the page
+    evidence: src/core/render/article.test.ts:372 — "puts columns in the flow, omits notes, keeps a divider an ordinary heading"
+  - out of reach of every source, the poster frame and a link appear with the caption
+    evidence: src/core/render/article-video.test.ts:146 — "inserts no player and marks nothing when every source is unreachable"
+  - one renderer, one stylesheet, one script serve every host
+    evidence: src-tauri/src/publish/stage.rs:119 — ""presenter/article-video.js","
+    evidence: preview.html:44 — "< script type="module" src="/src/core/render/article-video.js" defer>< /script>"
+- diverged:
+  - the third host is an 'exported single file'; delivered as the folder export's index.html
+    evidence: src/export/services.ts:88 — "article: ["
+    evidence: .abcd/development/specs/closed/spc-2609061318090042-read-the-document-as-a-tufte-article.md:308 — "the acceptance criterion's "exported single file" is answered by that folder export's own `index.html`"
+  - choosing any contents entry moves the page; a Part entry is a label with no href
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061318090042.md:669 — "Choosing a Part's own label does nothing by itself"
+  - the spec names stylesheet assertions in article.test.ts that the file does not contain
+    evidence: .abcd/development/specs/closed/spc-2609061318090042-read-the-document-as-a-tufte-article.md:547 — "article.css's own rules read back in article.test.ts's stylesheet assertions"
+- missing:
+  - a rendered check that the margin folds at 390 and returns at 820 and 1280 with nothing wider than the viewport
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061318090042.md:687 — "[ ] At all three widths, nothing on the page scrolls sideways"
+  - a comparison of the three hosts for one document
+    evidence: .abcd/.work.local/logs/acceptance/spc-2609061318090042.md:737 — "[ ] The three pages carry the same headings, in the same order."
+
+Scope-condition dispositions:
+- cond-2609061318099562 — falsified: the condition assumed one spec would cover this intent and map #10 together; two separate specs were written and closed, one per intent
+  evidence: .abcd/development/specs/closed/spc-2609061318090042-read-the-document-as-a-tufte-article.md:2 — "id: spc-2609061318090042"
+  evidence: .abcd/development/specs/closed/spc-2609061318154502-read-it-the-way-i-like-it.md:2 — "id: spc-2609061318154502"
+- cond-2609061318091913 — untested: no delivered run exercised Safari or Chromium at 390, 820 or 1280 CSS px; every test is jsdom and every checklist row is unticked
+- cond-2609061318092215 — survived: the preview holds chapter text in application memory and writes nothing; no authoring gesture was added to the reading moment
+  evidence: src-tauri/src/preview.rs:49 — "pub struct PendingPreview(Mutex< Option< PreviewSource>>);"
+- cond-2609061318096567 — survived: the article renders the tree it is handed and filters by the declared variant through the pre-existing inVariant, exactly as the phase-2 assumption states
+  evidence: src/preview.test.ts:76 — "renders the document's declared variant, filtering a block marked for another"
+  evidence: src/core/render/article.ts:539 — ".filter((block) => inVariant(block, article.variant))"
+- cond-2609061318097929 — survived: the article declares the custom properties on :root and the toolbar script sets only those and one data attribute, so the boundary with map #10 held
+  evidence: src/core/render/article.css:29 — "--article-measure: 38em;"
+  evidence: src/core/render/article-controls.js:198 — "setOrClearProperty(root, "--article-text-scale", TEXT_SCALE_BY_SIZE[choice.textSize]);"
+- cond-2609061318091537 — survived: resolution lives in bibliography.ts and the article only reads the resolution into the same renderMarginNote shape, so #9 owns placement and #11 owns the key and the list
+  evidence: src/core/render/article.ts:416 — "function citationMarginNotes(node: Inline, article: Article): string[] {"
+  evidence: src/core/bibliography.ts:483 — "export function resolveCitations("
+- cond-2609061318092133 — survived: the opening, marks, tray and Konami reveal live in article-eggs.js registered through the ArticlePage seam; the article renderer adds only two switch cases and no behaviour
+  evidence: src/core/render/article-eggs.js:660 — "global.ArticlePage.register(boot);"
+  evidence: src/core/render/article.ts:505 — "case "modal":"
+- cond-2609061318090890 — survived: chooseSource tries the sources in the order written and the renderer places the poster and links at that point in the flow, deciding no policy of its own
+  evidence: src/core/render/article-video.js:110 — "function chooseSource(sources, prober) {"
+  evidence: src/core/render/article.test.ts:240 — "tries a video's sources in the order written"
+- cond-2609061318097375 — survived: the article reads its own column of the canon table and the deck keeps its own render context; slides.ts changed only for map #11's foot line
+  evidence: src/core/canon.ts:180 — "article: { placement: "absent", wording: "absent" },"
+  evidence: src/core/render/slides.ts:102 — "return { resolve, rendering: "slides", variant };"
+- cond-2609061318099092 — survived: no single-file bundling was attempted; the folder export copies the page's chrome files beside it and map #17's embedding is untouched
+  evidence: src/export/services.ts:88 — "article: ["
+- cond-2609061318090837 — survived: keyboard movement shipped as its own file under map #26 and the article renderer claims no key, so #9 asserts nothing about chords
+  evidence: src-tauri/src/publish/stage.rs:139 — ""presenter/article-keys.js","
+- cond-2609061318099438 — survived: the article gives the callout and the margin aside their own forms through renderCallout and renderMarginNote, and the canon table keeps the deck's column separate
+  evidence: src/core/render/article.ts:290 — "function renderCallout(block: Block, article: Article): string {"
+  evidence: src/core/canon.ts:189 — "article: { placement: "callout", wording: "a callout box" },"
 ## Grounds
 
 - pursued: the article as a Tufte page — margin notes that fold at 390 CSS px and sit beside the paragraph at 820 and 1280 through stylesheet rules alone, a four-level contents list grouped by Part, a callout box, full-bleed images, and a video rule a small runtime script upgrades; one renderer and one stylesheet and one script read or copied unchanged by the app's new preview window, the site build, and the folder export. It would be wrong if a margin note ever duplicated its paragraph's text inline, if the three hosts disagreed on headings or margin placement for one document, if any slide-only construct left a trace in the article, or if a video block ever showed a player before a source actually loaded.
