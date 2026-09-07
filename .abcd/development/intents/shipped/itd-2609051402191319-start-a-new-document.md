@@ -187,7 +187,8 @@ predictable place from the start or accumulate later by hand.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-9c4986bcbb38 -->
+Fidelity review OWED (receipt rcp-9c4986bcbb38).
 
 ## Grounds
 

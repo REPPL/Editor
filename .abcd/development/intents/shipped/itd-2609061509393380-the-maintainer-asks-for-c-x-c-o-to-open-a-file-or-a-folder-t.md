@@ -187,7 +187,8 @@ lesser one.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-e23ff599ff7d -->
+Fidelity review OWED (receipt rcp-e23ff599ff7d).
 
 ## Grounds
 

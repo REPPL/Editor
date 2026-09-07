@@ -178,7 +178,8 @@ later reading surface something to inherit rather than invent.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-781d7ec9f9c8 -->
+Fidelity review OWED (receipt rcp-781d7ec9f9c8).
 
 ## Grounds
 

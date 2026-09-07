@@ -324,3 +324,8 @@ to assume the sidebar or the palette is its only caller.
 
 - pursued: the outline vocabulary of Markdown and Org modes lets Alice move, fold and reshape the book by heading as her hands expect, and settling the four chord conflicts in one table keeps the reading views' vocabulary consistent; wrong if authors navigate by the sidebar alone and never fold or promote a heading
 - pursued: the outline vocabulary of Markdown and Org modes lets Alice move, fold and reshape the book by heading as her hands expect, and settling the four chord conflicts in one table keeps the reading views' vocabulary consistent; wrong if authors navigate by the sidebar alone and never fold or promote a heading
+
+## Audit Notes
+
+<!-- abcd-review: OWED receipt=rcp-d4b309cb708b -->
+Fidelity review OWED (receipt rcp-d4b309cb708b).

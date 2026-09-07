@@ -162,7 +162,8 @@ own browser.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-c18cd5fd571d -->
+Fidelity review OWED (receipt rcp-c18cd5fd571d).
 
 ## Grounds
 

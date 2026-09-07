@@ -196,7 +196,8 @@ proof-reading pass that goes with them.
 
 ## Audit Notes
 
-_Empty. Populated by intent-auditor when intent moves to shipped/._
+<!-- abcd-review: OWED receipt=rcp-54bb87ee6800 -->
+Fidelity review OWED (receipt rcp-54bb87ee6800).
 
 ## Grounds
 
