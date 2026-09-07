@@ -11,17 +11,26 @@ public on GitHub under the maintainer's account and licensed MIT.
 
 ## Current phase
 
-Phase one, the deck, has shipped: twelve intents under
-`../development/intents/shipped/` (eight from the first slice, three the
-maintainer asked for after using the app: keyboard movement between the
-panes, an export panel, the prose vocabulary with M-x, and a text scale), each with its
-closed spec and an ingested fidelity audit; releases 0.1.0, 0.2.0, and 0.2.1 are
-cut in `CHANGELOG.md` and tagged locally. The app builds as a release bundle. What phase one has not had is a
-human at the keyboard: the manual acceptance rows under
-`../.work.local/logs/acceptance/` are all unticked, and every audit records
-the three-width legibility criteria as inconclusive for that reason. Phase
-two, the article, is next (intents 9 to 12 in
-`../development/brief/07-intent-map.md`).
+Phases one and two have shipped: twenty intents under
+`../development/intents/shipped/`, each with its closed spec and an ingested
+fidelity audit. Phase one is the deck and the editing surface; phase two is
+the article — the Tufte page with a preview window in the app, reader
+controls, citations from a bibliography file, hidden content, keyboard
+movement on the page — plus three the maintainer asked for while using the
+app: a new document from nothing, the outline vocabulary, and one chord that
+opens a file or a folder. Releases 0.1.0 to 0.3.0 are cut in `CHANGELOG.md`
+and tagged locally; nothing is pushed. The app builds as a release bundle.
+The maintainer's example documents are local test material under the
+gitignored `examples/` folder, and nothing committed names one; a harness
+runs every local document through the article and the deck. What no phase
+has had is a human at the keyboard: the manual acceptance rows under
+`../.work.local/logs/acceptance/` are all but one unticked, and every audit
+records the three-width criteria as inconclusive for that reason. Phase
+three — bringing a single-file manuscript in (intent 13) and writing one
+text for two audiences (intent 14) — is next in
+`../development/brief/07-intent-map.md`. One draft waits for its planning
+interview: aligned Markdown tables in the editing surface
+(`itd-2609061653559060`).
 
 ## Sharp edges
 
