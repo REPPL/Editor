@@ -49,7 +49,16 @@ extension points every other panel uses.
   (cond-2609061318157197). This writes `document.yaml` with no `id` key at
   all.
 - Declaring variants and a default variant: map #14, `itd-2609051335537470`
-  (cond-2609061318153050). A document created here declares none.
+  (cond-2609061318153050). A document created here declares none. Publishing
+  and exporting a document that declares none is not deferred, though: since
+  review round one (Fable F4, `iss-2609070642219301`), such a document
+  publishes and exports as its own single default variant — otherwise
+  `docs/tutorial-your-first-talk.md`, which uses exactly this map's own
+  document, would reach a dead end at its first dry run — rather than being
+  refused for want of a name nobody was asked to type.
+  `src/publish/services.ts::variantFor` is where that is decided; a document
+  that *does* declare one or more variants but names no default still keeps
+  the refusal, unchanged.
 - The bibliography file and the citation style's own moment of being chosen
   by the author: map #11, `itd-2609051335502171` (cond-2609061318157252).
   This names no bibliography and writes the one default citation style; map
@@ -293,12 +302,15 @@ Manual checks, logged as an unticked list under
 
 ## Risks and Open Questions
 
-- **The Rust slug rule is not the frontend's `slugify`.** Documented above as
-  a decision rather than a defect: the two agree on ASCII input and differ
-  only on accented or non-Latin titles, where the frontend keeps the letter's
-  shape and the shell drops it to a hyphen. Nothing in this feature reads a
-  Part or Chapter name back through the frontend's `slugify`, so the two
-  never have to agree with each other, only with the intent's own words.
+- **The Rust slug rule and the frontend's `slugify`.** The two departed on
+  purpose, documented above as a decision rather than a defect: the shell
+  carried no table folding an accented Latin letter to its plain ASCII form.
+  Resolved in review round one (Fable F16): `new_document.rs::fold_accent`
+  now carries that table directly — the Latin-1 Supplement and Latin
+  Extended-A ranges, enough to agree with the frontend's Unicode-NFKD-based
+  `slugify` on every case `outline.test.ts` pins — rather than a dependency
+  AGENTS.md's no-dependency rule forbids. A letter outside that table still
+  folds to a hyphen on the Rust side, which neither side's tests exercise.
 - **Trimming the title.** Both the panel's Create button (client-side, for
   when to enable it) and `create_document` (server-side, authoritative) treat
   a title as its trimmed form for the purpose of refusing an empty one; the
@@ -312,8 +324,15 @@ Manual checks, logged as an unticked list under
   answers yes to a `document.yaml` file or a chapter anywhere under a Part; a
   folder holding unrelated files, or an empty Part with no chapter in it, is
   still writable. This is the intent's own distinction — "already holds a
-  document", not "is not empty" — and `a_second_document_is_still_refused_the_same_way_beside_an_empty_part`
-  is the test that would fail if that reading were wrong.
+  document", not "is not empty" — and `a_second_document_is_still_creatable_beside_an_empty_part`
+  is the test that would fail if that reading were wrong (renamed from
+  `..._is_still_refused_the_same_way...` in review round one, Sonnet F5: the
+  old name asserted the opposite of what the test's own body proves). A
+  narrower case of the same question — the Part this call itself would
+  create, `01-chapters`, already sitting there empty — used to fail with the
+  filesystem's own "File exists" rather than being written into (Fable F15);
+  `writes_into_an_already_present_empty_first_part_rather_than_refusing`
+  is the test for that.
 - **No test exercises the mid-write rollback** (a Part folder created, then a
   failure before `document.yaml` is written). The write is two calls to an
   atomic primitive that is itself well-tested (`document.rs`'s own

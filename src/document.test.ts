@@ -278,6 +278,24 @@ describe("the sidebar", () => {
       .toBe(5);
   });
 
+  it("restores the cursor to where it was left when a chapter is opened again (itd-2609061318091323 AC8)", async () => {
+    await app.openFolder("book");
+    const alice = app.chapters.find(
+      (chapter) => chapter.path === "book/01-first/01-alice.md",
+    )!;
+    const bob = app.chapters.find(
+      (chapter) => chapter.path === "book/02-second/01-bob.md",
+    )!;
+    await app.openChapter(alice);
+    app.view.dispatch({ selection: { anchor: 5 } });
+
+    await app.openChapter(bob);
+    expect(app.view.state.selection.main.head).toBe(0);
+
+    await app.openChapter(alice);
+    expect(app.view.state.selection.main.head).toBe(5);
+  });
+
   it("shows a one-Part, one-chapter document with no empty rows", async () => {
     await app.openFolder("solo");
     expect(rows()).toEqual(["Alice and the Lantern"]);
@@ -599,7 +617,7 @@ describe("the sidebar's citation facts (itd-2609051335502171, map #11)", () => {
     await app.openFolder("book");
     expandAll();
     const badge = host.querySelector(".tree-badge-citation");
-    expect(badge?.textContent).toBe("1 unresolved");
+    expect(badge?.textContent).toBe("1 citation");
     expect(badge?.getAttribute("title")).toContain("nosuchkey");
   });
 
@@ -632,7 +650,42 @@ describe("the sidebar's citation facts (itd-2609051335502171, map #11)", () => {
     // No `readBibliography` service at all is the phase before this map: the
     // citation still resolves to nothing, since there is nothing to resolve
     // it against, but nothing here throws over its absence.
-    expect(host.querySelector(".tree-badge-citation")?.textContent).toBe("1 unresolved");
+    expect(host.querySelector(".tree-badge-citation")?.textContent).toBe("1 citation");
+  });
+
+  it("says the bibliography could not be read, and badges no key unresolved on its account (Fable F10)", async () => {
+    const citingText = "# Citing\n\nAs shown [@nosuchkey].\n";
+    const citingTexts = new Map(texts);
+    citingTexts.set("book/01-first/01-alice.md", citingText);
+    const unreadableBibliography: AppServices = {
+      ...services,
+      readChapter: (path) => {
+        const text = citingTexts.get(path);
+        return text === undefined
+          ? Promise.reject(new Error(`cannot read ${path}`))
+          : Promise.resolve(text);
+      },
+      readChapters: (paths) => {
+        const batch: ChapterBatch = {
+          reads: paths
+            .filter((path) => citingTexts.has(path))
+            .map((path) => ({ path, text: citingTexts.get(path)! })),
+          failures: [],
+        };
+        return Promise.resolve(batch);
+      },
+      readBibliography: () => Promise.reject(new Error("permission denied")),
+    };
+    app.destroy();
+    app = createApp(host, unreadableBibliography);
+    await app.openFolder("book");
+    expandAll();
+    // The read failed, not the key: nothing is badged unresolved on its
+    // account, unlike the case above where the same key is genuinely
+    // unresolved against a bibliography that reads back empty.
+    expect(host.querySelector(".tree-badge-citation")).toBeNull();
+    expect(app.modeline.element.textContent).toContain("bibliography unreadable");
+    expect(app.modeline.element.textContent).toContain("permission denied");
   });
 });
 
@@ -664,7 +717,7 @@ describe("the sidebar's hidden-construct facts (itd-2609051335518134, map #12)",
     await app.openFolder("book");
     expandAll();
     const badge = host.querySelector(".tree-badge-egg");
-    expect(badge?.textContent).toBe("1 unresolved");
+    expect(badge?.textContent).toBe("1 hidden mark");
     expect(badge?.getAttribute("title")).toContain("lantern");
   });
 
@@ -698,6 +751,6 @@ describe("the sidebar's hidden-construct facts (itd-2609051335518134, map #12)",
     const bobRow = buttons
       .find((button) => button.dataset["path"] === "book/02-second/01-bob.md")
       ?.closest(".tree-row");
-    expect(bobRow?.querySelector(".tree-badge-egg")?.textContent).toBe("1 unresolved");
+    expect(bobRow?.querySelector(".tree-badge-egg")?.textContent).toBe("1 hidden mark");
   });
 });

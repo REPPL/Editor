@@ -39,7 +39,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 const invoked = vi.mocked(invoke);
 
-const ROOT = "/documents/presentation";
+const ROOT = "/documents/the-lantern-papers";
 
 /**
  * A synthetic two-chapter talk, one Part, invented for this file alone.
@@ -51,7 +51,7 @@ const ROOT = "/documents/presentation";
  */
 function document(): DocumentForPublish {
   return {
-    title: "Macromarketing 2026",
+    title: "The Lantern Papers",
     variant: "talk",
     bibliography: null,
     tree: {
@@ -60,7 +60,7 @@ function document(): DocumentForPublish {
           path: "01-slides/01-opening.md",
           chapter: parseChapter(
             [
-              "# Why Macromarketing Matters",
+              "# Why the Lantern Matters",
               "",
               "## The scale of the problem",
               "",
@@ -171,9 +171,9 @@ describe("the export plan", () => {
 
   it("names each folder from the document's title", async () => {
     const plan = await services().plan();
-    expect(plan.slug).toBe("macromarketing-2026");
-    expect(folderNameFor("deck", plan.slug)).toBe("macromarketing-2026-deck");
-    expect(folderNameFor("article", plan.slug)).toBe("macromarketing-2026-article");
+    expect(plan.slug).toBe("the-lantern-papers");
+    expect(folderNameFor("deck", plan.slug)).toBe("the-lantern-papers-deck");
+    expect(folderNameFor("article", plan.slug)).toBe("the-lantern-papers-article");
     // The shell holds a name to one segment of lower-case letters, digits and
     // hyphens; the page hands it one.
     for (const title of ["A talk: notes & asides", "  ", "…", "l".repeat(200)]) {
@@ -191,7 +191,7 @@ describe("what one row writes", () => {
     const built = await plan();
     const request = requestFor("deck", built, "a-nonce-the-shell-minted");
     expect(request.files.map((file) => file.path)).toEqual([DECK_PATH]);
-    expect(request.folder_name).toBe("macromarketing-2026-deck");
+    expect(request.folder_name).toBe("the-lantern-papers-deck");
     // The nonce, not a folder: the shell holds the folder Alice chose.
     expect(request.destination_nonce).toBe("a-nonce-the-shell-minted");
     expect(Object.keys(request)).not.toContain("destination");

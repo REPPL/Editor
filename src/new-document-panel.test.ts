@@ -153,6 +153,9 @@ describe("the new document panel", () => {
     const status = panel.element.querySelector<HTMLElement>(".new-document-status");
     expect(status?.textContent).toContain("already holds a document");
     expect(status?.dataset["state"]).toBe("failed");
+    // A screen reader has no other route to the refusal: it must speak on
+    // its own (`itd-2609061324342715`).
+    expect(status?.getAttribute("aria-live")).toBe("polite");
     // The nonce was spent on the attempt, win or lose: a retry needs a fresh
     // choice, exactly as an export's own destination nonce behaves.
     expect(panel.element.textContent).toContain("No folder chosen yet.");

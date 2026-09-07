@@ -151,8 +151,14 @@ function badgeSlot(facts?: ChapterFacts): HTMLSpanElement {
   if (unresolved.length > 0) {
     const badge = document.createElement("span");
     badge.className = "tree-badge tree-badge-citation";
-    badge.textContent = unresolved.length === 1 ? "1 unresolved" : `${String(unresolved.length)} unresolved`;
+    // "N citation(s)", not "N unresolved": the egg badge beside it read the
+    // same word, so a chapter with both showed "1 unresolved 1 unresolved"
+    // and told two badges apart by colour alone (itd-2609061324342715,
+    // Fable F9). The keys themselves carry into `aria-label`, not only the
+    // `title` tooltip a screen reader or a keyboard-only reader never reaches.
+    badge.textContent = unresolved.length === 1 ? "1 citation" : `${String(unresolved.length)} citations`;
     badge.title = `Unresolved citation key${unresolved.length === 1 ? "" : "s"}: ${unresolved.join(", ")}`;
+    badge.setAttribute("aria-label", `${badge.textContent}: ${unresolved.join(", ")}`);
     slot.append(badge);
   }
   // A hidden construct's own badge (itd-2609051335518134, map #12): an egg
@@ -161,8 +167,9 @@ function badgeSlot(facts?: ChapterFacts): HTMLSpanElement {
   if (hidden.length > 0) {
     const badge = document.createElement("span");
     badge.className = "tree-badge tree-badge-egg";
-    badge.textContent = hidden.length === 1 ? "1 unresolved" : `${String(hidden.length)} unresolved`;
+    badge.textContent = hidden.length === 1 ? "1 hidden mark" : `${String(hidden.length)} hidden marks`;
     badge.title = `Unresolved hidden construct${hidden.length === 1 ? "" : "s"}: ${hidden.join(", ")}`;
+    badge.setAttribute("aria-label", `${badge.textContent}: ${hidden.join(", ")}`);
     slot.append(badge);
   }
   return slot;

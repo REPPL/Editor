@@ -27,6 +27,11 @@ list comes from the build itself, so it says what will actually be written.
 The last two rows cannot be confirmed. Pressing Return on either names the
 phase it arrives in, opens no dialog, and writes nothing.
 
+A document that names no variant in `document.yaml` — the shape [New
+document](how-to-start-a-new-document.md) writes, and the shape a single
+Markdown file opened on its own has — exports as its own single default
+variant. There is nothing to name before any row here opens.
+
 ## Write the deck
 
 Highlight the deck row and press Return. The folder dialog opens beside your
@@ -35,7 +40,7 @@ document folder. Choose somewhere — the desktop, a memory stick — and confir
 Editor writes the folder and shows it in the Finder. Inside it:
 
 ```
-macromarketing-2026-deck/
+the-lantern-papers-deck/
   slides/index.html      the deck: this is the page you open
   presenter/             the engine, its stylesheet, and its start-up script
   assets/…               one file per image, under a name that needs no escaping

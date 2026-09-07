@@ -38,16 +38,16 @@ function citationNode(source: string): Inline {
 }
 
 describe("a resolved citation", () => {
-  it("renders a bare numbered marker", () => {
+  it("renders a bare numbered marker, linked to the reference list's own anchor (GLM F13)", () => {
     const source = "As shown [@smith2020].";
     const html = renderInlines([citationNode(source)], contextFor(source));
-    expect(html).toBe('<span class="citation">[1]</span>');
+    expect(html).toBe('<span class="citation">[<a href="#ref-1">1</a>]</span>');
   });
 
-  it("carries a locator after the number, inside the brackets", () => {
+  it("carries a locator after the number, inside the brackets, the number still linked", () => {
     const source = "As shown [@smith2020, p. 4].";
     const html = renderInlines([citationNode(source)], contextFor(source));
-    expect(html).toBe('<span class="citation">[1, p. 4]</span>');
+    expect(html).toBe('<span class="citation">[<a href="#ref-1">1</a>, p. 4]</span>');
   });
 });
 
@@ -63,7 +63,7 @@ describe("an unresolved citation", () => {
   it("marks only the key that failed to resolve, beside the one that did", () => {
     const source = "As shown [@smith2020; @nosuchkey].";
     const html = renderInlines([citationNode(source)], contextFor(source));
-    expect(html).toContain('<span class="citation">[1]; ');
+    expect(html).toContain('<span class="citation">[<a href="#ref-1">1</a>]; ');
     expect(html).toContain('<span class="citation-key unresolved">nosuchkey</span>');
     expect(html).not.toContain("[@nosuchkey]");
   });

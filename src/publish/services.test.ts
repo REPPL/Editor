@@ -1,10 +1,13 @@
 /**
- * What a publish refuses before it builds anything.
+ * What a publish refuses before it builds anything, and what variant it
+ * publishes under when it does not refuse.
  *
  * A version at a public link cannot be taken back, so everything that would
  * make one wrong is answered here, before a single file is rendered: a buffer
  * the file does not match, a chapter that would go missing from the page, and
- * a variant with no name to publish under.
+ * several variants named with none of them confirmed as the default. A
+ * document that names no variant at all is not refused — it publishes as its
+ * own single default variant.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -93,24 +96,31 @@ describe("the document a publish is given", () => {
     );
   });
 
-  it("refuses a document that declares no variant", async () => {
+  it("publishes a document that declares no variant as its own single default variant", async () => {
+    // `C-x C-n` writes exactly this document.yaml — no `variants:` at all
+    // (itd-2609051402191319 AC3) — so the tutorial that starts there must be
+    // able to publish and export, not be refused for want of a name nobody
+    // was ever asked to type (iss-2609070642219301, review round one Fable
+    // F4).
     const read = readers({
       readDocumentMetadata: vi.fn(() =>
         Promise.resolve({ title: "Untitled", variants: [], default_variant: null }),
       ),
     });
-    await expect(documentForPublish(source(), read)).rejects.toThrow(/declares no variant/);
+    const loaded = await documentForPublish(source(), read);
+    expect(loaded.variant).toBe("default");
   });
 
-  it("falls back to the first declared variant when none is the default", async () => {
+  it("refuses a document that declares more than one variant but names no default", async () => {
+    // Unlike a document that declares none at all, guessing among several
+    // named variants could publish one Alice never confirmed — the refusal
+    // this finding's fix keeps rather than lifts.
     const read = readers({
       readDocumentMetadata: vi.fn(() =>
         Promise.resolve({ title: null, variants: ["full"], default_variant: null }),
       ),
     });
-    const loaded = await documentForPublish(source(), read);
-    expect(loaded.variant).toBe("full");
-    expect(loaded.title).toBe("Opening");
+    await expect(documentForPublish(source(), read)).rejects.toThrow(/names no default/);
   });
 
   it("refuses with no folder open and with no chapters", async () => {

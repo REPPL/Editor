@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   authorsOf,
-  citationMarkerText,
   citationPartsOf,
   formatReference,
   parseBibliography,
@@ -71,7 +70,7 @@ describe("parseBibliography", () => {
     const { entries } = bib();
     const smith = entries.get("smith2020");
     expect(smith?.type).toBe("article");
-    expect(smith?.fields["title"]).toBe("The {Lantern} Papers");
+    expect(smith?.fields["title"]).toBe("The Lantern Papers");
     expect(smith?.fields["journal"]).toBe("Journal of Winters");
     expect(smith?.fields["year"]).toBe("2020");
   });
@@ -91,9 +90,44 @@ describe("parseBibliography", () => {
     expect(entries.get("wrapped")?.fields["title"]).toBe("A title that wraps across lines");
   });
 
-  it("keeps braces that protect capitalisation inside a title", () => {
+  it("strips braces that protect capitalisation, rather than showing them to a reader (Fable F17)", () => {
     const { entries } = bib();
-    expect(entries.get("smith2020")?.fields["title"]).toContain("{Lantern}");
+    const title = entries.get("smith2020")?.fields["title"];
+    expect(title).not.toContain("{");
+    expect(title).not.toContain("}");
+    expect(title).toBe("The Lantern Papers");
+  });
+
+  it("folds a LaTeX accent command into the character it draws, each letter braced on its own", () => {
+    // `String.raw` so a backslash reaches the reader as one character, not
+    // an escape this test file's own source would otherwise consume — the
+    // shape a reference manager's export commonly writes.
+    const source = String.raw`@article{accents,
+  title = {Caf\'{e} \"{u}ber \`{e}l\^{e}ve fa\c{c}ade se\~{n}or},
+}`;
+    const { entries } = parseBibliography(source);
+    // Acute, umlaut, grave, circumflex, cedilla and tilde, one per word.
+    expect(entries.get("accents")?.fields["title"]).toBe("Café über èlêve façade señor");
+  });
+
+  it("also folds the bare form, with no braces around the letter at all", () => {
+    const source = String.raw`@article{bare,
+  title = {Caf\'e \"uber},
+}`;
+    const { entries } = parseBibliography(source);
+    expect(entries.get("bare")?.fields["title"]).toBe("Café über");
+  });
+
+  it("folds a double dash into an en dash, in a page range", () => {
+    const { entries } = bib();
+    expect(entries.get("smith2020")?.fields["pages"]).toBe("1–20");
+  });
+
+  it("folds a LaTeX tie (~) into an ordinary space", () => {
+    const { entries } = parseBibliography(
+      "@article{tie,\n  title = {See Figure~1},\n}",
+    );
+    expect(entries.get("tie")?.fields["title"]).toBe("See Figure 1");
   });
 
   it("ignores a @comment block entirely", () => {
@@ -164,7 +198,7 @@ describe("formatReference", () => {
     const smith = bib().entries.get("smith2020");
     if (smith === undefined) throw new Error("unreachable");
     expect(formatReference(smith)).toBe(
-      "Smith, Alice and Jones, Bob. 2020. The {Lantern} Papers. Journal of Winters. 12(3). 1--20.",
+      "Smith, Alice and Jones, Bob. 2020. The Lantern Papers. Journal of Winters. 12(3). 1–20.",
     );
   });
 
@@ -188,20 +222,6 @@ describe("shortReference, for the deck's credit line", () => {
 
   it("falls back to the key when there is nothing else to name it by", () => {
     expect(shortReference({ key: "onlykey", type: "misc", fields: {} })).toBe("onlykey");
-  });
-});
-
-describe("citationMarkerText", () => {
-  it("writes a bare numeric marker", () => {
-    expect(citationMarkerText([1], "")).toBe("[1]");
-  });
-
-  it("writes the locator after the number, inside the brackets", () => {
-    expect(citationMarkerText([1], "p. 4")).toBe("[1, p. 4]");
-  });
-
-  it("writes more than one number for a citation naming more than one key", () => {
-    expect(citationMarkerText([1, 2], "")).toBe("[1, 2]");
   });
 });
 
@@ -251,6 +271,35 @@ describe("resolveCitations", () => {
     const resolution = resolveCitations([chapter], bib());
     expect(resolution.unresolvedKeys).toEqual(["nosuchkey"]);
     expect(resolution.references.map((reference) => reference.key)).toEqual(["smith2020"]);
+  });
+
+  it("gives a .notes-only citation no article entry, so nothing points at it (Fable F7)", () => {
+    const chapter = chapterOf(
+      "A visible claim [@smith2020].",
+      "",
+      "::: {.notes}",
+      "An aside only a slide's speaker sees [@carroll1999].",
+      ":::",
+    );
+    const resolution = resolveCitations([chapter], bib(), "article");
+    expect(resolution.references.map((reference) => reference.key)).toEqual(["smith2020"]);
+    expect(resolution.byKey.has("carroll1999")).toBe(false);
+    expect(resolution.numberOf.has("carroll1999")).toBe(false);
+  });
+
+  it("still counts a .notes-only citation with no rendering filter, for the deck's own credit line", () => {
+    const chapter = chapterOf(
+      "A visible claim [@smith2020].",
+      "",
+      "::: {.notes}",
+      "An aside only a slide's speaker sees [@carroll1999].",
+      ":::",
+    );
+    const resolution = resolveCitations([chapter], bib());
+    expect(resolution.references.map((reference) => reference.key)).toEqual([
+      "smith2020",
+      "carroll1999",
+    ]);
   });
 
   it("resolves nothing and lists nothing for a chapter with no citations", () => {

@@ -103,24 +103,45 @@ struct Dirty(AtomicBool);
 ///
 /// Opening a folder also replaces the watcher, so exactly one document folder
 /// is watched at a time — the shell's half of "one document open at a time".
+///
+/// `app.reload()` calls this with the open document's own root, which is how
+/// a reload — pressed, or the watcher firing — reaches here too. When that
+/// root is the one `open_source::SingleFileRoot` remembers being opened from
+/// a bare file, this rebuilds through `read_single_chapter` instead of a real
+/// folder walk, so the sidebar still shows exactly the one chapter a reload
+/// promises rather than every sibling and subfolder the walk would otherwise
+/// draw in (review round one, Fable F25, `iss-2609070642207436`). A `path`
+/// that does not match that file's own folder is a genuinely different
+/// folder open, and is answered — and remembered — as one.
 #[tauri::command]
 async fn open_folder(
     path: String,
     app: tauri::AppHandle,
     root: tauri::State<'_, DocumentRoot>,
+    single_file: tauri::State<'_, open_source::SingleFileRoot>,
     watcher: tauri::State<'_, watch::CurrentWatch>,
 ) -> Result<DocumentTree, String> {
-    let (resolved, tree) = tauri::async_runtime::spawn_blocking(move || {
+    let remembered = single_file.get()?;
+    let (resolved, tree, bare_file) = tauri::async_runtime::spawn_blocking(move || {
         let resolved = document::canonical_root(&path)?;
+        if let Some(file) = open_source::SingleFileRoot::matches(&remembered, &resolved) {
+            let tree = document::read_single_chapter(&file)?;
+            return Ok::<_, String>((resolved, tree, Some(file)));
+        }
         let tree = document::read_tree(&resolved)?;
-        Ok::<_, String>((resolved, tree))
+        Ok::<_, String>((resolved, tree, None))
     })
     .await
     .map_err(|error| format!("cannot open the folder: {error}"))??;
     root.set(resolved.clone())?;
+    single_file.set(bare_file.clone())?;
     // A folder that cannot be watched still opens. The author loses the
-    // automatic redraw, not the document, and the reload chord is still there.
-    if let Err(error) = watcher.replace(&resolved, move || {
+    // automatic redraw, not the document, and the reload chord is still
+    // there. A bare file's watcher stays narrowed to the file itself, the
+    // same reason `open_source::open_document_source` narrows it in the
+    // first place.
+    let watched = bare_file.as_deref().unwrap_or(resolved.as_path());
+    if let Err(error) = watcher.replace(watched, move || {
         if let Err(error) = app.emit(watch::CHANGED_EVENT, ()) {
             log::error!("cannot emit {}: {error}", watch::CHANGED_EVENT);
         }
@@ -296,6 +317,7 @@ pub fn run() {
         .manage(export::ExportDestinations::default())
         .manage(new_document::NewDocumentDestinations::default())
         .manage(open_source::OpenSourcePicks::default())
+        .manage(open_source::SingleFileRoot::default())
         .manage(preview::PendingPreview::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![

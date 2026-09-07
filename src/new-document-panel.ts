@@ -175,6 +175,10 @@ export function createNewDocumentPanel(
 
     status = document.createElement("p");
     status.className = "new-document-status";
+    // The refusal is the only route a screen reader has to what went wrong —
+    // there is no separate error surface — so it must speak on its own the
+    // way the modeline's announcements do elsewhere (`itd-2609061324342715`).
+    status.setAttribute("aria-live", "polite");
 
     createButton = button(
       "Create",

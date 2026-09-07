@@ -41,7 +41,11 @@ Start typing.
 
 Nothing else is in the folder: no sample text, no placeholder chapter, no
 template to delete. `document.yaml` carries no id — an id is minted the
-first time you publish — and declares no variants and no bibliography.
+first time you publish — and declares no variants and no bibliography. A
+document with no variant declared is not a document you cannot publish: it
+publishes and exports as its own single default variant, so there is
+nothing more to write in `document.yaml` before you try [your first
+talk](tutorial-your-first-talk.md).
 
 ## What Create refuses
 

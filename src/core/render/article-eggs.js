@@ -29,6 +29,47 @@
   /** Every egg id Bob has collected, in this browser, as a JSON array. */
   var STORAGE_KEY_COLLECTED = "editor-article-collected-eggs";
 
+  // ------------------------------------------------------------- the scope
+
+  /**
+   * A stable scope for this document's own memory, so a dismissal or a
+   * collection is remembered per document, not per origin
+   * (iss-2609070642209805).
+   *
+   * The published site serves every document from one origin —
+   * `/<id>/<token>/` for the stable link, `/<id>/<token>/v/<hash>/` for one
+   * frozen version — so `location.pathname` with the `/v/<hash>/` segment
+   * stripped scopes a version to the same memory as its own document's
+   * stable link, and leaves two different documents apart. The app's
+   * preview window never navigates between two documents it shows in one
+   * session (`preview.ts`'s own header: "the window outlives one Preview"),
+   * so its pathname alone cannot tell them apart; `preview.ts` writes a
+   * `data-document-scope` attribute instead, from a hash of the document's
+   * own folder name, never the path itself, and that is read first here
+   * when it is present.
+   */
+  function documentScope() {
+    try {
+      var body = global.document.body;
+      var attr = body && body.getAttribute("data-document-scope");
+      if (attr) {
+        return attr;
+      }
+    } catch {
+      /* Falls through to the path-derived scope below. */
+    }
+    try {
+      return String(global.location.pathname).replace(/\/v\/[^/]+\//, "/");
+    } catch {
+      return "";
+    }
+  }
+
+  /** One storage key, scoped to this document. */
+  function scopedKey(base) {
+    return base + "::" + documentScope();
+  }
+
   /** up, up, down, down, left, right, left, right, b, a. */
   var KONAMI_SEQUENCE = [
     "arrowup",
@@ -52,7 +93,7 @@
 
   function readSeenOpening() {
     try {
-      return global.localStorage.getItem(STORAGE_KEY_OPENING) !== null;
+      return global.localStorage.getItem(scopedKey(STORAGE_KEY_OPENING)) !== null;
     } catch {
       return false;
     }
@@ -60,7 +101,7 @@
 
   function markSeenOpening() {
     try {
-      global.localStorage.setItem(STORAGE_KEY_OPENING, "1");
+      global.localStorage.setItem(scopedKey(STORAGE_KEY_OPENING), "1");
     } catch {
       /* The dismissal still applies for this visit; nothing to report. */
     }
@@ -77,7 +118,7 @@
    */
   function readCollected() {
     try {
-      var raw = global.localStorage.getItem(STORAGE_KEY_COLLECTED);
+      var raw = global.localStorage.getItem(scopedKey(STORAGE_KEY_COLLECTED));
       if (raw === null) {
         return [];
       }
@@ -95,7 +136,7 @@
 
   function writeCollected(ids) {
     try {
-      global.localStorage.setItem(STORAGE_KEY_COLLECTED, JSON.stringify(ids));
+      global.localStorage.setItem(scopedKey(STORAGE_KEY_COLLECTED), JSON.stringify(ids));
     } catch {
       /* The collection still applies for this visit; nothing to report. */
     }
@@ -243,7 +284,7 @@
     dialog.appendChild(body);
     backdrop.appendChild(dialog);
     global.document.body.appendChild(backdrop);
-    currentPanel = { backdrop: backdrop, returnFocusTo: returnFocusTo || null };
+    currentPanel = { backdrop: backdrop, dialog: dialog, returnFocusTo: returnFocusTo || null };
     focusOnce(close);
     var figures = body.querySelectorAll("figure.video");
     for (var i = 0; i < figures.length; i += 1) {
@@ -387,7 +428,7 @@
     dialog.appendChild(dismiss);
     backdrop.appendChild(dialog);
     global.document.body.appendChild(backdrop);
-    openingModal = { backdrop: backdrop, opening: opening };
+    openingModal = { backdrop: backdrop, dialog: dialog, opening: opening };
     focusOnce(dismiss);
   }
 
@@ -495,6 +536,48 @@
     }
   }
 
+  /** Every element `container` a Tab could reach, in document order. */
+  var FOCUSABLE_SELECTOR =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+    'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function focusableWithin(container) {
+    return Array.prototype.slice.call(container.querySelectorAll(FOCUSABLE_SELECTOR));
+  }
+
+  /**
+   * Wrap Tab at `container`'s own first and last focusable element, so a
+   * dialog that claims `aria-modal="true"` actually holds the keyboard
+   * (Fable F23, GLM F9): Escape and the labelled close already work, but
+   * nothing kept Tab from walking out into the page behind the backdrop.
+   * Returns whether it handled the key, so a caller with no dialog open
+   * falls through to whatever else a Tab press means on this page.
+   */
+  function trapTab(event, container) {
+    if (event.key !== "Tab") {
+      return false;
+    }
+    var focusable = focusableWithin(container);
+    if (focusable.length === 0) {
+      return false;
+    }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    var active = global.document.activeElement;
+    if (event.shiftKey) {
+      if (active === first || !container.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (active === last || !container.contains(active)) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    return true;
+  }
+
   function onKeydown(event) {
     if (event.key === "Escape") {
       if (currentPanel !== null) {
@@ -505,6 +588,12 @@
         closeOpeningModal();
         return;
       }
+    }
+    if (currentPanel !== null && trapTab(event, currentPanel.dialog)) {
+      return;
+    }
+    if (openingModal !== null && trapTab(event, openingModal.dialog)) {
+      return;
     }
     handleKonamiKey(event.key);
   }
@@ -523,11 +612,37 @@
    * once — `preview.ts` calls this again after every re-render, the same way
    * it re-invokes `article-video.js`'s own `upgradeVideos`.
    */
+  /**
+   * Tear down a panel or an opening modal left over from a previous
+   * document's own render, without marking anything seen and without
+   * returning focus anywhere: `<main>` is about to be replaced, so the
+   * element focus would return to is already gone (Fable F14, GLM F10).
+   */
+  function discardStalePanels() {
+    if (currentPanel !== null) {
+      var panel = currentPanel;
+      currentPanel = null;
+      panel.backdrop.remove();
+    }
+    if (openingModal !== null) {
+      var modal = openingModal;
+      openingModal = null;
+      modal.backdrop.remove();
+    }
+  }
+
   function boot() {
     if (typeof global.document === "undefined") {
       return;
     }
     bindOnce();
+    // A second Preview replaces `<main>` with a fresh document: any panel
+    // or opening modal the previous one left open is looking at nodes that
+    // no longer belong to the page, and `originsById` still holds the
+    // previous document's own elements — both are reset before this
+    // document's own markers are matched (Fable F14, GLM F10).
+    discardStalePanels();
+    originsById = {};
     collected = new Set(readCollected());
     processMarkers();
     processOpening();
@@ -538,6 +653,7 @@
     STORAGE_KEY_OPENING: STORAGE_KEY_OPENING,
     STORAGE_KEY_COLLECTED: STORAGE_KEY_COLLECTED,
     KONAMI_SEQUENCE: KONAMI_SEQUENCE.slice(),
+    documentScope: documentScope,
   };
 
   if (global.ArticlePage && typeof global.ArticlePage.register === "function") {

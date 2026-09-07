@@ -132,10 +132,20 @@ let openOutcome:
 let pickFolderCalls: number;
 let pickFileCalls: number;
 let openCalls: string[];
+let discardAnswer: boolean;
+let reloadTree: DocumentTree | null;
 
 const services: AppServices = {
   chooseFolder: () => Promise.resolve(null),
-  openFolder: () => Promise.reject(new Error("not used by these tests")),
+  // Only `reload` (`C-x C-r`, or the watcher firing) ever calls this in
+  // these tests, standing in for the shell: the real `open_folder` command
+  // rebuilds through `read_single_chapter` for a root `SingleFileRoot`
+  // remembers as a bare file (Fable F25), so a reload here answers with the
+  // one-chapter tree a fixed shell would, not a bigger one nothing staged.
+  openFolder: () =>
+    reloadTree
+      ? Promise.resolve(reloadTree)
+      : Promise.reject(new Error("not used by these tests")),
   readChapter: (path) => {
     const text = texts.get(path);
     return text === undefined
@@ -157,7 +167,7 @@ const services: AppServices = {
     };
     return Promise.resolve(batch);
   },
-  confirmDiscard: () => Promise.resolve(true),
+  confirmDiscard: () => Promise.resolve(discardAnswer),
   pickDocumentFolder: () => {
     pickFolderCalls += 1;
     return Promise.resolve(pickFolderResult);
@@ -188,6 +198,8 @@ beforeEach(() => {
   pickFolderCalls = 0;
   pickFileCalls = 0;
   openCalls = [];
+  discardAnswer = true;
+  reloadTree = null;
   host = document.createElement("div");
   document.body.append(host);
   app = createApp(host, services);
@@ -255,6 +267,29 @@ describe("opening through C-x C-o", () => {
     expect(written).toEqual([{ path: "drafts/01-notes.md", text: edited }]);
   });
 
+  it("reload after a save still shows the one chapter, not the whole folder (Fable F25)", async () => {
+    pickFileResult = { nonce: "n2", name: "01-notes.md" };
+    openOutcome = {
+      tree: oneChapterOnItsOwn(),
+      selectedChapter: "drafts/01-notes.md",
+    };
+    runBinding(app.view, "open-file-or-folder");
+    chooseSourceKind("file");
+    await flush();
+    expect(rows(host)).toEqual(["Notes"]);
+
+    // The fixed shell remembers the bare-file shape (`SingleFileRoot`) and
+    // rebuilds through `read_single_chapter` on reload, whether reload was
+    // asked for directly or the narrowed watcher fired after the author's
+    // own save — this is what a fixed `open_folder` now answers with,
+    // standing in for the shell answering `app.reload`'s own call.
+    reloadTree = oneChapterOnItsOwn();
+    await app.reload();
+
+    expect(rows(host)).toEqual(["Notes"]);
+    expect(app.chapterPath).toBe("drafts/01-notes.md");
+  });
+
   it("opens the whole document when the picked file already lives inside one", async () => {
     pickFileResult = { nonce: "n3", name: "01-opening.md" };
     openOutcome = {
@@ -296,6 +331,41 @@ describe("opening through C-x C-o", () => {
     expect(pickFolderCalls).toBe(1);
     expect(openCalls).toEqual([]);
     expect(app.documentRoot).toBeNull();
+  });
+
+  it("declining the discard guard claims no nonce and leaves the shell's root untouched (iss-2609070642208293)", async () => {
+    pickFolderResult = { nonce: "n1", name: "book" };
+    openOutcome = { tree: twoParts(), selectedChapter: null };
+    runBinding(app.view, "open-file-or-folder");
+    chooseSourceKind("folder");
+    await flush();
+    expect(app.documentRoot).toBe("book");
+
+    // Dirty the open chapter, so the discard guard has something to ask.
+    host.querySelector<HTMLButtonElement>(".tree-button")?.click();
+    await flush();
+    app.view.dispatch({ changes: { from: 0, insert: "x" } });
+    expect(app.dirty).toBe(true);
+
+    pickFolderResult = { nonce: "n2", name: "drafts" };
+    openOutcome = {
+      tree: oneChapterOnItsOwn(),
+      selectedChapter: "drafts/01-notes.md",
+    };
+    discardAnswer = false;
+
+    runBinding(app.view, "open-file-or-folder");
+    chooseSourceKind("folder");
+    await flush();
+
+    expect(pickFolderCalls).toBe(2);
+    // The second pick's nonce is never claimed: a refused discard never
+    // reaches `openDocumentSource`, so the shell's document root and folder
+    // watcher stay exactly where the first, still-open document left them.
+    expect(openCalls).toEqual(["n1"]);
+    expect(app.documentRoot).toBe("book");
+    expect(app.dirty).toBe(true);
+    expect(app.modeline.element.textContent).toContain("Kept the open chapter");
   });
 
   it("attempts no network request while opening either way", async () => {

@@ -30,19 +30,38 @@ export interface ReadingBindingData {
 export const READING_KEYS_DATA_ID = "article-keys-data";
 
 /**
+ * A chord this reading page never claims, even where the editing surface's
+ * own row lists it — the browser's own key wins outright, with no chord of
+ * this page's own left to fall back to (iss-2609070642203845, Fable F27):
+ *
+ * - `s-f` (Cmd-F): the spec's own Design names the browser's native find as
+ *   the accessible route to search, and this page's own `C-s` already
+ *   answers `isearch-forward` without it.
+ * - `Down`/`Up`: bare, they are the browser's own scroll, and a reader who
+ *   has not yet moved to a Section (`sectionIndex === -1`) got a swallowed
+ *   key that moved nothing at all; `C-n`/`C-p` still answer `next-line`/
+ *   `previous-line`.
+ */
+const READING_EXCLUDED_CHORDS: ReadonlySet<string> = new Set(["s-f", "Down", "Up"]);
+
+/**
  * The reading views' own vocabulary, ready to serialise.
  *
  * A plain object literal per row rather than the `Binding` itself: the
  * article's script has no use for `group` or `owner`, and a reading page's
  * data should carry only what it reads, not the whole shape of a table it
- * never sees.
+ * never sees. A row whose every chord is excluded is dropped rather than
+ * serialised with an empty `chords` array, which `article-keys.js` would
+ * otherwise read as a prefix or a chord no press could ever complete.
  */
 export function readingBindingData(): ReadingBindingData[] {
-  return readingBindings().map(({ id, label, chords }) => ({
-    id,
-    label,
-    chords: [...chords],
-  }));
+  return readingBindings()
+    .map(({ id, label, chords }) => ({
+      id,
+      label,
+      chords: chords.filter((chord) => !READING_EXCLUDED_CHORDS.has(chord)),
+    }))
+    .filter((row) => row.chords.length > 0);
 }
 
 /**

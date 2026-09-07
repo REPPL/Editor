@@ -223,11 +223,35 @@ describe("moving by Section", () => {
     }
   });
 
-  it("wraps from the last heading back to the first, and from the first to the last", () => {
+  it("starting with no Section chosen, previous opens at the last heading and next at the first", () => {
     const keys = load();
     keys.boot();
     pressPrefixed(NEXT_SECTION, PREV_SECTION_2);
     expect(document.activeElement?.id).toBe("c4-fourth-chapter");
+  });
+
+  it("refuses past the last heading, matching the editor's own outline-next-heading (Fable F28)", () => {
+    const keys = load();
+    keys.boot();
+    for (let step = 0; step < 6; step += 1) {
+      pressPrefixed(NEXT_SECTION, NEXT_SECTION_2);
+    }
+    expect(document.activeElement?.id).toBe("c4-fourth-chapter");
+    const before = keys.state().sectionIndex;
+    pressPrefixed(NEXT_SECTION, NEXT_SECTION_2);
+    // Stayed put: no wrap to the first heading.
+    expect(keys.state().sectionIndex).toBe(before);
+    expect(document.activeElement?.id).toBe("c4-fourth-chapter");
+  });
+
+  it("refuses before the first heading, matching the editor's own outline-previous-heading (Fable F28)", () => {
+    const keys = load();
+    keys.boot();
+    pressPrefixed(NEXT_SECTION, NEXT_SECTION_2);
+    expect(document.activeElement?.id).toBe("c1-opening");
+    pressPrefixed(NEXT_SECTION, PREV_SECTION_2);
+    // Stayed at the first heading: no wrap to the last.
+    expect(document.activeElement?.id).toBe("c1-opening");
   });
 });
 
@@ -453,6 +477,99 @@ describe("nothing stored, nothing sent (itd-2609051336145770)", () => {
     press(CANCEL_G, field);
     expect(window.localStorage.length).toBe(0);
     expect(document.querySelector(".article-search-panel")).toBeNull();
+  });
+});
+
+describe("the browser's own keys are not stolen (iss-2609070642203845, Fable F27)", () => {
+  it("never prevents default on bare Down or Up, leaving the browser's own scroll alone", () => {
+    const keys = load();
+    keys.boot();
+    const down = press({ code: "ArrowDown", key: "ArrowDown" });
+    expect(down.defaultPrevented).toBe(false);
+    const up = press({ code: "ArrowUp", key: "ArrowUp" });
+    expect(up.defaultPrevented).toBe(false);
+    // Neither moved the reading position: they are simply not honoured here.
+    expect(keys.state().itemIndex).toBe(-1);
+  });
+
+  it("still moves by item on C-n and C-p", () => {
+    const keys = load();
+    keys.boot();
+    pressPrefixed(NEXT_SECTION, NEXT_SECTION_2); // -> c1-opening
+    press(NEXT_ITEM);
+    expect(document.activeElement?.textContent).toBe("Alice opens with a short paragraph.");
+  });
+
+  it("does not open this page's own search on Cmd-F, leaving the browser's own find alone", () => {
+    const keys = load();
+    keys.boot();
+    const event = press({ code: "KeyF", key: "f", metaKey: true });
+    expect(event.defaultPrevented).toBe(false);
+    expect(keys.state().overlay).toBeNull();
+  });
+
+  it("still opens search on C-s", () => {
+    const keys = load();
+    keys.boot();
+    press(SEARCH_FORWARD);
+    expect(keys.state().overlay).toBe("search");
+  });
+
+  it("does not start the C-c prefix while text is selected, leaving the browser's own copy alone", () => {
+    const original = window.getSelection;
+    window.getSelection = (): Selection =>
+      ({ toString: () => "selected text" }) as unknown as Selection;
+    try {
+      const keys = load();
+      keys.boot();
+      const event = press(NEXT_SECTION);
+      expect(event.defaultPrevented).toBe(false);
+      // No chord pending: a second step never completes outline-next-heading.
+      press(NEXT_SECTION_2);
+      expect(keys.state().sectionIndex).toBe(-1);
+    } finally {
+      window.getSelection = original;
+    }
+  });
+
+  it("still starts the C-c prefix, and completes the chord, when nothing is selected", () => {
+    const keys = load();
+    keys.boot();
+    const event = press(NEXT_SECTION);
+    expect(event.defaultPrevented).toBe(true);
+    press(NEXT_SECTION_2);
+    expect(document.activeElement?.id).toBe("c1-opening");
+  });
+});
+
+describe("Tab stays inside the search dialog (Fable F29)", () => {
+  it("wraps Tab back to the field rather than letting it leave the dialog", () => {
+    const keys = load();
+    keys.boot();
+    press(SEARCH_FORWARD);
+    const field = document.querySelector<HTMLInputElement>(".article-search-field")!;
+    const event = press({ code: "Tab", key: "Tab" }, field);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(field);
+    expect(keys.state().overlay).toBe("search");
+  });
+});
+
+describe("a heading nested inside a div still has items (Fable F31)", () => {
+  it("finds the items after a heading that sits inside a callout, not only a direct child of <article>", () => {
+    const html = articleDocument(
+      "Fixture",
+      '<article><div class="callout"><h2 id="nested">Nested</h2><p>Inside the callout.</p></div></article>',
+      "chrome",
+    );
+    const page = new DOMParser().parseFromString(html, "text/html");
+    document.documentElement.innerHTML = page.documentElement.innerHTML;
+    const keys = load();
+    keys.boot();
+    pressPrefixed(NEXT_SECTION, NEXT_SECTION_2);
+    expect(document.activeElement?.id).toBe("nested");
+    press(NEXT_ITEM);
+    expect(document.activeElement?.textContent).toBe("Inside the callout.");
   });
 });
 

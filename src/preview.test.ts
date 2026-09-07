@@ -3,9 +3,9 @@
  * shell would hand them over — outside the shell, so this drives the pure
  * functions the way `present.test.ts` drives `present.ts`'s.
  */
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { articleOf, idPrefixFor } from "./preview";
+import { articleOf, idPrefixFor, show } from "./preview";
 import type { PreviewSource } from "./doctree";
 
 /** A document of two Parts holding four chapters in all — the intent's own
@@ -118,7 +118,7 @@ describe("articleOf, with a bibliography (itd-2609051335502171)", () => {
       ],
     };
     const html = await articleOf(source);
-    expect(html).toContain('<span class="citation">[1]</span>');
+    expect(html).toContain('<span class="citation">[<a href="#ref-1">1</a>]</span>');
     expect(html).toContain('<li id="ref-1">Smith, Alice. 2020. The Lantern Papers.</li>');
   });
 
@@ -134,14 +134,67 @@ describe("articleOf, with a bibliography (itd-2609051335502171)", () => {
     expect(html).toContain('<span class="citation-key unresolved">nosuchkey</span>');
   });
 
-  it("renders an ordinary document when it names no bibliography, even with a citation in it", async () => {
+  it("marks a citation unresolved rather than printing its brackets when the document names no bibliography at all (GLM F4)", async () => {
     const source: PreviewSource = {
       title: "A Paper",
       variant: "full",
       chapters: [{ path: "01-part/01-a.md", text: "As shown [@smith2020].\n" }],
     };
     const html = await articleOf(source);
-    expect(html).toContain('<span class="citation">[@smith2020]</span>');
+    expect(html).not.toContain("[@smith2020]");
+    expect(html).toContain('<span class="citation-key unresolved">smith2020</span>');
     expect(html).not.toContain("reference-list");
+  });
+
+  it("gives a citation written only inside a .notes div no article entry (Fable F7)", async () => {
+    const source: PreviewSource = {
+      title: "A Paper",
+      variant: "full",
+      bibliography: BIB,
+      chapters: [
+        {
+          path: "01-part/01-a.md",
+          text: ["# A Paper", "", "::: {.notes}", "An aside [@smith2020].", ":::", ""].join("\n"),
+        },
+      ],
+    };
+    const html = await articleOf(source);
+    expect(html).not.toContain("reference-list");
+    expect(html).not.toContain('id="ref-1"');
+  });
+});
+
+describe("show: the document-scope attribute (iss-2609070642209805) and the video probe (GLM F8)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "<main></main>";
+    delete (window as unknown as { ArticleVideo?: unknown }).ArticleVideo;
+  });
+
+  it("writes data-document-scope from the source, and clears it for a caller that predates the field", async () => {
+    await show({ title: "A", variant: "full", chapters: [], documentScope: "abc123" });
+    expect(document.body.getAttribute("data-document-scope")).toBe("abc123");
+
+    await show({ title: "B", variant: "full", chapters: [] });
+    expect(document.body.hasAttribute("data-document-scope")).toBe(false);
+  });
+
+  it("never probes an external video address on its own, but still probes an already-local one", async () => {
+    const probe = vi.fn().mockResolvedValue(true);
+    const upgradeVideos = vi.fn((prober: (href: string, timeoutMs: number) => Promise<boolean>) =>
+      Promise.all([
+        prober("https://example.com/clip.mp4", 4000),
+        prober("data:video/mp4;base64,AAA", 4000),
+      ]),
+    );
+    (window as unknown as { ArticleVideo: unknown }).ArticleVideo = { upgradeVideos, probe };
+
+    await show({ title: "A", variant: "full", chapters: [] });
+
+    expect(upgradeVideos).toHaveBeenCalledTimes(1);
+    // Only the already-local address ever reaches the real prober: the app
+    // never fetches an external source on its own initiative
+    // (`02-constraints.md`'s "network only on publish").
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(probe).toHaveBeenCalledWith("data:video/mp4;base64,AAA", 4000);
   });
 });

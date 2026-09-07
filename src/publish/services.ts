@@ -60,6 +60,51 @@ export interface PublishReaders {
 }
 
 /**
+ * The variant a document with no declared `variants:` publishes and exports
+ * under.
+ *
+ * `C-x C-n` writes a document with no `variants:` at all
+ * (`itd-2609051402191319` AC3), and the tutorial that starts there could not
+ * be completed: `documentForPublish` refused every such document outright
+ * (review round one, Fable F4). A document that names none is its own one
+ * variant, so this is the name that single variant publishes and exports
+ * under — an ordinary entry in `document.yaml`'s `variant_tokens:` map, the
+ * same as any variant a document does declare, so it needs no change to the
+ * shell's identity minting (`src-tauri/src/publish/mod.rs::mint_identity`)
+ * or the site's link shape, which was never keyed by a variant's name in the
+ * first place, only by its own opaque token (`iss-2609070642219301`).
+ */
+const DEFAULT_VARIANT = "default";
+
+/**
+ * Which variant a publish or an export runs under, or the refusal that
+ * stops it before anything is built.
+ *
+ * A document that declares no variant publishes as `DEFAULT_VARIANT` — its
+ * own single default variant, one build, nothing left to name. A document
+ * that declares one or more variants but no `default_variant:` keeps its
+ * refusal rather than guessing which one Alice meant: unlike an absent
+ * declaration, a declaration with more than one candidate and no chosen one
+ * is a question this could answer wrongly.
+ */
+function variantFor(metadata: {
+  readonly variants: readonly string[];
+  readonly default_variant: string | null;
+}): string {
+  if (metadata.variants.length === 0) return DEFAULT_VARIANT;
+  if (
+    metadata.default_variant !== null &&
+    metadata.variants.includes(metadata.default_variant)
+  ) {
+    return metadata.default_variant;
+  }
+  throw new Error(
+    "This document declares more than one variant but names no default. " +
+      "Set `default_variant:` in document.yaml under `variants:` before publishing.",
+  );
+}
+
+/**
  * The document as the publish build sees it.
  *
  * The parse is the one parse: the chapters are read in a single round trip and
@@ -114,14 +159,7 @@ export async function documentForPublish(
       `These chapters could not be read, so nothing was published: ${missing.join(", ")}`,
     );
   }
-  const variant = metadata.default_variant ?? metadata.variants[0] ?? "";
-  if (variant === "") {
-    // The variant names the token the link is minted under and the line the
-    // log writes. A nameless one would publish under a name nobody can say.
-    throw new Error(
-      "This document declares no variant. Name one in document.yaml under `variants:` before publishing.",
-    );
-  }
+  const variant = variantFor(metadata);
   return {
     title: metadata.title ?? chapters[0]?.title ?? "Untitled",
     variant,

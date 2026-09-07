@@ -20,7 +20,8 @@
  * stop the reference list a chapter's citations already earn.
  */
 
-import { walkChapterBlocks, walkInlines, type Chapter, type Inline } from "./tree";
+import { placementOf, type Rendering } from "./canon";
+import { walkInlines, type Block, type Chapter, type Inline } from "./tree";
 
 /** One BibTeX entry: its type, and every field it carries. */
 export interface BibEntry {
@@ -57,18 +58,67 @@ function isNameCharacter(char: string | undefined): boolean {
   return char !== undefined && /[A-Za-z0-9_-]/.test(char);
 }
 
-/** The one-based line a byte offset sits on, for a note that names it. */
-function lineAt(text: string, index: number): number {
+/**
+ * A one-based line counter for a monotonically increasing index.
+ *
+ * `parseBibliography`'s own scan only ever asks for a later index than its
+ * last question, so this counts each newline once across the whole file —
+ * an O(n) total rather than the O(n²) a rescan from the start, once per
+ * note, made real on a hostile file of many bad entries (Fable F17).
+ */
+function lineCounter(text: string): (index: number) => number {
   let line = 1;
-  for (let cursor = 0; cursor < index && cursor < text.length; cursor += 1) {
-    if (text[cursor] === "\n") line += 1;
-  }
-  return line;
+  let countedUpTo = 0;
+  return (index: number): number => {
+    while (countedUpTo < index && countedUpTo < text.length) {
+      if (text[countedUpTo] === "\n") line += 1;
+      countedUpTo += 1;
+    }
+    return line;
+  };
 }
 
 /** Collapse runs of whitespace, including newlines, into a single space. */
 function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+/** A LaTeX accent command's own character to the combining mark it draws. */
+const LATEX_ACCENT_COMBINING: Readonly<Record<string, string>> = {
+  '"': "̈", // dieresis / umlaut
+  "'": "́", // acute
+  "`": "̀", // grave
+  "^": "̂", // circumflex
+  "~": "̃", // tilde
+  c: "̧", // cedilla
+  v: "̌", // caron
+  "=": "̄", // macron
+  H: "̋", // double acute
+  r: "̊", // ring above
+  u: "̆", // breve
+  ".": "̇", // dot above
+};
+
+/**
+ * Fold what a reference manager's own BibTeX export writes for a reader who
+ * has no LaTeX to render it: the protective braces around a title BibTeX
+ * styles would otherwise lower-case (`{The {Great} War}`), the dozen common
+ * accent commands, braced or bare (`{\"o}` and `\'e` both), a double or
+ * triple dash into an en or em dash, and a tie (`~`) into an ordinary space
+ * (Fable F17). Every remaining `{`/`}` is protective by the time a value
+ * reaches here — nothing upstream keeps one for any other reason — so they
+ * are simply removed rather than matched brace by brace.
+ */
+function foldLatexEscapes(value: string): string {
+  return value
+    .replace(/[{}]/g, "")
+    .replace(/\\([`'^"~=Hcvru.])([A-Za-z])/g, (match, command: string, letter: string) => {
+      const mark = LATEX_ACCENT_COMBINING[command];
+      return mark === undefined ? match : (letter + mark).normalize("NFC");
+    })
+    .replace(/---/g, "—")
+    .replace(/--/g, "–")
+    .replace(/~/g, " ");
 }
 
 /**
@@ -164,6 +214,7 @@ function skipBalanced(text: string, open: number): number {
  * a name is displayed.
  */
 export function parseBibliography(text: string): Bibliography {
+  const lineAt = lineCounter(text);
   const entries = new Map<string, BibEntry>();
   const notes: string[] = [];
   let cursor = 0;
@@ -197,7 +248,7 @@ export function parseBibliography(text: string): Bibliography {
         return end;
       })();
       const name = text.slice(skipSpace(text, openAt + 1), nameEnd).trim();
-      notes.push(`ignored a @string macro '${name}', line ${String(lineAt(text, at))}`);
+      notes.push(`ignored a @string macro '${name}', line ${String(lineAt(at))}`);
       cursor = skipBalanced(text, openAt);
       continue;
     }
@@ -243,15 +294,15 @@ export function parseBibliography(text: string): Bibliography {
           : first === '"'
             ? readQuoted(text, valueStart)
             : readBare(text, valueStart, closer);
-      fields[name] = collapseWhitespace(read.value);
+      fields[name] = foldLatexEscapes(collapseWhitespace(read.value));
       fieldCursor = skipSpace(text, read.end);
       if (text[fieldCursor] === ",") fieldCursor += 1;
     }
 
     if (key === "") {
-      notes.push(`an entry with no citation key, line ${String(lineAt(text, at))}`);
+      notes.push(`an entry with no citation key, line ${String(lineAt(at))}`);
     } else if (entries.has(key)) {
-      notes.push(`ignored a repeated key '${key}', line ${String(lineAt(text, at))}`);
+      notes.push(`ignored a repeated key '${key}', line ${String(lineAt(at))}`);
     } else {
       entries.set(key, { key, type, fields });
     }
@@ -346,27 +397,36 @@ export function shortReference(entry: BibEntry): string {
 /** The one style this phase configures. `03-evidence.md` leaves the rest open. */
 export const DEFAULT_CITATION_STYLE = "numeric";
 
-/**
- * The numeric marker for a citation, its locator (`p. 4`) after the numbers.
- *
- * `numbers` is empty for a citation that resolved to nothing; a caller with
- * nothing to show does not call this.
- */
-export function citationMarkerText(numbers: readonly number[], locator: string): string {
-  const body = numbers.join(", ");
-  return locator === "" ? `[${body}]` : `[${body}, ${locator}]`;
-}
-
 // ---------------------------------------------------------------- resolving
 
-/** Every citation inline of a chapter, in source order, footnote bodies included. */
-function citationsIn(chapter: Chapter): Inline[] {
+/**
+ * Every citation inline of a chapter, in source order, footnote bodies
+ * included.
+ *
+ * `rendering` skips a block, and everything inside it, wherever that
+ * rendering's own placement for it is "absent" — a `.notes` div is absent
+ * from the article, so a citation written only inside one earns no numbered
+ * entry and no margin note there (Fable F7): nothing on the page ever points
+ * at it. Left undefined, every citation counts, wherever it sits — the
+ * shape the deck's own `citationLinesFor` needs, since it credits a
+ * citation in a slide's own speaker notes on purpose. `walkChapterBlocks`
+ * is not reused here because its own descent has no way to stop at an
+ * absent container's own children; this walk does, one call at a time.
+ */
+function citationsIn(chapter: Chapter, rendering?: Rendering): Inline[] {
   const found: Inline[] = [];
-  for (const block of walkChapterBlocks(chapter)) {
-    for (const inline of walkInlines(block.inlines)) {
-      if (inline.kind === "citation") found.push(inline);
+  const visit = (blocks: readonly Block[]): void => {
+    for (const block of blocks) {
+      if (rendering !== undefined && placementOf(block, rendering) === "absent") continue;
+      for (const inline of walkInlines(block.inlines)) {
+        if (inline.kind === "citation") found.push(inline);
+      }
+      visit(block.children);
+      for (const item of block.items ?? []) visit(item.blocks);
     }
-  }
+  };
+  visit(chapter.blocks);
+  for (const definition of Object.values(chapter.footnotes)) visit(definition.blocks);
   return found;
 }
 
@@ -412,10 +472,18 @@ export const EMPTY_RESOLUTION: CitationResolution = {
  * document, with the chapters in reading order, so the reference list, the
  * article's numbering, the deck's credit lines and the PDF's numbering all
  * come from the one pass over the one tree.
+ *
+ * `rendering` is the placement filter `citationsIn` applies — pass
+ * `"article"` for the resolution that feeds the article's own numbering
+ * and reference list, so a citation written only inside a `.notes` div
+ * never earns an entry there (Fable F7); leave it undefined for the deck's
+ * own resolution, which credits a citation wherever a slide's own content
+ * carries it, speaker notes included.
  */
 export function resolveCitations(
   chapters: readonly Chapter[],
   bibliography: Bibliography,
+  rendering?: Rendering,
 ): CitationResolution {
   const numberOf = new Map<string, number>();
   const byKey = new Map<string, ReferenceListEntry>();
@@ -423,7 +491,7 @@ export function resolveCitations(
   const unresolvedKeys: string[] = [];
   const seenUnresolved = new Set<string>();
   for (const chapter of chapters) {
-    for (const citation of citationsIn(chapter)) {
+    for (const citation of citationsIn(chapter, rendering)) {
       for (const key of citation.keys ?? []) {
         const found = bibliography.entries.get(key);
         if (found === undefined) {

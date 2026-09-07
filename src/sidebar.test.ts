@@ -49,15 +49,20 @@ describe("the citation badge on a chapter row", () => {
     expect(sidebar.element.querySelector(".tree-badge-citation")).toBeNull();
   });
 
-  it("names the count and lists the keys, for one unresolved key", () => {
+  it("names the count and lists the keys, for one unresolved key (Fable F9)", () => {
     const sidebar = createSidebar(hooks());
     const facts = new Map<string, ChapterFacts>([
       ["01-a.md", { unresolvedCitations: ["nosuchkey"] }],
     ]);
     sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
     const badge = sidebar.element.querySelector(".tree-badge-citation");
-    expect(badge?.textContent).toBe("1 unresolved");
+    // "1 citation", not "1 unresolved": the egg badge beside it must read
+    // differently, not merely in a different colour.
+    expect(badge?.textContent).toBe("1 citation");
     expect(badge?.getAttribute("title")).toBe("Unresolved citation key: nosuchkey");
+    // The key itself reaches a screen reader or a keyboard-only reader too,
+    // not only the `title` tooltip a pointer hovers to see.
+    expect(badge?.getAttribute("aria-label")).toBe("1 citation: nosuchkey");
   });
 
   it("names the count and lists every key, for more than one", () => {
@@ -67,8 +72,9 @@ describe("the citation badge on a chapter row", () => {
     ]);
     sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
     const badge = sidebar.element.querySelector(".tree-badge-citation");
-    expect(badge?.textContent).toBe("2 unresolved");
+    expect(badge?.textContent).toBe("2 citations");
     expect(badge?.getAttribute("title")).toBe("Unresolved citation keys: nosuchkey, another");
+    expect(badge?.getAttribute("aria-label")).toBe("2 citations: nosuchkey, another");
   });
 
   it("marks only the chapter facts names, not one it says nothing about", () => {
@@ -98,16 +104,21 @@ describe("the hidden-construct badge on a chapter row (itd-2609051335518134, map
     expect(sidebar.element.querySelector(".tree-badge-egg")).toBeNull();
   });
 
-  it("names the count and lists the entries, for one unresolved construct", () => {
+  it("names the count and lists the entries, for one unresolved construct (Fable F9)", () => {
     const sidebar = createSidebar(hooks());
     const facts = new Map<string, ChapterFacts>([
       ["01-a.md", { unresolvedCitations: [], unresolvedEggs: ["lantern (marker with no matching block)"] }],
     ]);
     sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
     const badge = sidebar.element.querySelector(".tree-badge-egg");
-    expect(badge?.textContent).toBe("1 unresolved");
+    // "1 hidden mark", not "1 unresolved": distinguishable from the
+    // citation badge by its own word, not only by colour.
+    expect(badge?.textContent).toBe("1 hidden mark");
     expect(badge?.getAttribute("title")).toBe(
       "Unresolved hidden construct: lantern (marker with no matching block)",
+    );
+    expect(badge?.getAttribute("aria-label")).toBe(
+      "1 hidden mark: lantern (marker with no matching block)",
     );
   });
 
@@ -127,7 +138,7 @@ describe("the hidden-construct badge on a chapter row (itd-2609051335518134, map
     ]);
     sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
     const badge = sidebar.element.querySelector(".tree-badge-egg");
-    expect(badge?.textContent).toBe("2 unresolved");
+    expect(badge?.textContent).toBe("2 hidden marks");
   });
 
   it("shows the citation and the egg badge side by side when a chapter carries both", () => {

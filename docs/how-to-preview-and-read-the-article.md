@@ -92,13 +92,16 @@ link. At 390, every margin note has already folded into the flow; at 820 and
 
 ## Reading it the way you like it
 
-A small toolbar sits in the corner of the page, offering theme (light, dark,
-sepia), text size (smaller, default, larger), measure (narrow, normal, wide),
-and a reset. Choose the dark theme and the largest text, and the page changes
-under your hands: the same words, the same notes, the same order, set the way
-you can read them. Close the tab and come back later — in the same browser —
-and the page is still dark and still large; nothing asked you to sign in, and
-nothing was set up in advance by whoever wrote the document.
+A small button in the corner of the page, "Reading preferences", opens a
+toolbar offering theme (light, dark, sepia), text size (smaller, default,
+larger), measure (narrow, normal, wide), and a reset; press it again to
+collapse the toolbar back to just the button, so it never has to sit over
+the last paragraphs on a phone for the whole read. Choose the dark theme and
+the largest text, and the page changes under your hands: the same words, the
+same notes, the same order, set the way you can read them. Close the tab and
+come back later — in the same browser — and the page is still dark and
+still large; nothing asked you to sign in, and nothing was set up in advance
+by whoever wrote the document.
 
 Your choices belong to your browser and go no further: nothing about them is
 sent anywhere, and they never appear to anyone reading the same link on a
@@ -114,12 +117,14 @@ defaults, the way the earlier sections of this page describe it.
 
 ## What is hidden in the text
 
-Some documents open with a quotation, shown once. The first time you open the
-article in a browser, it stands over the page until you dismiss it; open the
-same link again in the same browser, and you land straight on the first
-paragraph — it has already made its introduction. Where a browser cannot run
-a script at all, the same words sit in the flow instead, as an ordinary
-quotation at the top of the page.
+Some documents open with a quotation, shown once. The first time you open
+this document in a browser, it stands over the page until you dismiss it;
+open the same link again — or an earlier or a later version of it — in the
+same browser, and you land straight on the first paragraph — it has already
+made its introduction. A different document remembers nothing about this
+one: its own opening, if it has one, shows the same way the first time.
+Where a browser cannot run a script at all, the same words sit in the flow
+instead, as an ordinary quotation at the top of the page.
 
 Reading on, you may notice a small mark sitting inside a paragraph, about
 where a footnote marker would be. Click it, and what the author hid there

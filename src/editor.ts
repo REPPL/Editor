@@ -419,6 +419,21 @@ export function revealLine(view: EditorView, line: number): void {
   });
 }
 
+/**
+ * Put the cursor at a character offset and bring it into view.
+ *
+ * The offset is clamped to the document's length: a chapter can have been
+ * shortened, elsewhere or in a previous session, since the offset was last
+ * recorded against it (`app.ts`'s per-chapter cursor memory).
+ */
+export function placeCursor(view: EditorView, offset: number): void {
+  const clamped = Math.max(0, Math.min(offset, view.state.doc.length));
+  view.dispatch({
+    selection: EditorSelection.cursor(clamped),
+    scrollIntoView: true,
+  });
+}
+
 /** Where the cursor sat when the open search panel was opened, if anywhere. */
 export function searchOriginOf(view: EditorView): number | null {
   return view.state.field(searchOrigin, false) ?? null;

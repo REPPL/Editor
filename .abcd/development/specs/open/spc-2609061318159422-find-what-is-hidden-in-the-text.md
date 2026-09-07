@@ -288,7 +288,35 @@ more than once, re-reading storage fresh each time, which is also what
 makes "a browser that already dismissed the opening, on a second Preview,
 does not see it again" true with no extra bookkeeping — `readSeenOpening()`
 already answers that from storage, not from a variable this module would
-otherwise have to remember across calls.
+otherwise have to remember across calls. Before it reads storage, `boot()`
+now also discards a panel or an opening modal left open from a previous
+document's own render (`discardStalePanels`) and resets `originsById`, so a
+second Preview never leaves the first document's own dialog, or a focus
+target inside it, standing over a `<main>` that no longer holds it
+(review round one, Fable F14/GLM F10).
+
+- **The storage scope.** Both keys are suffixed with a scope computed at
+  read and write time, not fixed strings, so the once-only opening and the
+  collected eggs are remembered per document rather than per origin
+  (review round one, Fable F1/Sonnet F1, ledger `iss-2609070642209805`).
+  The scope is `document.body`'s own `data-document-scope` attribute where
+  the host wrote one, else `location.pathname` with any `/v/<hash>/`
+  segment removed — the published site varies its own path per document,
+  so stripping only the version segment shares memory between a document's
+  stable link and its own frozen versions while keeping two different
+  documents apart. The app's preview window never navigates between two
+  documents it shows in one session, so its own `data-document-scope`
+  attribute — `preview.ts` writes it from `PreviewSource.documentScope`, a
+  hash of the document's own folder name the shell computes, never the
+  path itself — is what scopes it there instead.
+- **The focus trap.** Both dialogs already carried `role="dialog"
+  aria-modal="true"`, a labelled close, and Escape, but nothing kept Tab
+  from walking a reader out into the page behind the backdrop while the
+  dialog was still announced as modal (review round one, Fable F23/GLM
+  F9). `trapTab` wraps Tab at the dialog's own first and last focusable
+  element (falling back to itself when it is the only one), driven from
+  `currentPanel.dialog`/`openingModal.dialog` rather than a second query
+  of the page.
 
 ## Acceptance Mapping
 
@@ -304,6 +332,9 @@ otherwise have to remember across calls.
 | iPhone width: the panel fills the viewport, no horizontal scroll, no pinch, closing returns focus and the tray stays reachable; iPad and desktop: beside the text, nothing wider than the viewport | `article.css`'s own rules (the 759px panel-width query, no fixed pixel width on `.egg-panel`, the tray an ordinary flow block); `article-eggs.test.ts` › "returns focus to the paragraph the marker sat in, once the panel closes"; manual M12-4 and M12-5, which is where the real look at three widths is proven |
 | The deck omits both constructs entirely | `slides.test.ts` › "the once-only opening and easter eggs" › "omits both constructs entirely…"; `html.test.ts` › "renders nothing in the deck, matched or not…"; `deck.ts`'s own pre-existing `"absent"` placement, confirmed rather than changed |
 | Nothing about a reader's dismissal or collection is held outside the browser; clearing storage returns the page to first-visit state | `article-eggs.test.ts` › "no reader progress ever leaves the browser", "a browser where storage is unavailable" (which is also what a cleared storage reads back as) |
+| A document has one opening, not one per site: two different documents on one origin keep independent memory, and a document's stable link shares memory with its own frozen versions (review round one, Fable F1/Sonnet F1, ledger `iss-2609070642209805`) | `article-eggs.test.ts` › "the memory is scoped to the document, not the origin" group (two documents apart, a version sharing its stable link's memory, a `data-document-scope` attribute overriding the path for a host whose own path never changes) |
+| A second Preview leaves nothing of the first document's own dialog or focus target behind (review round one, Fable F14/GLM F10) | `article-eggs.test.ts` › "a second Preview leaves nothing of the first document's own dialogs behind" group |
+| Both dialogs trap Tab, so a keyboard reader cannot leave an `aria-modal="true"` dialog by tabbing past its last control (review round one, Fable F23/GLM F9) | `article-eggs.test.ts` › "both dialogs trap Tab inside themselves" group |
 | Inherits: nothing stored about a reader; reachable by assistive technology; legible on three device classes; the renderings agree; one source, always; degrades gracefully; variant fidelity (not newly exercised) | see Disciplines inherited, above |
 
 ## Tasks

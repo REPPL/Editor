@@ -18,8 +18,10 @@ Write it as the very first block of your document's very first chapter:
 ```
 
 `once="per-browser"` is the only form the article renders as a modal: a
-reader sees it the first time they open the article in a browser, dismisses
-it, and never sees it again in that browser. Anywhere else in the
+reader sees it the first time they open this document in a browser,
+dismisses it, and never sees it again for this document in that browser —
+a different document, or an unrelated site, remembers nothing about it.
+Anywhere else in the
 document — a later chapter, or a later block of the first one — the sidebar
 lists it as misplaced and the article shows nothing for it at all. A
 document has one opening; write it once, at the very start.

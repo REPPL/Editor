@@ -13,7 +13,7 @@
 
 import type { Resolver } from "../assets";
 import { citationPartsOf, type CitationResolution } from "../bibliography";
-import { hasClass, type Block, type Inline, type ListItem, type TableCell } from "../tree";
+import { hasClass, walkInlines, type Block, type Inline, type ListItem, type TableCell } from "../tree";
 
 /** What a renderer hands the shared shapes. */
 export interface RenderContext {
@@ -184,7 +184,14 @@ function renderResolvedCitation(node: Inline, citations: CitationResolution): st
     // Nothing in this citation resolved: no brackets, just the key, marked.
     return unresolvedSpans;
   }
-  const marker = locator === "" ? numbers.join(", ") : `${numbers.join(", ")}, ${escapeText(locator)}`;
+  // Each number links to the reference list's own `id="ref-N"` (GLM F13):
+  // the list carried an anchor no marker pointed at, and a resolved
+  // citation's numbering is document-wide, so the id needs no idPrefix to
+  // stay unique the way a footnote's own anchor does.
+  const numberLinks = numbers
+    .map((number) => `<a href="#ref-${String(number)}">${String(number)}</a>`)
+    .join(", ");
+  const marker = locator === "" ? numberLinks : `${numberLinks}, ${escapeText(locator)}`;
   const mixed = unresolvedKeys.length === 0 ? "" : `; ${unresolvedSpans}`;
   return `<span class="citation">[${marker}]${mixed}</span>`;
 }
@@ -309,15 +316,38 @@ function cell(item: TableCell, context: RenderContext): string {
   )}</${tag}>`;
 }
 
+/**
+ * Whether an inline node is one the article renders as a margin note — a
+ * citation, a footnote reference or an inline footnote, or a `.margin` span.
+ *
+ * `listItem`'s own single-paragraph shortcut skips the flow renderer that
+ * would otherwise add one of these beside its block (GLM F3), so it asks
+ * this first: the shortcut is still safe for the ordinary paragraph — most
+ * list items — and only a paragraph that would actually lose a note falls
+ * back to the flow the rest of the article already renders through.
+ */
+function hasMarginNoteInline(nodes: readonly Inline[]): boolean {
+  for (const node of walkInlines(nodes)) {
+    if (node.kind === "citation" || node.kind === "footnote-reference" || node.kind === "footnote-inline") {
+      return true;
+    }
+    if (node.kind === "span" && hasClass(node, "margin")) return true;
+  }
+  return false;
+}
+
 /** Render one list item. */
 function listItem(
   item: ListItem,
   context: RenderContext,
   flow: (blocks: readonly Block[], context: RenderContext) => string,
 ): string {
-  // A single paragraph is the common case and wants no `<p>` inside the item.
+  // A single paragraph with nothing that earns a margin note is the common
+  // case and wants no `<p>` inside the item; one that does falls through to
+  // `flow`, the same path a multi-block item already takes, so its note is
+  // never silently dropped (GLM F3).
   const only = item.blocks[0];
-  if (item.blocks.length === 1 && only?.kind === "paragraph") {
+  if (item.blocks.length === 1 && only?.kind === "paragraph" && !hasMarginNoteInline(only.inlines)) {
     return `<li>${renderInlines(only.inlines, context)}</li>`;
   }
   return `<li>${flow(item.blocks, context)}</li>`;

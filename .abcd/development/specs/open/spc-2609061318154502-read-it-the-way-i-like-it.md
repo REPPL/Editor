@@ -89,7 +89,7 @@ state and a non-colour marker (weight and a leading mark) beside it, per
 | Discipline | Proven here by |
 |---|---|
 | Nothing is stored about a reader (`itd-2609051336145770`) | `article-controls.test.ts` › "calls neither fetch nor XMLHttpRequest while every control and reset is exercised"; every value kept lives under one `localStorage` key and nowhere else; `src/local-documents.test.ts`'s new check confirms the same against a real rendered document |
-| Reachable by assistive technology (`itd-2609061324342715`) | `article-controls.test.ts` › "every control is a native, labelled button, never a widget with no name or state"; every button carries `type="button"` and `aria-pressed`; each group is a `<fieldset>` named by its own `<legend>`; the pressed state carries weight and a leading mark beside `aria-pressed`, never colour alone; the two new themes' contrast is measured in "the dark and sepia themes meet a plain contrast floor" |
+| Reachable by assistive technology (`itd-2609061324342715`) | `article-controls.test.ts` › "every control is a native, labelled button, never a widget with no name or state"; every button carries `type="button"` and `aria-pressed`; each group is a `<fieldset>` named by its own `<legend>`; the pressed state carries weight and a leading mark beside `aria-pressed`, never colour alone; every theme's own contrast (light included, review round one Fable F2/GLM F15) is measured in "every theme meets a plain contrast floor" |
 | Legible on three device classes (`itd-2609051336128348`) | the toolbar's own `article.css` rules wrap rather than reserving a fixed width, and cap themselves by `calc(100vw - …)`; `--article-measure`'s two override values are `rem`, never a pixel, proven by "sets `--article-measure` from the measure control, never as a fixed pixel width"; the real look at 390/820/1280 with every control set is manual, M10-1 |
 | One source, always (`itd-2609051336090390`) | one file, `article-controls.js`, `include_str!`'d by `stage.rs`, linked by `build.ts`'s `articleDocument`, `export/services.ts`'s chrome list and `preview.html` alike; none of the four names its own copy |
 | Variant fidelity (`itd-2609051336107315`) | no control here names, offers, or hints at a variant; the toolbar's own markup carries no `.variant` span and reads nothing about one |
@@ -207,6 +207,48 @@ is checked by computing the WCAG relative-luminance contrast ratio of each
 theme's `--article-bg`/`--article-fg` pair directly from the hex values
 `article.css` declares, in `article-controls.test.ts`.
 
+### Each theme pins its own colour-scheme (review round one, Fable F2, GLM F15)
+
+`article.css`'s `:root` originally left `color-scheme: light dark` in force
+unconditionally and resolved `--article-bg`/`--article-fg`/`--article-muted`
+from the OS's own `Canvas`/`CanvasText`/`GrayText` for the light default, so
+"Light" under a dark OS resolved dark regardless of which button read as
+pressed, and "Dark" under a light OS resolved light. `pre`'s and
+`.callout`'s own box backgrounds, and the egg/opening backdrop and its
+`box-shadow`, had the same defect one level down: each mixed `CanvasText`
+into `Canvas` rather than into the theme's own two colours, so a box stayed
+near-white (or near-black) regardless of the chosen theme. Fixed by pinning:
+every one of the three `:root[data-article-theme="…"]` rules now sets its
+own `color-scheme` (`light` for light and sepia, `dark` for dark) alongside
+its four palette properties — light gains an explicit rule for the first
+time, `#ffffff`/`#1a1a1a`/`#595959`, rather than relying on `:root`'s own
+un-themed default — and every box background that used to read `Canvas`/
+`CanvasText` now reads `color-mix(in srgb, var(--article-fg) …%,
+var(--article-bg))`. `article-controls.test.ts`'s own contrast group is
+extended to all three themes (not only dark and sepia) and to `pre`'s and
+`.callout`'s own backgrounds, asserting neither names `Canvas` or
+`CanvasText` literally.
+
+### The toolbar's own toggle (review round one, Fable F6)
+
+`itd-2609051336128348` forbids reader controls "that cannot be reached or
+dismissed at the narrowest width"; the toolbar's own `position: fixed`
+footprint at 390 CSS px — three `<fieldset>`s and a reset, wrapped into
+several rows — sat over roughly the lower quarter of the viewport for the
+whole read with nothing that hid it. `buildToolbar` now wraps the three
+groups and the reset in an `.article-controls-body`, preceded by a
+`<button class="article-controls-toggle" aria-expanded="true"
+aria-controls="article-controls-body">`; a click toggles the body's own
+`hidden` attribute and flips `aria-expanded`. Chosen over moving the
+toolbar in flow at the top of the page below 760px (Fable's own alternative
+fix) because it keeps the toolbar's shape, its storage behaviour, and every
+existing test unchanged at every width, answering the discipline with one
+small, reversible state rather than a second layout mode; the toggle
+starts expanded, so a first read is unchanged, and nothing about the
+toggle's own open/closed state is persisted — it is a per-visit reading
+convenience, not a preference `readStored`/`writeStored` need to know
+about.
+
 ### Storage: one key, wrapped, sanitised on the way back in
 
 `readStored`, `writeStored` and `clearStored` are the only three places this
@@ -230,6 +272,7 @@ older version reading it back.
 | Sepia and narrow measure, then reset: theme, text size and measure all return to the article's defaults, and a reload keeps them | `article-controls.test.ts` › "returns theme, text size and measure to the article's defaults, and a reload keeps them" |
 | No request carries a preference; a second browser on the same machine renders at the defaults | `article-controls.test.ts` › "calls neither fetch nor XMLHttpRequest while every control and reset is exercised", "renders at the defaults in a second browser, which never saw the first browser's choice" |
 | 390 CSS px, largest text and widest measure together: only vertical scroll, nothing wider than the viewport; the same at 820 and 1280 | `article-controls.test.ts` › "sets --article-measure from the measure control, never as a fixed pixel width", "declares no width in article.css's toolbar section as a bare pixel value", "caps the toolbar's own width by the viewport rather than a fixed size"; the real look at three widths is manual, M10-1 |
+| Reader controls can be reached or dismissed at the narrowest width — the toolbar never permanently covers the page (`itd-2609051336128348`, review round one Fable F6) | `article-controls.test.ts` › "the dismiss toggle" › "starts expanded, and collapses the three groups and the reset behind it on a press" |
 | Every margin note stays level with its paragraph when the measure changes at 1280 CSS px | the Design section's own arithmetic argument (the margin rail's reserved strip does not read `--article-measure`); manual M10-2, because jsdom has no layout engine to move a note in the first place |
 | The exported single HTML file: the same toolbar, the same reset, choices in force per browser and per file | `stage.rs`'s `chrome_for_folder("article")` and `export.rs`'s `an_article_export_carries_only_the_article_s_stylesheet_and_its_scripts` prove the file ships beside the article's other two; the per-file isolation is a `file:` origin's own storage behaviour, not this script's, and is manual, M10-3 |
 | A browser with storage unavailable or cleared: the change applies for the visit, the next load is at the defaults, and no error shows | `article-controls.test.ts` › "applies the change for the visit, shows no error, and renders at the defaults on the next load" |

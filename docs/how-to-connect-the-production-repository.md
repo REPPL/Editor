@@ -79,4 +79,6 @@ document.
 
 Publish a document, open the link it hands you on another machine, and read
 `publish-log.json` in the document folder: one entry, with the timestamp, the
-version hash, the variant, the flag and the links.
+version hash, the variant, the flag and the links. A document that names no
+variant in `document.yaml` reads `default` here — its own single variant,
+not a name you chose.

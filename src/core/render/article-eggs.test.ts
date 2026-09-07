@@ -17,6 +17,7 @@ const SOURCE = readFileSync(join(__dirname, "article-eggs.js"), "utf8");
 
 interface ArticleEggsApi {
   boot(): void;
+  documentScope(): string;
   readonly STORAGE_KEY_OPENING: string;
   readonly STORAGE_KEY_COLLECTED: string;
   readonly KONAMI_SEQUENCE: readonly string[];
@@ -141,10 +142,13 @@ describe("first visit", () => {
 
 describe("dismissal", () => {
   it("removes the modal, marks the opening seen, and never shows it again this visit", () => {
-    load().boot();
+    const eggs = load();
+    eggs.boot();
     document.querySelector<HTMLButtonElement>(".opening-dismiss")?.click();
     expect(document.querySelector(".opening-modal")).toBeNull();
-    expect(window.localStorage.getItem("editor-article-opening-seen")).not.toBeNull();
+    // Scoped to the document (iss-2609070642209805): the bare key is never
+    // written on its own any more.
+    expect(window.localStorage.getItem(`${eggs.STORAGE_KEY_OPENING}::${eggs.documentScope()}`)).not.toBeNull();
   });
 
   it("Escape also dismisses the modal", () => {
@@ -177,6 +181,120 @@ describe("reload", () => {
     again.boot();
 
     expect(document.querySelector(".opening-modal")).not.toBeNull();
+  });
+});
+
+describe("the memory is scoped to the document, not the origin (iss-2609070642209805)", () => {
+  afterEach(() => {
+    window.history.pushState(null, "", "/");
+  });
+
+  it("keeps two documents on one site apart: dismissing one leaves the other's opening showing", () => {
+    window.history.pushState(null, "", "/doc-a/token/");
+    load().boot();
+    document.querySelector<HTMLButtonElement>(".opening-dismiss")?.click();
+    expect(document.querySelector(".opening-modal")).toBeNull();
+
+    window.history.pushState(null, "", "/doc-b/token/");
+    mountArticle();
+    const again = load();
+    again.boot();
+    expect(document.querySelector(".opening-modal")).not.toBeNull();
+  });
+
+  it("shares one memory between a document's stable link and one of its own frozen versions", () => {
+    window.history.pushState(null, "", "/doc-a/token/");
+    load().boot();
+    document.querySelector<HTMLButtonElement>(".opening-dismiss")?.click();
+
+    window.history.pushState(null, "", "/doc-a/token/v/abc123/");
+    mountArticle();
+    const again = load();
+    again.boot();
+    expect(document.querySelector(".opening-modal")).toBeNull();
+  });
+
+  it("prefers a data-document-scope attribute over the path, for a host whose path never changes", () => {
+    load().boot();
+    document.body.setAttribute("data-document-scope", "folder-hash-one");
+    document.querySelector<HTMLButtonElement>(".opening-dismiss")?.click();
+    expect(document.querySelector(".opening-modal")).toBeNull();
+
+    // The same fixed pathname, a different document's own scope attribute:
+    // the app's preview window, one page for every document Alice opens.
+    mountArticle();
+    document.body.setAttribute("data-document-scope", "folder-hash-two");
+    const again = load();
+    again.boot();
+    expect(document.querySelector(".opening-modal")).not.toBeNull();
+  });
+});
+
+describe("a second Preview leaves nothing of the first document's own dialogs behind (Fable F14, GLM F10)", () => {
+  it("discards a stale panel and opening modal rather than leaking them across a re-render", () => {
+    load().boot();
+    marker("egg-lantern").click();
+    expect(document.querySelector(".egg-panel")).not.toBeNull();
+
+    // A fresh document replaces `<main>` while the panel is still open.
+    mountArticle();
+    const again = load();
+    again.boot();
+
+    expect(document.querySelector(".egg-panel")).toBeNull();
+    // The new document's own opening shows: dismissing the first one never
+    // silently marked the second one seen.
+    expect(document.querySelector(".opening-modal")).not.toBeNull();
+  });
+
+  it("resets originsById, so a marker collected before the re-render does not focus a detached node", () => {
+    load().boot();
+    marker("egg-lantern").click();
+    document.querySelector<HTMLButtonElement>(".egg-panel-close")?.click();
+    const firstParagraph = marker("egg-lantern").closest("p");
+
+    mountArticle();
+    const again = load();
+    again.boot();
+
+    marker("egg-lantern").click();
+    document.querySelector<HTMLButtonElement>(".egg-panel-close")?.click();
+    // Focus goes to the new document's own paragraph, never the first
+    // render's detached one.
+    expect(document.activeElement).not.toBe(firstParagraph);
+    expect(document.activeElement).toBe(marker("egg-lantern").closest("p"));
+  });
+});
+
+describe("both dialogs trap Tab inside themselves (Fable F23, GLM F9)", () => {
+  it("wraps Tab forward from the egg panel's own last focusable element back to its first", () => {
+    load().boot();
+    marker("egg-lantern").click();
+    const close = document.querySelector<HTMLButtonElement>(".egg-panel-close");
+    close?.focus();
+    expect(document.activeElement).toBe(close);
+
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement?.className).toBe("egg-panel-close");
+  });
+
+  it("wraps Shift-Tab backward from the opening modal's own first focusable element to its last", () => {
+    load().boot();
+    const dismiss = document.querySelector<HTMLButtonElement>(".opening-dismiss");
+    dismiss?.focus();
+    expect(document.activeElement).toBe(dismiss);
+
+    const event = new KeyboardEvent("keydown", {
+      key: "Tab",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(dismiss);
   });
 });
 

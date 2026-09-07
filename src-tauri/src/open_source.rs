@@ -103,6 +103,59 @@ impl OpenSourcePicks {
     }
 }
 
+/// The bare file the open document root was opened from, when it was opened
+/// that way rather than as a real document folder — `None` for an ordinary
+/// folder open, or a file picked from inside a real document.
+///
+/// `open_folder`'s own command (`lib.rs`) checks this before deciding how to
+/// re-walk a root it is asked to open again — on `C-x C-r`, and whenever the
+/// watcher fires — so a reload rebuilds through [`document::read_single_chapter`]
+/// the same way the original open did, rather than the whole-folder walk
+/// that used to draw every sibling and subfolder the bare file never asked
+/// to share a sidebar with (review round one, Fable F25,
+/// `iss-2609070642207436`). A path that no longer matches the file
+/// remembered here is a genuinely different folder, and clears it.
+#[derive(Default)]
+pub struct SingleFileRoot(Mutex<Option<PathBuf>>);
+
+impl SingleFileRoot {
+    /// Remember (or forget) which bare file, if any, the open root was
+    /// opened from.
+    pub(crate) fn set(&self, file: Option<PathBuf>) -> Result<(), String> {
+        let mut held = self
+            .0
+            .lock()
+            .map_err(|_| "the document root is unreadable".to_string())?;
+        *held = file;
+        Ok(())
+    }
+
+    /// The bare file remembered, if the open root was opened from one.
+    pub(crate) fn get(&self) -> Result<Option<PathBuf>, String> {
+        Ok(self
+            .0
+            .lock()
+            .map_err(|_| "the document root is unreadable".to_string())?
+            .clone())
+    }
+
+    /// Whether `remembered` is the reason `resolved` is being opened again:
+    /// the bare file it names, exactly when that file's own parent folder is
+    /// `resolved` — `None` for every other case, including a `remembered`
+    /// that names a file somewhere else entirely, which is a genuinely
+    /// different folder open rather than a reload of this one.
+    ///
+    /// `lib.rs`'s `open_folder` calls this to decide whether a reload rebuilds
+    /// through `document::read_single_chapter` rather than walking `resolved`
+    /// as a whole folder (review round one, Fable F25).
+    pub(crate) fn matches(remembered: &Option<PathBuf>, resolved: &Path) -> Option<PathBuf> {
+        remembered
+            .as_ref()
+            .filter(|file| file.parent() == Some(resolved))
+            .cloned()
+    }
+}
+
 /// The last segment of a path, as a name a message may carry — never the
 /// machine path around it.
 fn name_of(path: &Path) -> String {
@@ -155,16 +208,26 @@ fn tree_contains_chapter(part: &document::Part, path: &str) -> bool {
 }
 
 /// Resolve one pick into the folder that becomes the new `DocumentRoot`, the
-/// tree to show, and the chapter to select, if any.
+/// tree to show, the chapter to select if any, and — only for a file with no
+/// real document above it — the bare file itself, for `SingleFileRoot` to
+/// remember.
 fn resolve_source(
     kind: PickedKind,
     path: &Path,
-) -> Result<(PathBuf, document::DocumentTree, Option<String>), String> {
+) -> Result<
+    (
+        PathBuf,
+        document::DocumentTree,
+        Option<String>,
+        Option<PathBuf>,
+    ),
+    String,
+> {
     match kind {
         PickedKind::Folder => {
             let resolved = document::canonical_root(&path.to_string_lossy())?;
             let tree = document::read_tree(&resolved)?;
-            Ok((resolved, tree, None))
+            Ok((resolved, tree, None, None))
         }
         PickedKind::File => {
             let resolved = fs::canonicalize(path)
@@ -181,11 +244,11 @@ fn resolve_source(
                 } else {
                     None
                 };
-                return Ok((root, tree, selected_chapter));
+                return Ok((root, tree, selected_chapter, None));
             }
             let selected = resolved.to_string_lossy().into_owned();
             let root_path = PathBuf::from(&standalone.root.path);
-            Ok((root_path, standalone, Some(selected)))
+            Ok((root_path, standalone, Some(selected), Some(resolved)))
         }
     }
 }
@@ -255,22 +318,30 @@ pub async fn pick_document_file(
 ///
 /// Sets `DocumentRoot` and replaces the folder watcher exactly as
 /// `open_folder`'s own command body already does, whichever route
-/// `resolve_source` took to get there — one canonical root, one watcher.
+/// `resolve_source` took to get there — one canonical root, one watcher. Also
+/// sets `SingleFileRoot`, so a later reload of this same root knows to rebuild
+/// it the same way (Fable F25). A bare file's watcher is narrowed to the file
+/// itself rather than its whole folder: a sibling changing, or the author's
+/// own save landing beside it, must not draw every neighbour into a sidebar
+/// that promised exactly one chapter.
 #[tauri::command]
 pub async fn open_document_source(
     nonce: String,
     app: tauri::AppHandle,
     picks: tauri::State<'_, OpenSourcePicks>,
     root: tauri::State<'_, DocumentRoot>,
+    single_file: tauri::State<'_, SingleFileRoot>,
     watcher: tauri::State<'_, watch::CurrentWatch>,
 ) -> Result<OpenedSource, String> {
     let (kind, path) = picks.claim(&nonce)?;
-    let (resolved, tree, selected_chapter) =
+    let (resolved, tree, selected_chapter, bare_file) =
         tauri::async_runtime::spawn_blocking(move || resolve_source(kind, &path))
             .await
             .map_err(|error| format!("cannot open what you chose: {error}"))??;
     root.set(resolved.clone())?;
-    if let Err(error) = watcher.replace(&resolved, move || {
+    single_file.set(bare_file.clone())?;
+    let watched = bare_file.as_deref().unwrap_or(resolved.as_path());
+    if let Err(error) = watcher.replace(watched, move || {
         if let Err(error) = app.emit(watch::CHANGED_EVENT, ()) {
             log::error!("cannot emit {}: {error}", watch::CHANGED_EVENT);
         }
@@ -289,6 +360,27 @@ mod tests {
 
     fn temp() -> tempfile::TempDir {
         tempfile::tempdir().expect("temp dir")
+    }
+
+    #[test]
+    fn matches_a_reload_of_the_same_bare_file_and_nothing_else() {
+        // A reload passes the open document's own root — the bare file's
+        // parent folder — back to `open_folder`; this is the check that
+        // tells it to rebuild through `read_single_chapter` rather than
+        // walking that folder for real (Fable F25, `iss-2609070642207436`).
+        let file = PathBuf::from("/documents/drafts/01-notes.md");
+        let folder = PathBuf::from("/documents/drafts");
+        let elsewhere = PathBuf::from("/documents/elsewhere");
+
+        assert_eq!(
+            SingleFileRoot::matches(&Some(file.clone()), &folder),
+            Some(file.clone())
+        );
+        // A genuinely different folder — nothing to do with the file
+        // remembered — is answered as one, not as a reload of it.
+        assert_eq!(SingleFileRoot::matches(&Some(file), &elsewhere), None);
+        // No file remembered at all: an ordinary folder open.
+        assert_eq!(SingleFileRoot::matches(&None, &folder), None);
     }
 
     #[test]
@@ -325,13 +417,14 @@ mod tests {
         fs::create_dir(dir.path().join("01-part")).expect("part");
         fs::write(dir.path().join("01-part/01-alice.md"), "# Alice\n").expect("chapter");
 
-        let (resolved, tree, selected) =
+        let (resolved, tree, selected, bare_file) =
             resolve_source(PickedKind::Folder, dir.path()).expect("resolved");
         let canonical = fs::canonicalize(dir.path()).expect("canonical");
         assert_eq!(resolved, canonical);
         assert_eq!(tree.root.parts.len(), 1);
         assert_eq!(tree.root.parts[0].chapters.len(), 1);
         assert_eq!(selected, None);
+        assert_eq!(bare_file, None);
     }
 
     #[test]
@@ -341,7 +434,8 @@ mod tests {
         fs::write(&file, "# Notes\n\nWritten on a train.\n").expect("chapter");
         let before: Vec<_> = fs::read_dir(dir.path()).expect("read before").collect();
 
-        let (resolved, tree, selected) = resolve_source(PickedKind::File, &file).expect("resolved");
+        let (resolved, tree, selected, bare_file) =
+            resolve_source(PickedKind::File, &file).expect("resolved");
         let canonical_file = fs::canonicalize(&file).expect("canonical");
         let canonical_folder = fs::canonicalize(dir.path()).expect("canonical folder");
         assert_eq!(resolved, canonical_folder);
@@ -351,6 +445,10 @@ mod tests {
             selected,
             Some(canonical_file.to_string_lossy().into_owned())
         );
+        // A bare file with no real document above it is exactly the shape
+        // `SingleFileRoot` remembers, so a later reload rebuilds it the same
+        // way rather than walking the whole folder (Fable F25).
+        assert_eq!(bare_file, Some(canonical_file));
 
         let after: Vec<_> = fs::read_dir(dir.path()).expect("read after").collect();
         assert_eq!(before.len(), after.len(), "nothing was written");
@@ -369,7 +467,7 @@ mod tests {
         let chapter = part.join("01-opening.md");
         fs::write(&chapter, "# Opening\n").expect("chapter");
 
-        let (resolved, tree, selected) =
+        let (resolved, tree, selected, bare_file) =
             resolve_source(PickedKind::File, &chapter).expect("resolved");
         let canonical_root = fs::canonicalize(dir.path()).expect("canonical root");
         let canonical_chapter = fs::canonicalize(&chapter).expect("canonical chapter");
@@ -379,6 +477,9 @@ mod tests {
             selected,
             Some(canonical_chapter.to_string_lossy().into_owned())
         );
+        // A chapter picked from inside a real document is not a bare file:
+        // nothing here should make a later reload skip the folder walk.
+        assert_eq!(bare_file, None);
     }
 
     #[test]

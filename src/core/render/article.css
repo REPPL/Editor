@@ -37,11 +37,14 @@
 
   /* The palette: three names, one shape. Light is the default; map #10's
      dark and sepia themes redeclare only these four properties, on the root
-     element, from outside this file. */
-  --article-bg: Canvas;
-  --article-fg: CanvasText;
-  --article-muted: GrayText;
-  --article-rule: color-mix(in srgb, CanvasText 25%, transparent);
+     element, from outside this file. Pinned hex rather than `Canvas`/
+     `CanvasText`/`GrayText`: those resolve by the OS's own colour scheme,
+     which is not the theme a reader chose here — under a dark OS, "Light"
+     must still be light (Fable F2, GLM F15). */
+  --article-bg: #ffffff;
+  --article-fg: #1a1a1a;
+  --article-muted: #595959;
+  --article-rule: color-mix(in srgb, #1a1a1a 25%, transparent);
 }
 
 /* ---------------------------------------------------------------------
@@ -80,6 +83,10 @@ body.article h1 {
 
 body.article p {
   margin: 0 0 1rem;
+  /* A long token — a DOI, an unbroken URL a reference carries verbatim —
+     breaks rather than forcing the page wider than the viewport at 390 CSS
+     px, the discipline's own named failure. */
+  overflow-wrap: anywhere;
 }
 
 body.article figure {
@@ -103,7 +110,10 @@ body.article figcaption {
 body.article pre {
   overflow-x: auto;
   padding: 0.75rem;
-  background: color-mix(in srgb, CanvasText 6%, Canvas);
+  /* Derived from the chosen theme's own two colours, never the OS's
+     `Canvas`/`CanvasText` (Fable F2): those resolve by the system's colour
+     scheme, which can disagree with the theme a reader picked here. */
+  background: color-mix(in srgb, var(--article-fg) 6%, var(--article-bg));
 }
 
 body.article table {
@@ -179,6 +189,9 @@ body.article .margin-note {
   line-height: 1.5;
   color: var(--article-muted);
   border-left: 2px solid var(--article-rule);
+  /* A citation's own url or a long token in a margin note breaks rather
+     than forcing the page wider than the viewport at 390 CSS px. */
+  overflow-wrap: anywhere;
 }
 
 body.article .margin-note p {
@@ -220,6 +233,9 @@ body.article .reference-list {
 
 body.article .reference-list li {
   margin: 0 0 0.5rem;
+  /* A reference's own url, appended verbatim, breaks rather than forcing
+     the page wider than the viewport at 390 CSS px. */
+  overflow-wrap: anywhere;
 }
 
 /* ---------------------------------------------------------------------
@@ -231,7 +247,9 @@ body.article .callout {
   padding: 1rem 1.25rem;
   border: 1px solid var(--article-rule);
   border-left-width: 4px;
-  background: color-mix(in srgb, CanvasText 4%, Canvas);
+  /* Derived from the chosen theme, never the OS's own colours (Fable F2):
+     see `pre`'s own rule above for why. */
+  background: color-mix(in srgb, var(--article-fg) 4%, var(--article-bg));
 }
 
 body.article .callout::before {
@@ -381,7 +399,22 @@ body.article figure.video[data-player-ready] img {
  * section only redeclares the four palette properties for the other two.
  * ------------------------------------------------------------------- */
 
+/* Each theme pins its own `color-scheme` rather than leaving `:root`'s
+   `light dark` in force: without this, a browser's own dark-mode scrollbar,
+   form control and selection colours followed the OS regardless of which
+   button read as pressed here, and "Light" under a dark OS, or "Dark" under
+   a light one, rendered its box backgrounds from the wrong half of `light
+   dark` while its four custom properties said otherwise (Fable F2). */
+:root[data-article-theme="light"] {
+  color-scheme: light;
+  --article-bg: #ffffff;
+  --article-fg: #1a1a1a;
+  --article-muted: #595959;
+  --article-rule: color-mix(in srgb, #1a1a1a 25%, transparent);
+}
+
 :root[data-article-theme="dark"] {
+  color-scheme: dark;
   --article-bg: #1b1b1b;
   --article-fg: #e9e6df;
   --article-muted: #a9a49a;
@@ -389,6 +422,7 @@ body.article figure.video[data-player-ready] img {
 }
 
 :root[data-article-theme="sepia"] {
+  color-scheme: light;
   --article-bg: #f4ecd8;
   --article-fg: #3b2f1e;
   --article-muted: #7a6a52;
@@ -398,19 +432,46 @@ body.article figure.video[data-player-ready] img {
 /* The toolbar itself: a small, fixed corner, never a fixed pixel width — it
    wraps its own groups rather than growing past the viewport, which is what
    keeps it inside 390 CSS px alongside the largest text and the widest
-   measure (itd-2609051335492327's own falsifiable claim). */
+   measure (itd-2609051335492327's own falsifiable claim). The toggle button
+   is the toolbar's only permanent footprint; its own body — the three
+   groups and the reset — is a reader's own choice to show, so nothing here
+   sits over the page for the whole read with no way to dismiss it
+   (itd-2609051336128348, Fable F6). */
 body.article .article-controls {
   position: fixed;
   right: 0.75rem;
   bottom: 0.75rem;
   z-index: 10;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 0.5rem;
   max-width: calc(100vw - 1.5rem);
-  padding: 0.5rem;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 0.8rem;
+}
+
+body.article .article-controls-toggle {
+  font: inherit;
+  color: inherit;
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+body.article .article-controls-toggle:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+body.article .article-controls-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.5rem;
   background: var(--article-bg);
   color: var(--article-fg);
   border: 1px solid var(--article-rule);
@@ -486,7 +547,10 @@ body.article .article-controls-reset {
   z-index: 30;
   display: flex;
   justify-content: flex-end;
-  background: color-mix(in srgb, CanvasText 45%, transparent);
+  /* Derived from the chosen theme's own foreground, never the OS's
+     `CanvasText` (Fable F2): the backdrop must dim by the same colour the
+     dialog it holds is drawn in. */
+  background: color-mix(in srgb, var(--article-fg) 45%, transparent);
 }
 
 .opening-backdrop {
@@ -503,7 +567,7 @@ body.article .article-controls-reset {
   background: var(--article-bg);
   color: var(--article-fg);
   border-radius: 0.25rem;
-  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, CanvasText 25%, transparent);
+  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, var(--article-fg) 25%, transparent);
 }
 
 /* The opening quotation itself, once it is inside the modal: the plain
@@ -771,8 +835,13 @@ body.article .article-controls-reset {
 .article-keys-list kbd {
   font: inherit;
   font-family: ui-monospace, monospace;
-  background: var(--article-muted);
-  color: var(--article-bg);
+  /* Muted text on the page background, with a rule border: the same pair
+     the body text already proves contrast for, rather than `--article-muted`
+     as a background colour, which carries no contrast guarantee of its own
+     against the text it held (Fable F30). */
+  background: var(--article-bg);
+  color: var(--article-muted);
+  border: 1px solid var(--article-rule);
   border-radius: 0.2rem;
   padding: 0.05rem 0.35rem;
   margin-right: 0.35rem;

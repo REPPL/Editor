@@ -69,18 +69,55 @@ struct NewDocumentMetadata<'a> {
     citation_style: &'a str,
 }
 
-/// A title as one path segment: the slug rule the intent names — lowercase
-/// ASCII, non-alphanumerics reduced to hyphens, collapsed.
+/// The plain ASCII letter an accented Latin letter reads as.
 ///
-/// This is deliberately simpler than `slugify` in `src/core/outline.ts`, which
-/// also folds accented Latin letters to their plain ASCII form through Unicode
-/// normalisation. Rust's standard library carries no such table, and adding
-/// one is a dependency this change may not take
-/// (`AGENTS.md`: "Do not add a dependency of any kind."). So a non-ASCII
-/// letter is treated as any other non-alphanumeric character and becomes a
-/// hyphen rather than the letter it resembles — still lowercase ASCII,
-/// still collapsed, and the one place the two slug rules read a title
-/// differently. Recorded as a decision.
+/// Covers the Latin-1 Supplement and Latin Extended-A accented letters —
+/// enough to answer every case `src/core/outline.ts`'s own `slugify` test
+/// pins — as a direct table rather than through Unicode NFKD normalisation,
+/// which needs a table Rust's standard library does not carry and this
+/// change may not add a dependency for (`AGENTS.md`: "Do not add a
+/// dependency of any kind."). A letter this table does not know about is
+/// left to fall through to punctuation, as every non-alphanumeric character
+/// already does.
+fn fold_accent(ch: char) -> Option<char> {
+    Some(match ch {
+        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ă' | 'Ą' | 'à' | 'á' | 'â' | 'ã' | 'ä' | 'å'
+        | 'ā' | 'ă' | 'ą' => 'a',
+        'Ç' | 'Ć' | 'Ĉ' | 'Ċ' | 'Č' | 'ç' | 'ć' | 'ĉ' | 'ċ' | 'č' => 'c',
+        'Ð' | 'Ď' | 'Đ' | 'ð' | 'ď' | 'đ' => 'd',
+        'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ĕ' | 'Ė' | 'Ę' | 'Ě' | 'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ'
+        | 'ė' | 'ę' | 'ě' => 'e',
+        'Ĝ' | 'Ğ' | 'Ġ' | 'Ģ' | 'ĝ' | 'ğ' | 'ġ' | 'ģ' => 'g',
+        'Ĥ' | 'Ħ' | 'ĥ' | 'ħ' => 'h',
+        'Ì' | 'Í' | 'Î' | 'Ï' | 'Ĩ' | 'Ī' | 'Ĭ' | 'Į' | 'İ' | 'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī'
+        | 'ĭ' | 'į' | 'ı' => 'i',
+        'Ĵ' | 'ĵ' => 'j',
+        'Ķ' | 'ķ' => 'k',
+        'Ĺ' | 'Ļ' | 'Ľ' | 'Ŀ' | 'Ł' | 'ĺ' | 'ļ' | 'ľ' | 'ŀ' | 'ł' => 'l',
+        'Ñ' | 'Ń' | 'Ņ' | 'Ň' | 'ñ' | 'ń' | 'ņ' | 'ň' => 'n',
+        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'Ō' | 'Ŏ' | 'Ő' | 'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø'
+        | 'ō' | 'ŏ' | 'ő' => 'o',
+        'Ŕ' | 'Ŗ' | 'Ř' | 'ŕ' | 'ŗ' | 'ř' => 'r',
+        'Ś' | 'Ŝ' | 'Ş' | 'Š' | 'ś' | 'ŝ' | 'ş' | 'š' | 'ß' => 's',
+        'Ţ' | 'Ť' | 'Ŧ' | 'ţ' | 'ť' | 'ŧ' => 't',
+        'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ũ' | 'Ū' | 'Ŭ' | 'Ů' | 'Ű' | 'Ų' | 'ù' | 'ú' | 'û' | 'ü' | 'ũ'
+        | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => 'u',
+        'Ŵ' | 'ŵ' => 'w',
+        'Ý' | 'Ÿ' | 'Ŷ' | 'ý' | 'ÿ' | 'ŷ' => 'y',
+        'Ź' | 'Ż' | 'Ž' | 'ź' | 'ż' | 'ž' => 'z',
+        _ => return None,
+    })
+}
+
+/// A title as one path segment: the slug rule the intent names — lowercase
+/// ASCII, non-alphanumerics reduced to hyphens, collapsed — with an accented
+/// Latin letter folded to the plain letter it resembles first, exactly as
+/// `src/core/outline.ts`'s own `slugify` does for a heading. The two rules
+/// used to depart here (review round one, Fable F16; the departure was
+/// recorded at the time, and the record now names this fold as what closed
+/// it) because Rust's standard library carries no Unicode normalisation
+/// table; `fold_accent` above is the thirty-some-line table that answers the
+/// cases that matter without adding one.
 pub fn slugify(title: &str) -> String {
     let mut slug = String::with_capacity(title.len());
     // Seeded true so a leading run of punctuation is dropped rather than
@@ -90,6 +127,9 @@ pub fn slugify(title: &str) -> String {
         let lower = ch.to_ascii_lowercase();
         if lower.is_ascii_lowercase() || lower.is_ascii_digit() {
             slug.push(lower);
+            last_was_hyphen = false;
+        } else if let Some(folded) = fold_accent(ch) {
+            slug.push(folded);
             last_was_hyphen = false;
         } else if !last_was_hyphen {
             slug.push('-');
@@ -166,6 +206,18 @@ pub fn create_document(destination: &Path, title: &str) -> Result<NewDocumentOut
     if title.is_empty() {
         return Err("a document needs a title before it can be created".to_string());
     }
+    // `write_the_book` writes `title` verbatim as the chapter's own level-one
+    // heading, and this command is reachable from any window regardless of
+    // what the New document panel's `<input type="text">` would let through
+    // (the app's own decision that Tauri capabilities do not gate commands
+    // by window) — so the newline this trust boundary must refuse is the
+    // Rust side's to catch, not the input field's (review round one, GLM
+    // F6). A line break in the middle of a title would otherwise turn one
+    // typed field into a second heading, or Setext-underline the next line
+    // by accident.
+    if title.contains('\n') || title.contains('\r') {
+        return Err("a title cannot hold a line break".to_string());
+    }
 
     let root = fs::canonicalize(destination)
         .map_err(|error| format!("cannot resolve the folder you chose: {error}"))?;
@@ -181,14 +233,27 @@ pub fn create_document(destination: &Path, title: &str) -> Result<NewDocumentOut
 
     let part_name = format!("01-{FIRST_PART_NAME}");
     let part = root.join(&part_name);
-    fs::create_dir(&part).map_err(|error| format!("cannot create {part_name}: {error}"))?;
+    // An empty `01-chapters` can already be sitting there — left by a folder
+    // that was never quite a document, or by an aborted create — and
+    // `what_it_already_holds` above has already decided that an empty Part
+    // is not a document either. `fs::create_dir` refuses to create a folder
+    // that exists, even an empty one, so this writes into it rather than
+    // asking the filesystem to make it twice, which used to fail with the
+    // OS's own "File exists" rather than the folder simply being written
+    // into (review round one, Fable F15).
+    let part_already_there = part.is_dir();
+    if !part_already_there {
+        fs::create_dir(&part).map_err(|error| format!("cannot create {part_name}: {error}"))?;
+    }
 
     let outcome = write_the_book(&root, &part, title);
-    if outcome.is_err() {
+    if outcome.is_err() && !part_already_there {
         // The folder is one this call made a moment ago, so it is this call's
         // to take away again: a half-written document must not look like one
         // that succeeded, and the next attempt must not find a partial book
         // standing in the way of `is_folder_name`-style collision handling.
+        // A Part this call found already there is left alone on failure —
+        // it was not this call's to make, so it is not this call's to sweep.
         if let Err(swept) = fs::remove_dir_all(&part) {
             eprintln!("new_document: cannot remove {part_name} after a failed create: {swept}");
         }
@@ -371,11 +436,11 @@ mod tests {
         );
         assert_eq!(
             slugify("Technikfolgenabschätzung"),
-            "technikfolgenabsch-tzung"
+            "technikfolgenabschatzung"
         );
         assert_eq!(slugify("---"), "document");
         assert_eq!(slugify(""), "document");
-        assert_eq!(slugify("  Café, 1999  "), "caf-1999");
+        assert_eq!(slugify("  Café, 1999  "), "cafe-1999");
     }
 
     #[test]
@@ -439,7 +504,7 @@ mod tests {
         assert!(
             outcome
                 .chapter
-                .contains("01-caf-life-1999-2001-a-memoir.md"),
+                .contains("01-cafe-life-1999-2001-a-memoir.md"),
             "{}",
             outcome.chapter
         );
@@ -450,6 +515,19 @@ mod tests {
         let dir = temp();
         let error = create_document(dir.path(), "   ").expect_err("refused");
         assert!(error.contains("title"), "{error}");
+        assert_eq!(fs::read_dir(dir.path()).expect("read").count(), 0);
+    }
+
+    #[test]
+    fn refuses_a_title_with_a_line_break_and_writes_nothing() {
+        // The command is reachable from any window regardless of what the
+        // New document panel's own `<input type="text">` would let through,
+        // so this trust boundary catches it independently — a line break
+        // would otherwise turn one typed field into a second heading in the
+        // chapter this call writes (review round one, GLM F6).
+        let dir = temp();
+        let error = create_document(dir.path(), "Line one\nLine two").expect_err("refused");
+        assert!(error.contains("line break"), "{error}");
         assert_eq!(fs::read_dir(dir.path()).expect("read").count(), 0);
     }
 
@@ -474,13 +552,32 @@ mod tests {
     }
 
     #[test]
-    fn a_second_document_is_still_refused_the_same_way_beside_an_empty_part() {
-        // An empty Part with no chapter in it is not yet a document: the
-        // refusal answers what a document *is*, not what a folder merely
-        // contains.
+    fn a_second_document_is_still_creatable_beside_an_empty_part() {
+        // An empty Part with no chapter in it is not yet a document: what
+        // `what_it_already_holds` answers is what a document *is*, not what
+        // a folder merely contains, so a create beside one succeeds rather
+        // than being refused.
         let dir = temp();
         fs::create_dir(dir.path().join("01-empty")).expect("seed");
         create_document(dir.path(), "The Lantern Papers").expect("still creatable");
+    }
+
+    #[test]
+    fn writes_into_an_already_present_empty_first_part_rather_than_refusing() {
+        // The Part this call itself writes to (`01-chapters`) can already be
+        // sitting there, empty — left by a folder that was never quite a
+        // document, or by a create that failed after this one made it.
+        // `fs::create_dir` refuses to make a folder that already exists,
+        // even an empty one; this proves the create writes into it instead
+        // of surfacing that refusal (review round one, Fable F15).
+        let dir = temp();
+        let part = dir.path().join("01-chapters");
+        fs::create_dir(&part).expect("seed the empty part");
+
+        let outcome = create_document(dir.path(), "The Lantern Papers").expect("still creatable");
+
+        assert_eq!(fs::read_dir(&part).expect("read part").count(), 1);
+        assert!(Path::new(&outcome.chapter).is_file());
     }
 
     #[test]

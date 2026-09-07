@@ -134,7 +134,7 @@ describe("what the article carries", () => {
       ),
     );
     const html = article(source, pathResolver(), { citations });
-    expect(html).toContain('<span class="citation">[1, p. 4]</span>');
+    expect(html).toContain('<span class="citation">[<a href="#ref-1">1</a>, p. 4]</span>');
     expect(html).toContain('<aside class="margin-note citation"><p>Smith, Alice. 2020. The Lantern Papers.</p></aside>');
   });
 
@@ -203,6 +203,21 @@ describe("what the article carries", () => {
     expect(html).toContain('<code class="language-ts">const x = 1;');
   });
 
+  it("gives a footnote inside a single-paragraph list item its margin note, not just the marker (GLM F3)", () => {
+    const html = article(
+      ["- First point.", "- Second point.[^note]", "", "[^note]: The detail."].join("\n"),
+    );
+    // An ordinary item is unchanged: no `<p>` wrapping.
+    expect(html).toContain("<ul><li>First point.</li>");
+    // The item that earns a note falls back to the flow the rest of the
+    // article renders through, so the note is not silently dropped.
+    expect(html).toContain(
+      '<li><p>Second point.<sup class="footnote-reference">' +
+        '<a href="#fn-note" id="fnref-note">note</a></sup></p>' +
+        '<aside id="fn-note" class="margin-note footnote"><p>The detail.</p></aside></li>',
+    );
+  });
+
   it("writes a callout as a box in the flow, carrying its kind", () => {
     const html = article(
       '::: {.callout kind="warning"}\nThe figures before 1998 are estimates.\n:::\n',
@@ -246,6 +261,40 @@ describe("what the article carries", () => {
     expect(local).toBeGreaterThanOrEqual(0);
     expect(site).toBeGreaterThan(local);
     expect(gated).toBeGreaterThan(site);
+  });
+});
+
+describe("Parts that share a display label stay apart in the contents list (GLM F14)", () => {
+  it("groups by the raw folder, not by the label two folders can share", () => {
+    const chapters = [
+      {
+        chapter: parseChapter("# First intro\n"),
+        idPrefix: "c1-",
+        part: "intro",
+        partKey: "01-intro",
+      },
+      {
+        chapter: parseChapter("# Second intro\n"),
+        idPrefix: "c2-",
+        part: "intro",
+        partKey: "02-intro",
+      },
+    ];
+    const contents = renderDocumentContents(chapters);
+    // Two Parts, not one merged Part carrying both chapters: two `<li>`s at
+    // the top level, each opening with its own "intro" label.
+    expect(contents.match(/<span class="part">intro<\/span>/g)).toHaveLength(2);
+    expect(contents).toContain('<a href="#c1-first-intro">First intro</a>');
+    expect(contents).toContain('<a href="#c2-second-intro">Second intro</a>');
+  });
+
+  it("falls back to grouping by the label alone when a caller predates partKey", () => {
+    const chapters = [
+      { chapter: parseChapter("# One\n"), idPrefix: "c1-", part: "Beginnings" },
+      { chapter: parseChapter("# Two\n"), idPrefix: "c2-", part: "Beginnings" },
+    ];
+    const contents = renderDocumentContents(chapters);
+    expect(contents.match(/<span class="part">Beginnings<\/span>/g)).toHaveLength(1);
   });
 });
 
@@ -483,6 +532,25 @@ describe("the once-only opening quotation (itd-2609051335518134, map #12)", () =
 
   it("defaults isFirstChapter to true, so a chapter rendered alone is treated as the document's first", () => {
     expect(article(SOURCE)).toContain('class="opening"');
+  });
+
+  it("carries the once= attribute the author wrote, not a literal string regardless of it (Fable F13)", () => {
+    const source = [
+      '::: {.opening once="per-session"}',
+      "> A different quote.",
+      ":::",
+      "",
+      "# Beginnings",
+      "",
+    ].join("\n");
+    expect(article(source)).toContain('data-once="per-session"');
+  });
+
+  it("falls back to per-browser when the author wrote no once= attribute at all", () => {
+    const source = ["::: {.opening}", "> No attribute written.", ":::", "", "# Beginnings", ""].join(
+      "\n",
+    );
+    expect(article(source)).toContain('data-once="per-browser"');
   });
 });
 

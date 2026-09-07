@@ -163,11 +163,19 @@ export interface DocumentContentsChapter {
   readonly idPrefix: string;
   /**
    * The Part's display label, as the sidebar shows it — the folder name
-   * with its numeric prefix and its hyphens gone. Consecutive entries
-   * sharing one label are read as one Part's chapters; omit it for a
-   * document the caller does not group by Part.
+   * with its numeric prefix and its hyphens gone. Two different folders can
+   * share this label ("01-intro" and "02-intro" both read "intro"), so
+   * grouping is by [`partKey`], never by this string (Fable GLM F14); omit
+   * both for a document the caller does not group by Part.
    */
   readonly part?: string;
+  /**
+   * The Part's own raw folder identity — `folderOf(chapter.path)`, never a
+   * display string — that consecutive entries are grouped by. Falls back to
+   * `part` when a caller predates this field, which keeps a hand-built
+   * fixture that names one Part by a label alone working exactly as before.
+   */
+  readonly partKey?: string;
 }
 
 /** One Chapter's own entry: its title, linked, with its Sections nested. */
@@ -206,14 +214,15 @@ export function renderDocumentContents(
     const items = chapters.map((entry) => chapterItem(entry)).join("");
     return items === "" ? "" : `<nav class="contents"><ol>${items}</ol></nav>`;
   }
-  const groups: { part: string; chapters: DocumentContentsChapter[] }[] = [];
+  const groups: { part: string; key: string; chapters: DocumentContentsChapter[] }[] = [];
   for (const entry of chapters) {
     const part = entry.part ?? "";
+    const key = entry.partKey ?? part;
     const current = groups[groups.length - 1];
-    if (current !== undefined && current.part === part) {
+    if (current !== undefined && current.key === key) {
       current.chapters.push(entry);
     } else {
-      groups.push({ part, chapters: [entry] });
+      groups.push({ part, key, chapters: [entry] });
     }
   }
   const items = groups
@@ -307,10 +316,14 @@ function renderCallout(block: Block, article: Article): string {
  */
 function renderOpening(block: Block, article: Article): string {
   if (block !== article.validOpening) return "";
-  return `<div class="opening" data-once="per-browser">${renderBlocks(
-    block.children,
-    article,
-  )}</div>`;
+  // `data-once` carries the `once=` attribute the author wrote, not a
+  // literal `"per-browser"` regardless of it (Fable F13): `"per-browser"`
+  // is what a chapter omitting the attribute still means, since it is the
+  // only form `article-eggs.js` and this map's own docs describe.
+  const once = block.attributes.pairs["once"] ?? "per-browser";
+  return `<div class="opening"${attributes([
+    ["data-once", once],
+  ])}>${renderBlocks(block.children, article)}</div>`;
 }
 
 /**

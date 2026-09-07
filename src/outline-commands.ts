@@ -357,14 +357,61 @@ export function demoteHeading(view: EditorView): string | null {
 export const NO_SECTION_TO_MOVE = "No section to swap with at this level";
 
 /**
+ * The one-based line at which a heading's subtree ends: the next heading at
+ * or above the given level, or one past the document's last line when there
+ * is none. Unlike `subtreeEndLine`, this never folds a run of blank lines
+ * before that boundary into the subtree itself — `sectionBodyEnd` below is
+ * the one that decides how much of the blank run, if any, belongs to the
+ * section rather than to the gap after it.
+ */
+function nextBoundaryLine(
+  headings: readonly HeadingRef[],
+  index: number,
+  totalLines: number,
+): number {
+  const level = (headings[index] as HeadingRef).level;
+  for (let i = index + 1; i < headings.length; i += 1) {
+    if ((headings[i] as HeadingRef).level <= level) {
+      return (headings[i] as HeadingRef).line;
+    }
+  }
+  return totalLines + 1;
+}
+
+/**
+ * The offset where a section's own content ends, stopping before any run of
+ * blank lines that separates it from `boundaryLine` (the next heading, or
+ * one past the document's end).
+ *
+ * A trailing blank run belongs to neither section it sits between, so
+ * `moveHeadingBy` below leaves it untouched rather than folding it into
+ * whichever slice happened to end there — which is what used to lose a
+ * blank-line separator, or add a trailing newline the document never had,
+ * whenever the two sections' own conventions differed (review round one,
+ * Fable F11): the document's last section never carries a newline after it,
+ * because nothing follows it to need one.
+ */
+function sectionBodyEnd(doc: Text, headingLine: number, boundaryLine: number): number {
+  let line = boundaryLine - 1;
+  while (line > headingLine && doc.line(line).text.trim() === "") {
+    line -= 1;
+  }
+  return doc.line(line).to;
+}
+
+/**
  * `C-c Up`/`C-c Down`: swap the current section, subtree included, with its
  * nearest same-level sibling in the given direction.
  *
  * The same "stop at a shallower heading" rule as same-level movement finds
  * the sibling, which is also what guarantees the two sections are always
  * contiguous: the sibling's own subtree, by construction, ends exactly where
- * the other section begins. Swapping is two non-overlapping changes in one
- * transaction; nothing outside their combined span moves.
+ * the other section begins, once the blank run between them is set aside by
+ * `sectionBodyEnd`. Swapping is two non-overlapping changes in one
+ * transaction, over the two sections' own content alone; the blank run
+ * between them, and whatever the second section's boundary borders (another
+ * heading, or the end of the document), lie outside both changes and so are
+ * carried along untouched by neither of them.
  */
 function moveHeadingBy(view: EditorView, direction: 1 | -1): string | null {
   const { headings, index } = context(view);
@@ -389,19 +436,27 @@ function moveHeadingBy(view: EditorView, direction: 1 | -1): string | null {
   const totalLines = doc.lines;
   const firstIndex = Math.min(index, siblingIndex);
   const secondIndex = Math.max(index, siblingIndex);
-  const firstEnd = subtreeEndLine(headings, firstIndex, totalLines);
-  const secondEnd = subtreeEndLine(headings, secondIndex, totalLines);
-  const firstFrom = doc.line((headings[firstIndex] as HeadingRef).line).from;
-  const firstTo = doc.line(Math.min(firstEnd, totalLines)).to;
-  const secondFrom = doc.line((headings[secondIndex] as HeadingRef).line).from;
-  const secondTo = doc.line(Math.min(secondEnd, totalLines)).to;
-  const firstText = doc.sliceString(firstFrom, firstTo);
-  const secondText = doc.sliceString(secondFrom, secondTo);
+  const firstHeadingLine = (headings[firstIndex] as HeadingRef).line;
+  const secondHeadingLine = (headings[secondIndex] as HeadingRef).line;
+  const firstFrom = doc.line(firstHeadingLine).from;
+  const firstBodyEnd = sectionBodyEnd(
+    doc,
+    firstHeadingLine,
+    nextBoundaryLine(headings, firstIndex, totalLines),
+  );
+  const secondFrom = doc.line(secondHeadingLine).from;
+  const secondBodyEnd = sectionBodyEnd(
+    doc,
+    secondHeadingLine,
+    nextBoundaryLine(headings, secondIndex, totalLines),
+  );
+  const firstText = doc.sliceString(firstFrom, firstBodyEnd);
+  const secondText = doc.sliceString(secondFrom, secondBodyEnd);
 
   view.dispatch({
     changes: [
-      { from: firstFrom, to: firstTo, insert: secondText },
-      { from: secondFrom, to: secondTo, insert: firstText },
+      { from: firstFrom, to: firstBodyEnd, insert: secondText },
+      { from: secondFrom, to: secondBodyEnd, insert: firstText },
     ],
   });
   return null;
@@ -626,20 +681,29 @@ export function openSwitchChapter(
   });
 }
 
+/** An occur row: what is shown, and the line's own text the query matches. */
+interface OccurEntry extends ListEntry {
+  readonly text: string;
+}
+
 /**
  * `M-s o`: occur — every line matching a typed query, as a list.
  *
  * Offered only once something is typed: an empty query would list the whole
  * chapter, which is not "keep it small". Choosing a row moves the cursor
- * there and changes no byte; occur only ever reads.
+ * there and changes no byte; occur only ever reads. The query matches each
+ * line's own text, never the line number the label is prefixed with — a
+ * search for `12` finding line 12 by name alone, or `1:` finding every line,
+ * would be the label leaking into what is meant to be a text search.
  */
 export function openOccur(view: EditorView, hooks: { host?: HTMLElement } = {}): Overlay {
   const doc = view.state.doc;
-  const lines: ListEntry[] = [];
+  const lines: OccurEntry[] = [];
   for (let n = 1; n <= doc.lines; n += 1) {
-    lines.push({ id: String(n), label: `${String(n)}: ${doc.line(n).text}` });
+    const text = doc.line(n).text;
+    lines.push({ id: String(n), label: `${String(n)}: ${text}`, text });
   }
-  return openListOverlay<ListEntry>({
+  return openListOverlay<OccurEntry>({
     ...(hooks.host ? { host: hooks.host } : {}),
     className: "palette",
     label: "Occur",
@@ -648,9 +712,9 @@ export function openOccur(view: EditorView, hooks: { host?: HTMLElement } = {}):
     placeholder: "Occur…",
     fieldLabel: "Search the document",
     entries: (query) => {
-      const needle = query.trim();
+      const needle = query.trim().toLowerCase();
       if (needle === "") return [];
-      return filterByLabel(lines, needle);
+      return lines.filter((entry) => entry.text.toLowerCase().includes(needle));
     },
     onChoose: (entry) => {
       revealLine(view, Number(entry.id));

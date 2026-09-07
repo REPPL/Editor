@@ -227,13 +227,24 @@
    * same reading `outline-next-heading`/`outline-previous-heading` give the
    * editing surface (`src/keys.ts`'s own outline group). A reading page has
    * no cursor to move from, so the position lives here instead, in memory
-   * only, and wraps at the ends the way every overlay's own list does.
+   * only. It refuses at the ends rather than wrapping: `outline-next-
+   * heading`/`outline-previous-heading` refuse there in the editor too
+   * ("No heading after this one"), and the wrap this page carried before
+   * was the overlay's own rule (`src/overlay.ts`) borrowed for a page that
+   * never asked for it — the same row must mean the same thing on both
+   * surfaces (Fable F28).
    */
   function moveSection(delta) {
     var headings = allHeadings();
     var count = headings.length;
     if (count === 0) return;
-    sectionIndex = sectionIndex === -1 ? (delta > 0 ? 0 : count - 1) : wrap(sectionIndex + delta, count);
+    if (sectionIndex === -1) {
+      sectionIndex = delta > 0 ? 0 : count - 1;
+    } else {
+      var next = sectionIndex + delta;
+      if (next < 0 || next >= count) return;
+      sectionIndex = next;
+    }
     itemIndex = -1;
     currentElement = headings[sectionIndex];
     reveal(currentElement);
@@ -242,16 +253,20 @@
   /**
    * Every flow child between the current Section's heading and the next
    * heading of any level — a paragraph, a list, a figure, a callout, a
-   * margin note — read straight off the `<article>` map #9 already wraps
-   * one chapter in, never a structure this file builds of its own.
+   * margin note — read from the heading's own parent, not always
+   * `<article>`: a heading nested inside a `.callout` or a variant div is
+   * not a direct child of `<article>` at all, and walking that ancestor
+   * found the heading at no position among its own children, so
+   * `C-c C-n` reached the Section but `C-n` inside it always found nothing
+   * (Fable F31).
    */
   function itemsInCurrentSection() {
     var headings = allHeadings();
     if (sectionIndex < 0 || sectionIndex >= headings.length) return [];
     var heading = headings[sectionIndex];
-    var article = heading.closest("article") || heading.parentElement;
-    if (!article) return [];
-    var children = Array.prototype.slice.call(article.children);
+    var container = heading.parentElement;
+    if (!container) return [];
+    var children = Array.prototype.slice.call(container.children);
     var start = children.indexOf(heading);
     if (start === -1) return [];
     var items = [];
@@ -690,6 +705,12 @@
 
   // ------------------------------------------------------------- wiring
 
+  /** Whether the reader has a real, non-empty text selection right now. */
+  function hasNonEmptySelection() {
+    var selection = typeof global.getSelection === "function" ? global.getSelection() : null;
+    return !!selection && selection.toString() !== "";
+  }
+
   var pendingPrefix = null;
   var pendingTimer = null;
   /** How long a prefix's second step is waited for before it is dropped. */
@@ -723,6 +744,18 @@
       if (chord === "Return") {
         event.preventDefault();
         closeOverlay(false);
+        return;
+      }
+      if (chord === "Tab" || chord === "S-Tab") {
+        // The dialog's own field is its only focusable element; the
+        // contents and keys overlays already hold Tab by preventing every
+        // key they do not otherwise answer, but this branch returns before
+        // reaching that for every ordinary keystroke, so Tab needs its own
+        // line — a reader tabbing out of `aria-modal="true"` leaves the
+        // overlay still owning every later keydown with nothing left to
+        // show for it (Fable F29).
+        event.preventDefault();
+        overlay.input.focus();
         return;
       }
       // A letter, Backspace, an arrow inside the field: left alone. The
@@ -787,6 +820,15 @@
     }
 
     if (isPrefixStart(chord)) {
+      // `C-c` is copy and `C-x` is cut on Windows and Linux Chromium — one
+      // of the two engines the legibility discipline fixes; a reader
+      // mid-selection pressing either gets the browser's own copy or cut,
+      // never this page's prefix window (iss-2609070642203845, Fable F27).
+      // `C-h`, this page's other prefix, has no such browser meaning and
+      // keeps preventing its default unconditionally.
+      if ((chord === "C-c" || chord === "C-x") && hasNonEmptySelection()) {
+        return;
+      }
       event.preventDefault();
       pendingPrefix = chord;
       pendingTimer = global.setTimeout(clearPending, PREFIX_TIMEOUT_MS);

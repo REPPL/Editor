@@ -104,7 +104,7 @@ are each proven by a named test below.
 | Discipline | Proven here by |
 |---|---|
 | One source, always (`itd-2609051336090390`) | `article.css` and `article-video.js` are read or copied, never re-authored, by every host — `stage.rs`'s `CHROME`/`chrome_for_folder` `include_str!` the core files directly, `preview.html` links the core file directly, and `build.ts`/`export/services.ts` add no rule of their own; `src/publish/build.test.ts` reads `src/core/render/article.css` as the file every host serves |
-| The renderings agree (`itd-2609051336130664`) | `src/publish/build.test.ts` › `gives the whole document one contents list, chapter by chapter`; `src/preview.test.ts` › `articleOf` against the same shape `renderVariant` builds; the manual check M9-6 compares the three hosts for real |
+| The renderings agree (`itd-2609051336130664`) | `src/publish/build.test.ts` › `gives the whole document one contents list, chapter by chapter`, and its own `citations, resolved once and shared by the article and the deck` group › `"composes the identical article fragment preview.ts's articleOf renders for the same chapters"` (Fable F8: `renderVariant` and `articleOf` both call one exported `composeArticle`, proven equal rather than assumed to stay in step); the manual check M9-6 compares the three hosts for real |
 | Legible on three device classes (`itd-2609051336128348`) | `article.css`'s own rules (viewport meta in every host's page, `max-width: 100%` on media, the 760px fold breakpoint, no fixed pixel width on the measure) held against a jsdom-reachable test in `article.test.ts`; the actual look at 390/820/1280 is manual, M9-2 and M9-3 |
 | Degrades gracefully in a plain tool (`itd-2609051336110536`) | every construct's canon placement is unchanged from phase 1 for a plain Markdown reader; the video block's poster, caption and links are in the markup regardless of script, proven by `article.test.ts` and `article-video.test.ts`'s "no script at all" cases |
 | No machine in the document (`itd-2609051336080960`) | nothing this spec adds writes to a document folder; the preview window reads buffers and files and writes nothing, and `src-tauri/src/preview.rs`'s `PendingPreview` lives in application memory only |
@@ -204,7 +204,27 @@ path, through a new `partTitleOf`, deliberately mirroring `title_of` in
 remaining hyphens turned to spaces — so a reader sees the sidebar's own name
 for a Part rather than the app's and the article's disagreeing. `preview.ts`
 calls the same function, imported from `build.ts` rather than reimplemented,
-because `partTitleOf`/`folderOf` are pure and carry no Tauri dependency.
+because `partTitleOf`/`folderOf` are pure and carry no Tauri dependency. A
+Part's own grouping in the contents list is by a second, raw field,
+`partKey` (`folderOf` unformatted) — never by `part`, the display label
+alone, which two folders can share ("01-intro" and "02-intro" both read
+"intro") and which merged them into one Part until review round one caught
+it (Fable/GLM F14); `partKey` defaults to `part` when a caller predates the
+field, so a hand-built fixture naming one Part by a label alone still groups
+as before.
+
+**One composer, not two.** `renderVariant` and `preview.ts`'s own `articleOf`
+used to each build the document's article by hand — a contents list, every
+chapter's own page, and the reference list, joined — with their own copy of
+the id-prefix rule and their own `citationsFor`, and nothing proved the two
+still agreed once either changed (review round one, Fable F8). `build.ts`
+now exports `composeArticle(entries: ComposedChapter[], citations)`, and
+both call it: `entries` is what each host's own chapter-rendering loop
+already produces — a resolver bound to a folder's assets, synchronous for a
+publish, asynchronous for the app's live preview, so the render call itself
+stays each host's own — and `composeArticle` is the one function that turns
+a list of already-rendered chapters into the whole article, so a fix to how
+the parts are joined reaches every host from one place.
 
 ### The callout and full-bleed
 

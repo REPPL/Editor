@@ -93,6 +93,11 @@ Press `C-c C-l`. The publish panel opens with the document's title, the variant
 being published, and — every time, behind no disclosure — the sentence about
 what unlisted means.
 
+The document you created here names no variant — `C-x C-n` writes none — so
+the panel shows "default": a document that declares no variant publishes as
+its own single default variant, with no further step needed before you can
+publish or export it.
+
 Press **Dry run**.
 
 Editor builds the version exactly as a real publish would: it computes the

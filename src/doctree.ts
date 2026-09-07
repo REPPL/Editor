@@ -399,6 +399,45 @@ export interface PreviewSource {
    * this field — a test's own fixture, say — still constructs one.
    */
   readonly bibliography?: string | null;
+  /**
+   * A stable scope for this document's own memory in the preview window —
+   * the once-only opening and the collected eggs (`article-eggs.js`).
+   *
+   * The preview window's own page never navigates (`preview.ts`'s own
+   * header: "the window outlives one Preview"), so its `location.pathname`
+   * never changes between two different documents Alice opens in the same
+   * session, and a scope keyed on it alone would share one memory across
+   * every document she ever previews (iss-2609070642209805). This field is
+   * a hash of the document's own folder name — never the path itself, which
+   * `AGENTS.md`'s privacy rule forbids in anything the page carries — computed
+   * by the caller that knows that folder (`src/app.ts`'s own call to
+   * `previewDocument`, alongside the tree it already reads) and threaded
+   * through the shell unread, the same way `bibliography` is. Absent for a
+   * caller that predates this field — a test's own fixture, or the app
+   * before it is wired in — in which case the preview window's own default
+   * scope, one shared by every document, still applies until it is.
+   */
+  readonly documentScope?: string;
+}
+
+/**
+ * The value `PreviewSource.documentScope` above carries, for a document's
+ * own root — never the path itself, which `AGENTS.md`'s privacy rule
+ * forbids, just enough that two different documents Alice previews in the
+ * same session never share the once-only opening or the collected eggs
+ * (`iss-2609070642209805`).
+ *
+ * The first sixteen hex characters of a SHA-256 digest of the root: the
+ * same root always folds to the same scope, and two different roots
+ * collide only as improbably as SHA-256 itself does. The root crosses into
+ * `crypto.subtle` and no further: this is the one function that ever sees
+ * it on the way to a `PreviewSource`.
+ */
+export async function documentScopeOf(root: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(root));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 16);
 }
 
 /** The event the shell emits when a new document is waiting to be previewed. */

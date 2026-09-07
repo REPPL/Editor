@@ -25,7 +25,7 @@ import { outlineOf, type Outline, type OutlineNode } from "./core/outline";
 import { parseChapter } from "./core/parse";
 import { setBibliography } from "./citations";
 import { createDropRouter, type DropRouter, type DropTargets } from "./drop";
-import { createEditor, documentText, revealLine, setDocument } from "./editor";
+import { createEditor, documentText, placeCursor, revealLine, setDocument } from "./editor";
 import { createFocusModel, type FocusModel, type PanelFocus } from "./focus";
 import {
   queryReplaceRegex,
@@ -283,6 +283,18 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   let detached = false;
   let message = "";
   /**
+   * The bibliography's own read failure, set by the most recent
+   * `readSidebarData` and read by whichever caller announces next.
+   *
+   * A named `.bib` that cannot be read is not the same fact as a document
+   * with no bibliography at all: the first is an error to say, the second
+   * is ordinary (`itd-2609051335502171`, review round one Fable F10). Kept
+   * separate from every citation key's own unresolved state, which stays
+   * unbadged while this is set, rather than badging every key in every
+   * chapter as unresolved for a cause that is the file, not the key.
+   */
+  let bibliographyError: string | null = null;
+  /**
    * The column `M-q` fills at.
    *
    * The open document's own, from `document.yaml`, and 80 while the file is
@@ -298,6 +310,17 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    * save target, and the selection with the chapter the author left behind.
    */
   let loadToken = 0;
+  /**
+   * Where the cursor sat in each chapter last left, by path.
+   *
+   * `C-x b` and the sidebar promise a chapter opens "with the cursor where
+   * she last left it" (`docs/how-to-move-through-the-outline.md`, intent
+   * `itd-2609061318091323` AC8); `openChapter` records the offset here on
+   * the way out and restores it on the way back in, clamped to the text
+   * that is there now, since a chapter can have been edited elsewhere
+   * since her last visit.
+   */
+  const chapterCursors = new Map<string, number>();
   /** The last dirty state handed to the shell, so it hears only changes. */
   let reportedDirty: boolean | null = null;
   /** The timer clearing a message that says itself once, if one is running. */
@@ -464,6 +487,16 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     })();
   }
 
+  /**
+   * A suffix for the announcement a document open or reload ends with, when
+   * the bibliography `readSidebarData` just read could not be read at all —
+   * empty otherwise, in the same shape `openFolder`'s own "entries
+   * unreadable" suffix already takes.
+   */
+  function bibliographySuffix(): string {
+    return bibliographyError === null ? "" : ` — bibliography unreadable: ${bibliographyError}`;
+  }
+
   /** Ask before edits are thrown away. True means carry on. */
   async function mayDiscard(): Promise<boolean> {
     if (!isDirty()) return true;
@@ -494,6 +527,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     const chapters = chaptersOf(next.root);
     const outlines = new Map<string, Outline>();
     const facts = new Map<string, ChapterFacts>();
+    bibliographyError = null;
     if (chapters.length === 0) return { outlines, facts, bibliography: EMPTY_BIBLIOGRAPHY };
 
     const paths = chapters.map((chapter) => chapter.path);
@@ -517,10 +551,15 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     // A document with no bibliography at all is ordinary: every citation key
     // still resolves to nothing, which is exactly what an empty bibliography
     // reads back as, so a chapter that cites one is reported the same way a
-    // chapter with a typo'd key against a real bibliography would be.
+    // chapter with a typo'd key against a real bibliography would be. A named
+    // bibliography that exists but cannot be read is a different fact, and
+    // stays a different one: it is the file's own error, not a fact about any
+    // citation key, so `bibliographyError` carries it for a caller to
+    // announce, and no key is badged unresolved on its account below.
     const bibliographyText = services.readBibliography
       ? await services.readBibliography().catch((error: unknown) => {
-          console.warn(`bibliography: ${String(error)}`);
+          bibliographyError = String(error);
+          console.warn(`bibliography: ${bibliographyError}`);
           return null;
         })
       : null;
@@ -532,7 +571,8 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     for (const read of batch.reads) {
       const chapter = parseChapter(read.text);
       outlines.set(read.path, outlineOf(chapter));
-      const unresolvedCitations = unresolvedCitationKeysIn(chapter, bibliography);
+      const unresolvedCitations =
+        bibliographyError === null ? unresolvedCitationKeysIn(chapter, bibliography) : [];
       const unresolvedEggs = unresolvedEggsIn(chapter, read.path === firstChapterPath);
       if (unresolvedCitations.length > 0 || unresolvedEggs.length > 0) {
         facts.set(read.path, { unresolvedCitations, unresolvedEggs });
@@ -756,13 +796,19 @@ export function createApp(root: HTMLElement, services: AppServices): App {
         ? await services.pickDocumentFile?.()
         : await services.pickDocumentFolder?.();
       if (!picked) return; // the author cancelled the dialog
-      const outcome = await services.openDocumentSource?.(picked.nonce);
-      if (!outcome) return;
+      // The discard guard runs before the nonce is claimed: declining leaves
+      // the shell's document root and watcher untouched, rather than
+      // swapping them out from under the chapter still on screen
+      // (`iss-2609070642208293`). The nonce stays valid for its own
+      // lifetime regardless of how long the confirm dialog takes.
       if (!(await mayDiscard())) {
         announce("Kept the open chapter");
         return;
       }
+      const outcome = await services.openDocumentSource?.(picked.nonce);
+      if (!outcome) return;
       forgetChapter();
+      chapterCursors.clear();
       await showTree(outcome.tree);
       for (const failure of outcome.tree.failures) {
         console.warn(`open ${picked.name}: ${failure}`);
@@ -779,9 +825,9 @@ export function createApp(root: HTMLElement, services: AppServices): App {
           : chapters.find((chapter) => chapter.path === outcome.selectedChapter);
       if (selected) {
         await app.openChapter(selected);
-        announce(`Opened ${selected.title}`);
+        announce(`Opened ${selected.title}${bibliographySuffix()}`);
       } else {
-        announce(`Opened ${title}`);
+        announce(`Opened ${title}${bibliographySuffix()}`);
       }
     } catch (error) {
       announce(String(error));
@@ -1031,8 +1077,10 @@ export function createApp(root: HTMLElement, services: AppServices): App {
         const next = await services.openFolder(path);
         // The chapter that was open belongs to the document being replaced.
         // Holding on to its path would aim the next save at a file nothing on
-        // screen shows any more.
+        // screen shows any more, and a remembered cursor at a path that
+        // happens to recur in the new document.
         forgetChapter();
+        chapterCursors.clear();
         await showTree(next);
         for (const failure of next.failures) {
           console.warn(`open ${path}: ${failure}`);
@@ -1043,10 +1091,10 @@ export function createApp(root: HTMLElement, services: AppServices): App {
             : "";
         const title = await documentTitle(next.root.title);
         if (chaptersOf(next.root).length === 0) {
-          announce(`${title} holds no Markdown chapters${unreadable}`);
+          announce(`${title} holds no Markdown chapters${unreadable}${bibliographySuffix()}`);
           return;
         }
-        announce(`Opened ${title}${unreadable}`);
+        announce(`Opened ${title}${unreadable}${bibliographySuffix()}`);
       } catch (error) {
         announce(String(error));
       }
@@ -1090,6 +1138,13 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       // The document's own settings are read again, because a reload is what
       // an edit to `document.yaml` arrives as.
       await documentTitle(next.root.title);
+      // Said now, because the reload's own chapter-comparison branches below
+      // may have nothing else to say — a clean, unchanged chapter reloads
+      // silently otherwise — and a bibliography that stopped reading is worth
+      // more than silence.
+      if (bibliographyError !== null) {
+        announce(`Bibliography unreadable: ${bibliographyError}`);
+      }
 
       if (openChapterPath === null) return;
       const still = chapterAt(openChapterPath);
@@ -1134,9 +1189,16 @@ export function createApp(root: HTMLElement, services: AppServices): App {
 
     async openChapter(chapter: Chapter, node?: OutlineNode): Promise<void> {
       const sameChapter = chapter.path === openChapterPath;
-      if (!sameChapter && !(await mayDiscard())) {
-        announce("Kept the open chapter");
-        return;
+      if (!sameChapter) {
+        if (!(await mayDiscard())) {
+          announce("Kept the open chapter");
+          return;
+        }
+        // Remember where she leaves this chapter, so it opens here again the
+        // next time she comes back to it (`itd-2609061318091323` AC8).
+        if (openChapterPath !== null) {
+          chapterCursors.set(openChapterPath, view.state.selection.main.head);
+        }
       }
       if (sameChapter && node) {
         // Already open: moving to one of its headings is not a load, and
@@ -1160,7 +1222,12 @@ export function createApp(root: HTMLElement, services: AppServices): App {
         detached = false;
         setDocument(view, text);
         sidebar.select(chapter.path, openNodeId);
-        if (node) revealLine(view, node.line);
+        if (node) {
+          revealLine(view, node.line);
+        } else {
+          const rememberedCursor = chapterCursors.get(chapter.path);
+          if (rememberedCursor !== undefined) placeCursor(view, rememberedCursor);
+        }
         announce("");
       } catch (error) {
         if (token !== loadToken) return;

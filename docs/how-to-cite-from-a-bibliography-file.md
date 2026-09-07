@@ -16,11 +16,16 @@ citation_style: numeric
 ```
 
 `bibliography` names a `.bib` file relative to the document root — a plain
-BibTeX file, the same one a reference manager exports. `citation_style` is
-`numeric` for now: a marker in reading order, `[1]`, and a reference list
-numbered the same way, in the order a key is first cited. A document naming
-no bibliography at all is ordinary: every citation stays untouched, and
-nothing about it is reported as an error.
+BibTeX file, the same one a reference manager exports, and Editor strips its
+own protective braces and folds its common accent commands (`\'e`, `{\"o}`,
+and a dozen others) into the letters they draw, so what you see is the
+character, never the escape a reference manager wrote to reach it.
+`citation_style` is `numeric` for now: a marker in reading order, `[1]`, and
+a reference list numbered the same way, in the order a key is first cited.
+A document naming no bibliography at all is ordinary: it is not an error,
+but every citation in it is unresolved in exactly the shape the next
+section describes, because there is nothing for any key to resolve
+against.
 
 ## Write a citation
 
@@ -75,8 +80,12 @@ list with it. Write a `## Sources {.refs}` heading yourself, and the list
 appears there; write none, and it appears once, after the last chapter.
 
 Because the deck, the article, and the printed page all resolve the same
-chapters against the same file, the deck's credit line always names a work
-that also appears in the article's and the printed page's own lists.
+chapters against the same file, the deck's credit line names a work that
+also appears in the article's and the printed page's own lists — with one
+exception: a citation written only inside a chapter's own speaker notes
+(a `::: {.notes}` block) earns the deck's own credit line, because the
+speaker sees it, but no entry or margin note in the article or the printed
+page, because a reader never does.
 
 ## Related
 

@@ -24,14 +24,37 @@ describe("readingBindingData", () => {
     expect(data.map((row) => row.id)).toEqual([...READING_BINDING_IDS]);
   });
 
-  it("carries each row's label and chords, verbatim from the table", () => {
+  /**
+   * A chord the table names for a row but this page never claims — the
+   * browser's own key wins outright (iss-2609070642203845, Fable F27), so
+   * `readingBindingData`'s own copy of that row's chords is the table's
+   * own list with these removed, not the table's list verbatim.
+   */
+  const EXCLUDED: ReadonlySet<string> = new Set(["s-f", "Down", "Up"]);
+
+  it("carries each row's label, and the table's own chords with the browser's own excluded", () => {
     const data = readingBindingData();
     for (const row of data) {
       const binding = bindingById(row.id);
       expect(binding, `${row.id} is not a row in BINDINGS`).toBeDefined();
       expect(row.label).toBe(binding?.label);
-      expect(row.chords).toEqual(binding?.chords);
+      expect(row.chords).toEqual((binding?.chords ?? []).filter((chord) => !EXCLUDED.has(chord)));
     }
+  });
+
+  it("excludes s-f, so the browser's own Cmd-F reaches the page rather than this page's own search", () => {
+    const search = readingBindingData().find((row) => row.id === "isearch-forward");
+    expect(search?.chords).not.toContain("s-f");
+    expect(search?.chords).toContain("C-s");
+  });
+
+  it("excludes bare Down and Up, so the browser's own scroll is never swallowed", () => {
+    const next = readingBindingData().find((row) => row.id === "next-line");
+    const previous = readingBindingData().find((row) => row.id === "previous-line");
+    expect(next?.chords).not.toContain("Down");
+    expect(next?.chords).toContain("C-n");
+    expect(previous?.chords).not.toContain("Up");
+    expect(previous?.chords).toContain("C-p");
   });
 
   it("carries nothing beyond id, label and chords", () => {

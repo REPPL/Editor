@@ -22,7 +22,13 @@ import {
   type Resolution,
   type Resolver,
 } from "../core/assets";
-import { parseBibliography, resolveCitations, type CitationResolution } from "../core/bibliography";
+import {
+  EMPTY_RESOLUTION,
+  parseBibliography,
+  resolveCitations,
+  type CitationResolution,
+} from "../core/bibliography";
+import type { Rendering } from "../core/canon";
 import { buildChapterDecks } from "../core/deck";
 import {
   chapterHasRefsHeading,
@@ -30,6 +36,11 @@ import {
   renderDocumentContents,
   renderReferenceList,
 } from "../core/render/article";
+// `escapeText` is the one function `articleDocument`/`deckDocument` share
+// with `html.ts`'s own inline renderer: a private copy here was the exact
+// "two answers to one question" pattern this range was reviewed against
+// (GLM F11, Sonnet F6).
+import { escapeText } from "../core/render/html";
 import { readingKeysDataScript } from "../core/render/reading-keys";
 import { renderSlides } from "../core/render/slides";
 import type { Block, Chapter, Inline } from "../core/tree";
@@ -532,20 +543,87 @@ export function chromeBase(host: BuildHost, rendering: "article" | "slides"): st
  * Resolve a document's citations once, from the bibliography text
  * `RenderOptions` carries.
  *
- * `undefined` for a document that names no bibliography at all — an ordinary
- * document, not an empty one — so the article and the deck both fall through
- * to their own "nothing to resolve" shape rather than an empty resolution
- * that would still mark every citation unresolved.
+ * `rendering` is the placement filter passed on to `resolveCitations`:
+ * `"article"` for the resolution the article's own numbering and reference
+ * list are built from, so a citation written only inside a `.notes` div
+ * earns neither there (Fable F7); left undefined for the deck's own
+ * resolution, which credits a citation wherever a slide's own content
+ * carries it, speaker notes included — the deck's `citationLinesFor`
+ * (`core/deck.ts`) walks a slide's own notes on purpose.
+ *
+ * A document that names no bibliography at all is an ordinary document, not
+ * an empty one (itd-2609051335502171's own Assumption). For the article,
+ * that is `EMPTY_RESOLUTION`, not `undefined`: a citation in it is marked
+ * unresolved the same way an unknown key is, rather than printed as the
+ * literal brackets `html.ts`'s own phase-1 fallback shows for a caller with
+ * no resolution at all — the deck's speaker notes, not a reader's article
+ * (GLM F4). The deck's own inline rendering never reads this field either
+ * way (`html.ts`'s citation case is absent from `slides.ts`'s own
+ * `RenderContext`), so its "nothing to resolve" shape is left as `undefined`.
  */
 function citationsFor(
   tree: DocumentSource,
   bibliography: string | null | undefined,
+  rendering?: Rendering,
 ): CitationResolution | undefined {
-  if (bibliography === null || bibliography === undefined) return undefined;
+  if (bibliography === null || bibliography === undefined) {
+    return rendering === "article" ? EMPTY_RESOLUTION : undefined;
+  }
   return resolveCitations(
     tree.chapters.map((input) => input.chapter),
     parseBibliography(bibliography),
+    rendering,
   );
+}
+
+/**
+ * One chapter, already rendered against its own picture resolver, ready
+ * for [`composeArticle`].
+ *
+ * The shape both `renderVariant` and `preview.ts`'s own `renderChapter`
+ * produce, so the one composer below can build either host's article from
+ * it: a resolver is bound to a folder's assets and, for the app's own
+ * preview, read asynchronously before rendering, so the chapter-rendering
+ * call itself is each host's own to make — only what happens once every
+ * chapter is a string is shared.
+ */
+export interface ComposedChapter {
+  readonly chapter: Chapter;
+  readonly idPrefix: string;
+  readonly part: string;
+  readonly partKey: string;
+  readonly html: string;
+}
+
+/**
+ * Compose the whole document's article from every chapter already
+ * rendered: one document-wide contents list, every chapter's own page in
+ * order, and the generated reference list once, wherever no chapter's own
+ * `.refs` heading claimed it.
+ *
+ * `preview.ts`'s own `articleOf` and this module's `renderVariant` used to
+ * each build this by hand, with their own copy of the id-prefix rule and
+ * their own `citationsFor` — the exact "two hand-kept compositions" review
+ * round one's Fable F8 named, with nothing proving they still agreed once
+ * either changed. Both now call this one function for the part every host
+ * must build identically; `build.test.ts`'s own "the two hosts agree"
+ * group renders one `DocumentSource` through both and asserts equality.
+ */
+export function composeArticle(
+  entries: readonly ComposedChapter[],
+  citations: CitationResolution | undefined,
+): string {
+  const contents = renderDocumentContents(entries);
+  // A `.refs` heading writes the reference list where the document asked
+  // for it, through `renderArticle`'s own "appendix" placement; a document
+  // that wrote none gets it once, after the last chapter, rather than not
+  // at all.
+  const appendix = entries.some((entry) => chapterHasRefsHeading(entry.chapter))
+    ? ""
+    : renderReferenceList(citations);
+  return [contents, ...entries.map((entry) => entry.html), appendix]
+    .filter((part) => part !== "")
+    .join("\n");
 }
 
 /** Render one variant's article and deck. */
@@ -554,21 +632,21 @@ export function renderVariant(
   variant: string,
   options: RenderOptions,
 ): RenderedVariant {
-  const citations = citationsFor(tree, options.bibliography);
+  const citations = citationsFor(tree, options.bibliography, "article");
+  const deckCitations = citationsFor(tree, options.bibliography);
 
   // The article is one page per document, so its contents list covers every
   // chapter. Each chapter's ids carry a prefix of its own, because an outline
   // id is unique within one chapter and two chapters may open the same way.
   const idPrefix = (index: number): string => `c${String(index + 1)}-`;
-  const contents = renderDocumentContents(
-    tree.chapters.map((input, index) => ({
-      chapter: input.chapter,
-      idPrefix: idPrefix(index),
-      part: partTitleOf(folderOf(input.path)),
-    })),
-  );
-  const chapterPages = tree.chapters.map((input, index) =>
-    renderArticle(input.chapter, createAssetResolver(input.path, "article"), {
+  const chapterEntries: ComposedChapter[] = tree.chapters.map((input, index) => ({
+    chapter: input.chapter,
+    idPrefix: idPrefix(index),
+    part: partTitleOf(folderOf(input.path)),
+    // The raw folder, not the display label: see `preview.ts`'s own
+    // comment on the same field (Fable/GLM F14).
+    partKey: folderOf(input.path),
+    html: renderArticle(input.chapter, createAssetResolver(input.path, "article"), {
       variant,
       contents: false,
       idPrefix: idPrefix(index),
@@ -578,16 +656,8 @@ export function renderVariant(
       // `.opening`, if it wrote one, is a misplaced block the sidebar lists.
       isFirstChapter: index === 0,
     }),
-  );
-  // A `.refs` heading writes the reference list where the document asked for
-  // it, through `renderArticle`'s own "appendix" placement; a document that
-  // wrote none gets it once, after the last chapter, rather than not at all.
-  const appendix = tree.chapters.some((input) => chapterHasRefsHeading(input.chapter))
-    ? ""
-    : renderReferenceList(citations);
-  const article = [contents, ...chapterPages, appendix]
-    .filter((part) => part !== "")
-    .join("\n");
+  }));
+  const article = composeArticle(chapterEntries, citations);
 
   // One plan for the whole document, so the deck at the link is the deck the
   // app rehearsed and no two slides claim the same id; the fragment is
@@ -595,7 +665,7 @@ export function renderVariant(
   // folder its references sit in.
   const plans = buildChapterDecks(
     tree.chapters.map((input) => input.chapter),
-    { variant, citations },
+    { variant, citations: deckCitations },
   );
   const fragments = tree.chapters.map((input, index) =>
     renderSlides(
@@ -695,11 +765,4 @@ export function deckDocument(
     "</html>",
     "",
   ].join("\n");
-}
-
-function escapeText(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }

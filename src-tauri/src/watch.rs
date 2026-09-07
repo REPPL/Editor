@@ -119,14 +119,31 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    /// Wait until `predicate` holds, or give up. Filesystem events are not
-    /// synchronous, and a fixed sleep is either flaky or slow.
-    fn wait_for(predicate: impl Fn() -> bool) -> bool {
-        for _ in 0..100 {
+    /// Perform `trigger` again and again, polling `predicate` with a
+    /// deadline rather than a fixed sleep, until one holds or both give up.
+    ///
+    /// A single filesystem operation right after `watch` returns can still
+    /// race the OS's own event delivery under heavy scheduling load — the
+    /// call returns once the watch is *requested*, not necessarily once
+    /// delivery for it is fully armed — so waiting longer for the *one*
+    /// operation already performed is not enough on its own: under load this
+    /// crate's own test suite produces (and, on a machine shared with other
+    /// concurrent work, `fseventsd` itself queuing behind every other
+    /// watcher on the system), the first operation can be missed entirely
+    /// rather than merely reported late. Repeating a fresh operation every
+    /// quarter-second, spaced well past the debouncer's own `DEBOUNCE`
+    /// window, for up to thirty seconds, is what a watch that is not yet
+    /// truly listening eventually catches, which is what made these two
+    /// tests flake under concurrent load even after they were already
+    /// polling with a deadline rather than a fixed sleep
+    /// (`iss-2609061520160056`).
+    fn trigger_until_seen(mut trigger: impl FnMut(), predicate: impl Fn() -> bool) -> bool {
+        for _ in 0..120 {
             if predicate() {
                 return true;
             }
-            std::thread::sleep(Duration::from_millis(50));
+            trigger();
+            std::thread::sleep(Duration::from_millis(250));
         }
         predicate()
     }
@@ -144,10 +161,23 @@ mod tests {
         })
         .expect("watcher");
 
-        std::fs::rename(base.join("01-alice.md"), base.join("02-alice.md")).expect("rename");
-
+        // Alternates the chapter's name back and forth: every attempt is a
+        // genuine rename, and one from each end exists at any given moment
+        // for the next attempt to rename again.
+        let mut swapped = false;
         assert!(
-            wait_for(|| seen.load(Ordering::Relaxed) > 0),
+            trigger_until_seen(
+                || {
+                    let (from, to) = if swapped {
+                        (base.join("02-alice.md"), base.join("01-alice.md"))
+                    } else {
+                        (base.join("01-alice.md"), base.join("02-alice.md"))
+                    };
+                    std::fs::rename(from, to).expect("rename");
+                    swapped = !swapped;
+                },
+                || seen.load(Ordering::Relaxed) > 0
+            ),
             "a rename inside the folder is reported"
         );
         drop(watch);
@@ -157,7 +187,8 @@ mod tests {
     fn watches_below_the_root_as_well() {
         let root = tempfile::tempdir().expect("temp dir");
         let base = root.path();
-        std::fs::create_dir(base.join("01-part")).expect("part");
+        let part = base.join("01-part");
+        std::fs::create_dir(&part).expect("part");
 
         let seen = Arc::new(AtomicUsize::new(0));
         let counter = Arc::clone(&seen);
@@ -166,10 +197,18 @@ mod tests {
         })
         .expect("watcher");
 
-        std::fs::write(base.join("01-part/01-alice.md"), "# Alice\n").expect("chapter");
-
+        // A fresh, distinctly named chapter each attempt, so a retry is
+        // never mistaken for the same write the watcher already missed.
+        let mut attempt = 0u32;
         assert!(
-            wait_for(|| seen.load(Ordering::Relaxed) > 0),
+            trigger_until_seen(
+                || {
+                    std::fs::write(part.join(format!("{attempt:02}-alice.md")), "# Alice\n")
+                        .expect("chapter");
+                    attempt += 1;
+                },
+                || seen.load(Ordering::Relaxed) > 0
+            ),
             "a chapter added inside a Part is reported"
         );
         drop(watch);

@@ -24,7 +24,7 @@
 import { shortReference, type CitationResolution } from "./bibliography";
 import { placementOf, type Placement } from "./canon";
 import { slugify } from "./outline";
-import { hasClass, walkInlines, type Block, type Chapter, type Inline } from "./tree";
+import { hasClass, walkBlocks, walkInlines, type Block, type Chapter, type Inline } from "./tree";
 
 /** What opened a slide, which is what a renderer styles it by. */
 export type SlideKind =
@@ -428,7 +428,12 @@ function citationLinesFor(slide: Draft, resolution: CitationResolution | undefin
     if (inline.kind === "citation") cited.push(inline);
   }
   const carried = [...slide.face, ...(slide.authored ?? slide.generated)];
-  for (const block of carried) {
+  // `walkBlocks`, not `block.inlines` alone: a citation nested inside a list
+  // item's own paragraph or a quote's own child block is otherwise never
+  // seen, so a key cited only that way earned the article's numbered entry
+  // (`bibliography.ts`'s own `citationsIn` already descends this far) but no
+  // credit line here (GLM F2).
+  for (const block of walkBlocks(carried)) {
     for (const inline of walkInlines(block.inlines)) {
       if (inline.kind === "citation") cited.push(inline);
     }

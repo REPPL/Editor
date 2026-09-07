@@ -453,6 +453,17 @@ describe("moving a section", () => {
     expect(moveHeadingDown(view)).toBe(NO_SECTION_TO_MOVE);
     expect(documentText(view)).toBe(OUTLINE_CHAPTER);
   });
+
+  it("keeps the blank separator and adds no trailing newline when the last section has none (Fable F11)", () => {
+    // The last section carries no newline after it, because nothing follows
+    // it in the file; swapping it into the first position must not leave
+    // one behind, and the blank line that separated the two sections must
+    // still separate them the other way round.
+    open("## A\ntext\n\n## B\nmore");
+    onLine(1); // "## A"
+    expect(moveHeadingDown(view)).toBeNull();
+    expect(documentText(view)).toBe("## B\nmore\n\n## A\ntext");
+  });
 });
 
 describe("bold, italic and inserting a link or image", () => {
@@ -599,6 +610,15 @@ describe("occur", () => {
     typeInto(".palette-field", "Alpha");
     pressOverlay("C-g");
     expect(documentText(view)).toBe(before);
+  });
+
+  it("matches a line's own text, not the line number its row is labelled with", () => {
+    // Line 12 is a blank line; its row reads "12: " for display only. A
+    // query of "12" must not find it by matching that label — no line's own
+    // text holds the digits "12" anywhere in this chapter.
+    openOccur(view, {});
+    typeInto(".palette-field", "12");
+    expect(document.querySelectorAll(".palette-row")).toHaveLength(0);
   });
 });
 

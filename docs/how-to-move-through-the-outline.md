@@ -114,8 +114,7 @@ number and text. Choose one to put the cursor there. Cancelling with `C-g`
 or Escape closes the list and changes nothing.
 
 `M-s` on its own opens as a prefix and does nothing until the next key: it
-used to centre the selection, which `C-l`'s own recentre already does for
-the cursor's line, so the chord was free for Emacs's own search prefix.
+is reserved for the outline's own occur, `M-s o`.
 
 ## Replace with a regular expression
 

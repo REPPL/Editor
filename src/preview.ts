@@ -9,23 +9,24 @@
  * The article is one page per document (spc-2609061318090042), so unlike a
  * Present — which shows one chapter's deck — a Preview shows every chapter
  * the shell knows about, in reading order. The open chapter's text is its
- * buffer's, so an unsaved edit previews; every other chapter is read as the
- * shell last read it. Nothing is written: the article is a string built here
- * from that text, and closing the window loses nothing because the work
- * never lived here.
+ * buffer's, so an unsaved edit previews; every other chapter is read fresh
+ * from disk at the moment of the press (`src/main.ts`'s own `readChapters`
+ * call, not a value carried over from an earlier read — Fable F20). Nothing
+ * is written: the article is a string built here from that text, and
+ * closing the window loses nothing because the work never lived here.
  */
 
 import { dataResolver, referencesOf } from "./core/assets";
-import { parseBibliography, resolveCitations, type CitationResolution } from "./core/bibliography";
-import { parseChapter } from "./core/parse";
 import {
-  chapterHasRefsHeading,
-  renderArticle,
-  renderDocumentContents,
-  renderReferenceList,
-} from "./core/render/article";
+  EMPTY_RESOLUTION,
+  parseBibliography,
+  resolveCitations,
+  type CitationResolution,
+} from "./core/bibliography";
+import { parseChapter } from "./core/parse";
+import { renderArticle } from "./core/render/article";
+import { escapeText } from "./core/render/html";
 import { READING_KEYS_DATA_ID, readingBindingDataJson } from "./core/render/reading-keys";
-import type { Chapter } from "./core/tree";
 import {
   inShell,
   pendingPreview,
@@ -34,7 +35,7 @@ import {
   type PreviewChapter,
   type PreviewSource,
 } from "./doctree";
-import { folderOf, partTitleOf } from "./publish/build";
+import { composeArticle, folderOf, partTitleOf, type ComposedChapter } from "./publish/build";
 
 /**
  * The window `article-video.js` installs, loaded as a plain script beside
@@ -46,9 +47,42 @@ import { folderOf, partTitleOf } from "./publish/build";
  * TypeScript error, not an override. Its absence is not a failure either way:
  * the poster and the link are already in the markup this module writes.
  */
-function articleVideo(): { upgradeVideos(): Promise<unknown> } | undefined {
-  return (window as unknown as { ArticleVideo?: { upgradeVideos(): Promise<unknown> } })
-    .ArticleVideo;
+/** A video prober's own shape: `article-video.js`'s `probe`, or a test's fake. */
+type VideoProber = (href: string, timeoutMs: number) => Promise<boolean>;
+
+function articleVideo():
+  | { upgradeVideos(prober?: VideoProber): Promise<unknown>; probe?: VideoProber }
+  | undefined {
+  return (
+    window as unknown as {
+      ArticleVideo?: { upgradeVideos(prober?: VideoProber): Promise<unknown>; probe?: VideoProber };
+    }
+  ).ArticleVideo;
+}
+
+/**
+ * An address `previewProber` never probes on its own: an absolute `http(s)`
+ * URL is a `remote:`/`gated:` video source `context.resolve` left
+ * untouched, rather than one `readAssets` already turned into a `data:` URI
+ * (`local`/`site`, read once through the shell alongside every chapter).
+ */
+const EXTERNAL_ADDRESS = /^https?:/i;
+
+/**
+ * Probe every video figure the way a published page does, except an
+ * external source's own address, which this app must never fetch on its
+ * own initiative (`02-constraints.md`'s "network only on publish": the app
+ * touches the network during a publish Alice started, and at no other time
+ * — GLM F8). A `local`/`site` source is already a `data:` URI by the time
+ * it reaches the page, so probing it touches no network at all and is left
+ * to the real prober.
+ */
+function previewProber(): VideoProber {
+  return (href, timeoutMs) => {
+    if (EXTERNAL_ADDRESS.test(href)) return Promise.resolve(false);
+    const real = articleVideo()?.probe;
+    return real ? real(href, timeoutMs) : Promise.resolve(false);
+  };
 }
 
 /**
@@ -127,21 +161,13 @@ export function idPrefixFor(index: number): string {
   return `c${String(index + 1)}-`;
 }
 
-/** One chapter, parsed and rendered, with the Part it reports for the contents list. */
-interface RenderedChapter {
-  readonly chapter: Chapter;
-  readonly idPrefix: string;
-  readonly part: string;
-  readonly html: string;
-}
-
 /** One chapter of the preview, parsed and rendered against its own pictures. */
 async function renderChapter(
   source: PreviewChapter,
   index: number,
   variant: string | null,
-  citations: CitationResolution | undefined,
-): Promise<RenderedChapter> {
+  citations: CitationResolution,
+): Promise<ComposedChapter> {
   const chapter = parseChapter(source.text);
   const assets = await readAssets(source.text, source.path);
   const idPrefix = idPrefixFor(index);
@@ -149,6 +175,11 @@ async function renderChapter(
     chapter,
     idPrefix,
     part: partTitleOf(folderOf(source.path)),
+    // The raw folder, not the display label: two folders can share one
+    // label ("01-intro" and "02-intro" both read "intro"), and grouping by
+    // the label alone merged them into one Part in the contents list
+    // (Fable/GLM F14).
+    partKey: folderOf(source.path),
     html: renderArticle(chapter, dataResolver(assets), {
       variant,
       contents: false,
@@ -164,15 +195,20 @@ async function renderChapter(
 /**
  * The document's citations, resolved once against every chapter's own text.
  *
- * `undefined` for a document that names no bibliography at all — an ordinary
- * document (itd-2609051335502171's own Assumption) — so a citation in it
- * still renders, as the literal text `html.ts`'s own fallback shows.
+ * `EMPTY_RESOLUTION` for a document that names no bibliography at all — an
+ * ordinary document (itd-2609051335502171's own Assumption) — so a citation
+ * in it is marked unresolved the same way an unknown key is, rather than
+ * printed as the literal brackets the author wrote (GLM F4: `undefined` is
+ * `html.ts`'s own phase-1 fallback for a caller with no resolution at all,
+ * the deck's speaker notes, not this one). `"article"` is the placement
+ * filter, so a citation written only inside a `.notes` div earns no entry
+ * here (Fable F7).
  */
-function citationsFor(source: PreviewSource): CitationResolution | undefined {
+function citationsFor(source: PreviewSource): CitationResolution {
   const bibliography = source.bibliography;
-  if (bibliography === null || bibliography === undefined) return undefined;
+  if (bibliography === null || bibliography === undefined) return EMPTY_RESOLUTION;
   const chapters = source.chapters.map((chapter) => parseChapter(chapter.text));
-  return resolveCitations(chapters, parseBibliography(bibliography));
+  return resolveCitations(chapters, parseBibliography(bibliography), "article");
 }
 
 /** The whole document's article: one contents list, every chapter in order. */
@@ -182,39 +218,54 @@ export async function articleOf(source: PreviewSource): Promise<string> {
   const rendered = await Promise.all(
     source.chapters.map((chapter, index) => renderChapter(chapter, index, variant, citations)),
   );
-  const contents = renderDocumentContents(rendered);
-  // A `.refs` heading writes the reference list where the document asked for
-  // it, through `renderArticle`'s own "appendix" placement; a document that
-  // wrote none gets it once, after the last chapter, rather than not at all.
-  const appendix = rendered.some((entry) => chapterHasRefsHeading(entry.chapter))
-    ? ""
-    : renderReferenceList(citations);
-  return [contents, ...rendered.map((entry) => entry.html), appendix]
-    .filter((part) => part !== "")
-    .join("\n");
+  // `build.ts`'s own `renderVariant` composes its article the same way, from
+  // the same function: the one place both hosts must agree (Fable F8).
+  return composeArticle(rendered, citations);
 }
 
 /** Say why there is nothing to show, on the page rather than in a console. */
 function reportEmpty(message: string): void {
   const main = document.querySelector("main");
   if (main === null) return;
-  main.innerHTML = `<p>${message.replace(/[<&]/g, (character) =>
-    character === "<" ? "&lt;" : "&amp;",
-  )}</p>`;
+  // `escapeText` (GLM F12: the hand-rolled version here escaped `<` and `&`
+  // but not `>`, which a message quoting a tag or a comparison could carry).
+  main.innerHTML = `<p>${escapeText(message)}</p>`;
 }
 
-/** Build and show the document the shell is holding. */
-async function show(source: PreviewSource): Promise<void> {
+/**
+ * Write this document's own memory scope onto `<body>`, or clear it.
+ *
+ * `article-eggs.js` reads `data-document-scope` before falling back to
+ * `location.pathname`, which never changes between two documents in this
+ * one window (iss-2609070642209805): a scope absent from `source` — a
+ * caller that predates the field — clears any earlier document's own
+ * attribute rather than leaving it to be read for a document it was never
+ * about.
+ */
+function applyDocumentScope(source: PreviewSource): void {
+  if (source.documentScope === undefined || source.documentScope === "") {
+    document.body.removeAttribute("data-document-scope");
+    return;
+  }
+  document.body.setAttribute("data-document-scope", source.documentScope);
+}
+
+/** Build and show the document the shell is holding, exported for `preview.test.ts`. */
+export async function show(source: PreviewSource): Promise<void> {
   document.title = source.title === "" ? "Preview" : source.title;
+  applyDocumentScope(source);
   const main = document.querySelector("main");
   if (main === null) return;
   main.innerHTML = await articleOf(source);
   // The script already ran once at page load, over an empty `<main>`; a
   // later preview needs it run again over what this just wrote. Its own
-  // absence is not a failure — the poster and the link already stand.
-  await articleVideo()?.upgradeVideos().catch(() => {
-    /* A source that errors after the probe leaves the fallback standing. */
-  });
+  // absence is not a failure — the poster and the link already stand. The
+  // prober here never touches an external address on its own (GLM F8).
+  await articleVideo()
+    ?.upgradeVideos(previewProber())
+    .catch(() => {
+      /* A source that errors after the probe leaves the fallback standing. */
+    });
   // Re-applies the opening and every egg's marker to the freshly written
   // `<main>`; harmless where the script never loaded, the same as the video
   // upgrade above.

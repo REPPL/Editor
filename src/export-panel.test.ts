@@ -56,9 +56,9 @@ const LONG_ASSET =
 
 function plan(overrides: Partial<ExportPlan> = {}): ExportPlan {
   return {
-    title: "Macromarketing 2026",
+    title: "The Lantern Papers",
     variant: "talk",
-    slug: "macromarketing-2026",
+    slug: "the-lantern-papers",
     files: [
       { path: "index.html", text: "<!doctype html>\n" },
       { path: "slides/index.html", text: "<!doctype html>\n" },
@@ -101,7 +101,7 @@ function panelWith(
     // What the shell answers with: the nonce for the folder Alice chose in
     // its own dialog, never the folder itself.
     chooseFolder: vi.fn(() => Promise.resolve("a-nonce-the-shell-minted")),
-    exportRendering: vi.fn(() => Promise.resolve({ folder: "macromarketing-2026-deck", files: 9 })),
+    exportRendering: vi.fn(() => Promise.resolve({ folder: "the-lantern-papers-deck", files: 9 })),
     dryRun: vi.fn(() =>
       Promise.resolve({ hash: "cccccccccccccccccccccccccc" } as never),
     ),
@@ -160,7 +160,7 @@ describe("the export panel", () => {
 
     const deck = panel.element.querySelector<HTMLElement>('[data-row="deck"]');
     expect(deck?.querySelector(".export-destination")?.textContent).toContain(
-      "macromarketing-2026-deck",
+      "the-lantern-papers-deck",
     );
     const written = [...(deck?.querySelectorAll(".export-writes li") ?? [])].map(
       (item) => item.textContent ?? "",
@@ -173,7 +173,7 @@ describe("the export panel", () => {
 
     const article = panel.element.querySelector<HTMLElement>('[data-row="article"]');
     expect(article?.querySelector(".export-destination")?.textContent).toContain(
-      "macromarketing-2026-article",
+      "the-lantern-papers-article",
     );
 
     const dry = panel.element.querySelector<HTMLElement>('[data-row="dry-run"]');
@@ -260,9 +260,9 @@ describe("the export panel", () => {
     expect(request).toBeDefined();
     if (request === undefined) return;
     expect(request.kind).toBe("deck");
-    expect(request.folder_name).toBe("macromarketing-2026-deck");
+    expect(request.folder_name).toBe("the-lantern-papers-deck");
     expect(request.files.map((file) => file.path)).toEqual(["slides/index.html"]);
-    expect(used.said.join(" ")).toContain("macromarketing-2026-deck");
+    expect(used.said.join(" ")).toContain("the-lantern-papers-deck");
   });
 
   it("writes nothing when the dialog is cancelled", async () => {

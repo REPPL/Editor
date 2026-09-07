@@ -231,9 +231,17 @@ openDocumentSource?(
 and one command, wired the way `switchChapter` already is — a local function
 reusing the application's own `showTree`, `forgetChapter`, `documentTitle`,
 `chaptersOf`, and `mayDiscard`, rather than a new public `App` method: the
-discard guard runs *after* the dialog closes and *before* the tree is shown,
-the same order `promptForFolder` already keeps between choosing a folder and
-opening it. A chapter the outcome names is opened through the same
+discard guard runs *after* the dialog closes and *before the nonce is
+claimed* — not merely before the tree is shown, which is what shipped first
+and is the ordering bug review round one caught (Fable F24, Sonnet F2,
+`iss-2609070642208293`): `openDocumentSource` sets the shell's own document
+root and replaces its folder watcher the moment it is called, so running the
+guard after it left a declined discard with the old chapter still on screen
+but the shell already confined to the new root. Fixed to match
+`promptForFolder`'s own order between choosing and opening — the guard first,
+the claim only once she has agreed — with the nonce's own thirty-second
+lifetime (`DESTINATION_LIFETIME`) covering however long the confirm dialog
+takes. A chapter the outcome names is opened through the same
 `app.openChapter` the sidebar already calls; a chapter it names but the
 drawn tree does not contain — the one edge `document_root_above` can leave
 unresolved — falls back to announcing the document's title alone, exactly as
@@ -249,6 +257,7 @@ an ordinary folder open with nothing pre-selected already announces.
 | A file picked from inside a real document: whole document opens, picked chapter is the one already open | `src-tauri/src/open_source.rs` › `finds_the_document_root_above_a_chapter_two_levels_deep`; `src/open-source.test.ts` › "opens the whole document when the picked file already lives inside one" |
 | A file that is not Markdown: nothing opens, refused with a message, nothing written | `src-tauri/src/document.rs` › `refuses_a_non_markdown_file_as_a_bare_chapter`; `src/open-source.test.ts` › "refuses a file that is not Markdown" |
 | Either dialog cancelled: nothing changes, nothing is written | `src/open-source.test.ts` › "cancelling either dialog leaves the open document untouched" |
+| A discard she declines claims no nonce and leaves the shell's own root untouched | `src/open-source.test.ts` › "declining the discard guard claims no nonce and leaves the shell's root untouched (iss-2609070642208293)" |
 | `C-x o` still moves to the other pane; `C-x C-o` no longer does | `src/emacs-keys.test.ts` › "gives no two rows the same chord"; `src/focus.test.ts` › "moves the keyboard to the sidebar on C-x o and starts on the open chapter" |
 | Opening either way offline: every action succeeds, no request is attempted | `src/open-source.test.ts` › "attempts no network request while opening either way" |
 | Inherits the four disciplines | the tests named in Scope |
@@ -315,3 +324,33 @@ Manual checks, `npm run tauri dev`, recorded unticked in
 - **Manual checks** cover the real Finder dialogs and the real save-to-disk
   byte comparison; nothing in jsdom drives the native panel itself, which is
   the same gap map #1's own `M1` and `M2` already carry forward.
+- **Publishing and exporting a one-chapter document opened this way.** Not
+  designed for here, but reachable through it: a file opened on its own has
+  no `document.yaml`, so `read_metadata` (`src-tauri/src/metadata.rs`)
+  answers empty metadata — no declared variants — for the same reason it
+  does for a folder that genuinely has none. `docs/how-to-open-a-file-or-a-folder.md`
+  used to say publish and export refuse such a document "the same way they
+  refuse when no document is open at all" (Fable F26); since
+  `src/publish/services.ts::variantFor`'s fix for F4
+  (`iss-2609070642219301`), that is no longer what happens — a document
+  with no declared variant publishes and exports as its own single default
+  variant, so the doc page now says that instead. A real (non-dry-run)
+  publish is the one action that then writes into the file's own folder: it
+  mints the document's identity into a `document.yaml` it creates there,
+  since nothing else in the folder can remember it for the next publish.
+- **A bare-file document's reload used to rebuild the whole folder around
+  it** (Fable F25, `iss-2609070642207436`): `app.reload()` calls the ordinary
+  `open_folder` command with the open document's own root, and that command
+  always walked it as a real folder — every sibling and subfolder the bare
+  file never asked to share a sidebar with, drawn in the moment the author's
+  own save fired the recursive watcher this spec set up over that root.
+  Fixed by a new piece of state this spec's module gained,
+  `open_source::SingleFileRoot`: `open_document_source` records which bare
+  file, if any, a root was opened from, and `open_folder` (`lib.rs`) checks
+  it before walking — a root that matches rebuilds through
+  `read_single_chapter` again instead. The watcher over a bare file is also
+  narrowed to the file itself rather than its whole folder, on the same
+  state, so a sibling changing no longer fires a reload at all.
+  `open_source::tests::matches_a_reload_of_the_same_bare_file_and_nothing_else`
+  and `src/open-source.test.ts` › "reload after a save still shows the one
+  chapter, not the whole folder" are the tests.

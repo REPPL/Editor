@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { parseChapter } from "../core/parse";
+import { DECK_CONFIG } from "../core/render/slides";
+import type { PreviewSource } from "../doctree";
+import { articleOf } from "../preview";
 import {
   ARTICLE_PATH,
   DECK_PATH,
@@ -15,7 +18,6 @@ import {
   type DocumentSource,
 } from "./build";
 import { versionLinks } from "./links";
-import { DECK_CONFIG } from "../core/render/slides";
 
 /**
  * A synthetic two-chapter talk, one Part, invented for this file alone.
@@ -26,14 +28,14 @@ import { DECK_CONFIG } from "../core/render/slides";
  * more than one chapter — a contents list spanning both, an asset copied
  * from each, and slide ids that must not collide across them.
  */
-function presentation(): DocumentSource {
+function lanternTalk(): DocumentSource {
   return {
     chapters: [
       {
         path: "01-slides/01-opening.md",
         chapter: parseChapter(
           [
-            "# Why Macromarketing Matters",
+            "# Why the Lantern Matters",
             "",
             "## The scale of the problem",
             "",
@@ -65,13 +67,13 @@ function presentation(): DocumentSource {
 
 function build(tree: DocumentSource, variant = "talk"): ReturnType<typeof buildVersion> {
   return buildVersion(tree, variant, {
-    rendered: renderVariant(tree, variant, { title: "Macromarketing 2026", host: "site" }),
+    rendered: renderVariant(tree, variant, { title: "The Lantern Papers", host: "site" }),
   });
 }
 
 describe("buildVersion", () => {
   it("writes the article and the deck at the version folder's two paths", () => {
-    const built = build(presentation());
+    const built = build(lanternTalk());
     expect(built.files.map((file) => file.path)).toEqual([
       ARTICLE_PATH,
       DECK_PATH,
@@ -79,14 +81,14 @@ describe("buildVersion", () => {
   });
 
   it("is deterministic: the same tree renders the same bytes twice", () => {
-    const first = build(presentation());
-    const second = build(presentation());
+    const first = build(lanternTalk());
+    const second = build(lanternTalk());
     expect(first.files).toEqual(second.files);
     expect(first.copies).toEqual(second.copies);
   });
 
   it("embeds no id, token, hash or timestamp in any built file", () => {
-    const built = build(presentation());
+    const built = build(lanternTalk());
     const links = versionLinks(
       "https://example.invalid",
       "aaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -106,7 +108,7 @@ describe("buildVersion", () => {
   });
 
   it("built_pages_declare_the_viewport_and_no_fixed_width", () => {
-    const built = build(presentation());
+    const built = build(lanternTalk());
     for (const file of built.files) {
       expect(file.text).toMatch(
         /<meta name="viewport" content="width=device-width, initial-scale=1[^"]*">/,
@@ -129,7 +131,7 @@ describe("buildVersion", () => {
   });
 
   it("names no absolute URL in a built page", () => {
-    for (const file of build(presentation()).files) {
+    for (const file of build(lanternTalk()).files) {
       expect(file.text).not.toMatch(/https?:\/\//);
     }
   });
@@ -139,7 +141,7 @@ describe("buildVersion", () => {
     // unread — so a page that laid itself out in one would arrive at the link
     // with its columns collapsed and its table alignment gone. Every declared
     // size is a data attribute the site's stylesheets answer.
-    const built = build(presentation());
+    const built = build(lanternTalk());
     for (const file of built.files) {
       expect(file.text, file.path).not.toMatch(/\sstyle\s*=/);
       expect(file.text, file.path).not.toContain("<style");
@@ -165,7 +167,7 @@ describe("buildVersion", () => {
     // The article is one page per document, and an outline id is unique within
     // one chapter only: without a prefix, two chapters opening the same way
     // would send both contents entries to the first one.
-    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026", host: "site" });
+    const rendered = renderVariant(lanternTalk(), "talk", { title: "The Lantern Papers", host: "site" });
     const navs = rendered.article.match(/<nav class="contents">/g) ?? [];
     expect(navs).toHaveLength(1);
     const targets = [...rendered.article.matchAll(/<nav class="contents">([\s\S]*?)<\/nav>/g)]
@@ -188,7 +190,7 @@ describe("buildVersion", () => {
   it("wraps the deck in an envelope with no absolute URL and one configuration", () => {
     // The envelope that ships is the site build's, because the site's policy
     // forbids the inline script the core's own envelope used.
-    const deck = build(presentation()).files.find((file) => file.path === DECK_PATH);
+    const deck = build(lanternTalk()).files.find((file) => file.path === DECK_PATH);
     const text = deck?.text ?? "";
     expect(text).not.toMatch(/https?:\/\//);
     expect(text).not.toContain("cdn");
@@ -268,7 +270,7 @@ describe("the asset plan", () => {
   });
 
   it("copies each asset once, however many chapters reference it", () => {
-    const { copies } = assetPlan(presentation(), "talk");
+    const { copies } = assetPlan(lanternTalk(), "talk");
     expect(new Set(copies.map((copy) => copy.to)).size).toBe(copies.length);
     expect(copies.length).toBeGreaterThan(0);
     for (const copy of copies) {
@@ -401,7 +403,7 @@ describe("slide ids across a whole document", () => {
   }
 
   it("gives no two slides the same id, across chapters", () => {
-    const rendered = renderVariant(presentation(), "talk", { title: "Macromarketing 2026", host: "site" });
+    const rendered = renderVariant(lanternTalk(), "talk", { title: "The Lantern Papers", host: "site" });
     const ids = idsOf(rendered.deck);
     expect(ids.length).toBeGreaterThan(1);
     expect(new Set(ids).size).toBe(ids.length);
@@ -437,7 +439,7 @@ function references(page: string): string[] {
 }
 
 function rendered(host: "site" | "folder"): ReturnType<typeof renderVariant> {
-  return renderVariant(presentation(), "talk", { title: "Macromarketing 2026", host });
+  return renderVariant(lanternTalk(), "talk", { title: "The Lantern Papers", host });
 }
 
 describe("the folder host", () => {
@@ -463,8 +465,8 @@ describe("the folder host", () => {
     expect(rest(folder.article)).toEqual(rest(site.article));
 
     // And the assets a version carries are one plan, whatever the host.
-    expect(buildVersion(presentation(), "talk", { rendered: folder }).copies).toEqual(
-      buildVersion(presentation(), "talk", { rendered: site }).copies,
+    expect(buildVersion(lanternTalk(), "talk", { rendered: folder }).copies).toEqual(
+      buildVersion(lanternTalk(), "talk", { rendered: site }).copies,
     );
   });
 
@@ -549,8 +551,8 @@ describe("citations, resolved once and shared by the article and the deck", () =
       host: "site",
       bibliography: BIB,
     });
-    expect(built.article).toContain('<span class="citation">[1]</span>');
-    expect(built.article).toContain('<span class="citation">[2]</span>');
+    expect(built.article).toContain('<span class="citation">[<a href="#ref-1">1</a>]</span>');
+    expect(built.article).toContain('<span class="citation">[<a href="#ref-2">2</a>]</span>');
     expect(built.article).toContain(
       '<li id="ref-1">Carroll, Carol. 1999. Reading by Lamplight.</li>',
     );
@@ -615,13 +617,75 @@ describe("citations, resolved once and shared by the article and the deck", () =
     expect(creditLines).toHaveLength(articleEntries.length);
   });
 
-  it("renders and generates nothing when the document names no bibliography", () => {
+  it("gives a .notes-only citation no article entry, but still credits it in the deck (Fable F7)", () => {
+    const tree: DocumentSource = {
+      chapters: [
+        {
+          path: "01-part/01-a.md",
+          chapter: parseChapter(
+            [
+              "# A Paper",
+              "",
+              "## Findings",
+              "",
+              "::: {.notes}",
+              "An aside only a slide's speaker sees [@carroll1999].",
+              ":::",
+              "",
+            ].join("\n"),
+          ),
+        },
+      ],
+    };
+    const built = renderVariant(tree, "full", { title: "A Paper", host: "site", bibliography: BIB });
+    // Nothing on the article page points at it: no entry, no margin note.
+    expect(built.article).not.toContain('class="reference-list"');
+    expect(built.article).not.toContain("Reading by Lamplight");
+    // The deck's own speaker notes still credit it at the foot of the slide.
+    expect(built.deck).toContain('<footer class="slide-foot"><p class="citation">Carroll, 1999</p></footer>');
+  });
+
+  it("composes the identical article fragment preview.ts's articleOf renders for the same chapters (Fable F8)", async () => {
+    // The exact two chapters `twoChapters()` (above) parses, so the two
+    // hosts render the same document — one from a parsed `Chapter`, the
+    // other from its own source text, as each is actually handed one.
+    const CHAPTER_1 = "# A Paper\n\n## Beginnings\n\nAs shown [@carroll1999].\n";
+    const CHAPTER_2 = "## Findings\n\nAlso [@smith2020], and once more [@nosuchkey].\n";
+    const tree: DocumentSource = {
+      chapters: [
+        { path: "01-part/01-beginnings.md", chapter: parseChapter(CHAPTER_1) },
+        { path: "01-part/02-findings.md", chapter: parseChapter(CHAPTER_2) },
+      ],
+    };
+    const built = renderVariant(tree, "full", { title: "A Paper", host: "site", bibliography: BIB });
+
+    const previewSource: PreviewSource = {
+      title: "A Paper",
+      variant: "full",
+      bibliography: BIB,
+      chapters: [
+        { path: "01-part/01-beginnings.md", text: CHAPTER_1 },
+        { path: "01-part/02-findings.md", text: CHAPTER_2 },
+      ],
+    };
+    const previewArticle = await articleOf(previewSource);
+
+    // build.ts wraps the same fragment in a full HTML document
+    // (`articleDocument`); the fragment itself — contents list, every
+    // chapter's own page, the reference list — must be identical, or the
+    // two hosts have quietly drifted apart (the exact defect Fable F8
+    // named: two hand-kept compositions with nothing proving they agree).
+    expect(built.article).toContain(previewArticle);
+  });
+
+  it("marks a citation unresolved, generating nothing else, when the document names no bibliography (GLM F4)", () => {
     const built = renderVariant(
       { chapters: [{ path: "01-part/01-a.md", chapter: parseChapter("As shown [@carroll1999].\n") }] },
       "full",
       { title: "A Paper", host: "site" },
     );
-    expect(built.article).toContain('<span class="citation">[@carroll1999]</span>');
+    expect(built.article).not.toContain("[@carroll1999]");
+    expect(built.article).toContain('<span class="citation-key unresolved">carroll1999</span>');
     expect(built.article).not.toContain('class="reference-list"');
     expect(built.deck).not.toContain('class="slide-foot"');
   });

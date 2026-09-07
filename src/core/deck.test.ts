@@ -377,6 +377,24 @@ describe("a citation's credit line (itd-2609051335502171)", () => {
     expect(buildDeck(parseChapter(source)).columns[0]?.slides[0]?.foot).toEqual([]);
   });
 
+  it("names a work cited inside a list item, not just a bare paragraph (GLM F2)", () => {
+    const source = ["## Beginnings", "", "- First point.", "- As shown [@carroll1999].", ""].join(
+      "\n",
+    );
+    const plan = buildDeck(parseChapter(source), { citations: citationsFor(source) });
+    expect(plan.columns[0]?.slides[0]?.foot).toEqual([
+      { kind: "citation", label: null, blocks: [], inlines: [], text: "Carroll, 1999" },
+    ]);
+  });
+
+  it("names a work cited inside a block quote, not just a bare paragraph (GLM F2)", () => {
+    const source = ["## Beginnings", "", "> As shown [@carroll1999].", ""].join("\n");
+    const plan = buildDeck(parseChapter(source), { citations: citationsFor(source) });
+    expect(plan.columns[0]?.slides[0]?.foot).toEqual([
+      { kind: "citation", label: null, blocks: [], inlines: [], text: "Carroll, 1999" },
+    ]);
+  });
+
   it("puts a citation's credit line after an authored .credit line", () => {
     const source = [
       "## Beginnings",

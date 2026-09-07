@@ -222,23 +222,41 @@
 
   /**
    * The toolbar, built once at boot from native elements alone: a `<section>`
-   * with an accessible name, three `<fieldset>`s each naming themselves
-   * through their own `<legend>`, and `<button>`s carrying `aria-pressed` —
-   * every one of them reachable by Tab and activated by Enter or Space with
-   * nothing here claiming a key, per `itd-2609061324342715`.
+   * with an accessible name, a toggle button, and a body carrying three
+   * `<fieldset>`s each naming themselves through their own `<legend>`, and
+   * `<button>`s carrying `aria-pressed` — every one of them reachable by Tab
+   * and activated by Enter or Space with nothing here claiming a key, per
+   * `itd-2609061324342715`.
+   *
+   * The toggle exists so the toolbar can be dismissed at the narrowest width
+   * (itd-2609051336128348, Fable F6): it starts expanded, matching every
+   * shipped screenshot and the toolbar's own previous shape, and a reader
+   * who finds it in the way of the page's last paragraphs collapses it with
+   * one press, `aria-expanded` carrying which state it is in.
    */
   function buildToolbar(choice) {
     var toolbar = global.document.createElement("section");
     toolbar.className = "article-controls";
     toolbar.setAttribute("aria-label", "Reading preferences");
+    var body = global.document.createElement("div");
+    body.className = "article-controls-body";
+    var toggle = global.document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "article-controls-toggle";
+    toggle.textContent = "Reading preferences";
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.setAttribute("aria-controls", "article-controls-body");
+    toolbar.appendChild(toggle);
+    body.id = "article-controls-body";
     for (var i = 0; i < CONTROLS.length; i += 1) {
-      toolbar.appendChild(buildGroup(CONTROLS[i], choice));
+      body.appendChild(buildGroup(CONTROLS[i], choice));
     }
     var reset = global.document.createElement("button");
     reset.type = "button";
     reset.className = "article-controls-reset";
     reset.textContent = "Reset to defaults";
-    toolbar.appendChild(reset);
+    body.appendChild(reset);
+    toolbar.appendChild(body);
     return toolbar;
   }
 
@@ -272,6 +290,14 @@
     toolbar.addEventListener("click", function (event) {
       var target = event.target;
       if (!target || typeof target.closest !== "function") {
+        return;
+      }
+      var toggle = target.closest(".article-controls-toggle");
+      if (toggle) {
+        var body = toolbar.querySelector(".article-controls-body");
+        var expanded = toggle.getAttribute("aria-expanded") === "true";
+        body.hidden = expanded;
+        toggle.setAttribute("aria-expanded", String(!expanded));
         return;
       }
       if (target.closest(".article-controls-reset")) {

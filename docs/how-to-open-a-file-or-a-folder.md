@@ -38,15 +38,23 @@ and starts you on the chapter you picked.
 Picking a file that is not Markdown opens nothing: Editor says so, and
 writes nothing anywhere.
 
-## What a one-chapter document cannot do yet
+## Publishing and exporting a one-chapter document
 
-A document opened this way has no document folder behind it, so export and
-publish both refuse it the same way they refuse when no document is open at
-all. To give the file the rest of a document's shape — a metadata file, a
-named Part, room for a second chapter — start fresh with [New
-document](how-to-start-a-new-document.md) and move the text across, or build
-the folder around it by hand; either way, `C-x C-f` reads it back exactly
-as any other document folder once it exists.
+A document opened this way names no variant — there is no `document.yaml` to
+name one in — so it publishes and exports as its own single default variant,
+the same as a document [New document](how-to-start-a-new-document.md)
+creates before you have written any `variants:` into it. Nothing about the
+publish panel or the export panel treats it differently.
+
+A dry run and a folder export still write nothing beside the file itself. A
+real publish is the one exception: the first time you publish, Editor mints
+this document its identity and writes it into a `document.yaml` it creates
+in the file's own folder, so a later publish reuses the same public link
+rather than minting a second one. To give the file the rest of a document's
+shape ahead of that — a named Part, room for a second chapter — start fresh
+with [New document](how-to-start-a-new-document.md) and move the text
+across, or build the folder around it by hand; either way, `C-x C-f` reads
+it back exactly as any other document folder once it exists.
 
 ## Related
 

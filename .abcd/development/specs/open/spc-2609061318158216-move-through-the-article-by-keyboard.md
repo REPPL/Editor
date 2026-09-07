@@ -115,11 +115,27 @@ here unchanged, they are what "next/previous Section" means on a page whose
 headings are Chapter, Section and Sub-section stops in one continuous
 argument — the Press Release's own "one chord moves him to the next Section"
 does not distinguish a Chapter stop from a Section stop, and neither does
-this table. `next-line`/`previous-line` (`C-n`/`Down`, `C-p`/`Up`) are reused
-for "moving by item inside a Section": on a page with no text cursor, an
-"item" is the next flow block — a paragraph, a list, a figure, a callout, a
-margin note — read straight off the `<article>` map #9 already wraps one
-chapter in, so this spec builds no structure of its own to walk.
+this table. `next-line`/`previous-line` are reused for "moving by item
+inside a Section": on a page with no text cursor, an "item" is the next flow
+block — a paragraph, a list, a figure, a callout, a margin note — read from
+the current heading's own parent, walked forward to the next heading of any
+level.
+
+**A reading view's own copy of a row's chords, not always the table's own
+list verbatim (review round one, Fable F27, ledger `iss-2609070642203845`).**
+`next-line`/`previous-line`'s own row in `src/keys.ts` carries `C-n`/`Down`
+and `C-p`/`Up`; a reading page claiming the bare arrow keys took the
+browser's own scroll away from every reader who has not yet moved to a
+Section (`sectionIndex === -1` finds no items, so the key was silently
+swallowed on first load), and `isearch-forward`'s own `s-f` took Cmd-F from
+the same browser whose own native find the spec's own Design, above, already
+names as the accessible route to search. `src/core/render/reading-keys.ts`'s
+`readingBindingData` now filters a fixed, small set of chords —
+`s-f`, `Down`, `Up` — out of the rows it serialises, so `article-keys.js`
+never sees them as honoured at all and never calls `preventDefault` on
+them; `C-n`/`C-p`/`C-s` still answer their own rows unchanged. A row whose
+every chord is excluded would be dropped from the served data entirely
+(none currently is).
 
 `outline-occur` (`M-s o`) is the contents chord, deliberately not
 `outline-switch-chapter`: "switch chapter by name" moves between different
@@ -171,17 +187,37 @@ in memory for the life of the page and touched by nothing that would let
 them survive a reload or reach a request. `moveSection(delta)` reads every
 `h1`–`h6` with an `id` under `<main>`, in document order (`article.ts`'s own
 anchors are what give every one of them that id), and moves the index one
-step, wrapping at either end — the same "a list that stops dead at its ends
-makes the reader look at the screen to find out why" reasoning
-`src/overlay.ts` already states for the editing surface's own overlays,
-restated here because this file cannot import that module either.
-`moveItem(delta)` reads the current heading's enclosing `<article>` and
-walks its direct children from the heading forward until the next heading of
-any level, which is the flat, sibling-level shape `renderBlocks` already
-writes one chapter's blocks in — a margin note is one of these siblings too,
-because `inlineMarginNotes` appends it as the block's own next sibling
-(`spc-2609061318090042`'s own Design), so stepping through items already
-visits a footnote or a citation beside the paragraph that made it.
+step. **It refuses past either end rather than wrapping (review round one,
+Fable F28).** The original design wrapped, reasoning from `src/overlay.ts`'s
+own "a list that stops dead at its ends makes the reader look at the screen
+to find out why" — but the editing surface's own `outline-next-heading`/
+`outline-previous-heading`, the two rows this chord answers, refuse at
+either end in the editor ("No heading after this one"), and the whole point
+of reusing the editor's own rows is that a row means the same thing on both
+surfaces; the wrap was the overlay's own rule, borrowed for a page that
+never asked for it. `moveItem(delta)` reads the current heading's own
+parent element — not always `<article>`: a heading nested inside a
+`.callout` or a variant div is not a direct child of `<article>` at all, and
+walking that fixed ancestor found the heading at no position among its own
+children, so `C-n` inside such a Section always found nothing (review round
+one, Fable F31) — and walks that parent's children forward from the heading
+to the next heading of any level, the flat, sibling-level shape
+`renderBlocks` already writes one chapter's blocks in for an ordinary
+Section, and a `.callout`/variant div's own children for one nested inside.
+A margin note is one of these siblings too, because `inlineMarginNotes`
+appends it as the block's own next sibling (`spc-2609061318090042`'s own
+Design), so stepping through items already visits a footnote or a citation
+beside the paragraph that made it.
+
+**A prefix start is not always prevented (review round one, Fable F27).**
+`isPrefixStart` answers yes for `C-c`, `C-x` and `C-h` — the first step of
+this page's own two-step chords — and `onKeydown` used to call
+`preventDefault` on all three unconditionally. On Windows and Linux
+Chromium, `C-c` is copy and `C-x` is cut: a reader with a non-empty text
+selection (`window.getSelection().toString() !== ""`) pressing either now
+gets the browser's own copy or cut, and this page's own prefix window never
+opens for that one press — checked only for `C-c`/`C-x`, since `C-h` has no
+such browser meaning and keeps its unconditional prevention.
 
 Reaching a heading by any route — Section movement, item movement, or the
 contents list — calls one function, `reveal`, itself two calls: a guarded
@@ -213,7 +249,15 @@ opens a real, labelled `<input>` rather than capturing characters at the
 document level, so typing, Backspace and an arrow inside the field are left
 alone entirely: the field is the "prompt" shape `src/overlay.ts`'s own
 `onKey` hook describes, mirrored here because this page cannot import that
-contract either. `findMatches(query)` walks every text node under `<main>`
+contract either. **Tab is not left alone** (review round one, Fable F29):
+the field is the search dialog's only focusable element, so a bare `Tab` or
+`S-Tab` press is caught, its default prevented, and the field refocused —
+the contents and keys overlays already hold Tab by preventing every key
+they do not otherwise answer, but the search branch returns before reaching
+that shared fallback for every ordinary keystroke, so it needed its own
+line, or a reader tabbing out of `aria-modal="true"` left the overlay still
+owning every later keydown with nothing to show for it.
+`findMatches(query)` walks every text node under `<main>`
 with a `TreeWalker`, matching case-insensitively, and reports one match per
 text node that carries the term — a reading page bringing a reader to a
 paragraph, not a find-in-page tool counting character offsets — with each
@@ -277,7 +321,10 @@ today, this map does not make it worse.
 
 | Criterion | Proven by |
 |---|---|
-| Two Parts, four Chapters: the next-section chord moves to each heading in document order from the top, and the previous-section chord retraces it | `article-keys.test.ts` › "moves to each heading in document order, and back, from the top of the page", "wraps from the last heading back to the first, and from the first to the last" |
+| Two Parts, four Chapters: the next-section chord moves to each heading in document order from the top, and the previous-section chord retraces it; it refuses past either end rather than wrapping, matching the editor's own `outline-next-heading`/`outline-previous-heading` (review round one, Fable F28) | `article-keys.test.ts` › "moves to each heading in document order, and back, from the top of the page", "starting with no Section chosen, previous opens at the last heading and next at the first", "refuses past the last heading, matching the editor's own outline-next-heading", "refuses before the first heading, matching the editor's own outline-previous-heading" |
+| The browser's own keys are never stolen: bare Down/Up still scroll, Cmd-F still opens the browser's own find, and a `C-c`/`C-x` prefix start is not prevented while text is selected (review round one, Fable F27, ledger `iss-2609070642203845`) | `reading-keys.test.ts` › "excludes s-f…", "excludes bare Down and Up…"; `article-keys.test.ts` › "the browser's own keys are not stolen" group |
+| A heading nested inside a div (a `.callout`, a variant span) still has items to move to (review round one, Fable F31) | `article-keys.test.ts` › "a heading nested inside a div still has items" group |
+| Tab cannot leave the search dialog while it is open (review round one, Fable F29) | `article-keys.test.ts` › "Tab stays inside the search dialog" group |
 | The contents chord opens a list of Parts, Chapters and Sections; the movement chords step through it; Return jumps and closes | `article-keys.test.ts` › "opens listing Parts, Chapters and Sections, moves with the movement chords, and Return jumps and closes", "does not open when there is nothing to jump to" |
 | With the contents list open and a search in progress, the cancel chord closes whatever is open and keeps the reading position; Escape does the same | `article-keys.test.ts` › "closes the contents list on C-g, keeping the reading position", "closes the contents list on Escape too" |
 | A word appearing three times: stepping forward and backward brings each match into view in turn, and cancelling returns to the paragraph search started from | `article-keys.test.ts` › "steps forward and backward through three matches, and cancel returns to the paragraph it started from", "keeps typing in the field for a plain character" |

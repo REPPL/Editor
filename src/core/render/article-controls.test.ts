@@ -176,6 +176,27 @@ describe("the toolbar the article's own script builds", () => {
   });
 });
 
+describe("the dismiss toggle (itd-2609051336128348, Fable F6)", () => {
+  it("starts expanded, and collapses the three groups and the reset behind it on a press", () => {
+    load().boot();
+    const toggle = document.querySelector<HTMLButtonElement>(".article-controls-toggle");
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    const body = document.querySelector<HTMLElement>(".article-controls-body");
+    expect(body?.hidden).toBe(false);
+
+    toggle?.click();
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    // `hidden` is what `article.css` hides on: a real dismissal, not a
+    // fixed overlay pretending to be gone.
+    expect(body?.hidden).toBe(true);
+
+    toggle?.click();
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(body?.hidden).toBe(false);
+  });
+});
+
 describe("choosing a control", () => {
   it("sets the theme's data attribute on the root element, and shows the choice as pressed", () => {
     load().boot();
@@ -360,14 +381,43 @@ function hexOf(section: string, property: string): string {
   return match[1];
 }
 
-describe("the dark and sepia themes meet a plain contrast floor (itd-2609061324342715)", () => {
-  it.each(["dark", "sepia"] as const)("body text contrasts at least 4.5:1 in the %s theme", (theme) => {
-    const marker = `[data-article-theme="${theme}"] {`;
-    const start = STYLESHEET.indexOf(marker);
-    expect(start, `article.css names no ${theme} theme`).toBeGreaterThan(-1);
-    const section = STYLESHEET.slice(start, STYLESHEET.indexOf("}", start));
-    const bg = hexOf(section, "--article-bg");
-    const fg = hexOf(section, "--article-fg");
-    expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5);
-  });
+/** One theme's own `:root[data-article-theme="…"] { … }` section. */
+function themeSection(theme: string): string {
+  const marker = `[data-article-theme="${theme}"] {`;
+  const start = STYLESHEET.indexOf(marker);
+  expect(start, `article.css names no ${theme} theme`).toBeGreaterThan(-1);
+  return STYLESHEET.slice(start, STYLESHEET.indexOf("}", start));
+}
+
+describe("every theme meets a plain contrast floor (itd-2609061324342715)", () => {
+  it.each(["light", "dark", "sepia"] as const)(
+    "body text contrasts at least 4.5:1 in the %s theme",
+    (theme) => {
+      const section = themeSection(theme);
+      const bg = hexOf(section, "--article-bg");
+      const fg = hexOf(section, "--article-fg");
+      expect(contrastRatio(bg, fg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark", "sepia"] as const)(
+    "pins its own colour-scheme, never the OS's (Fable F2)",
+    (theme) => {
+      const section = themeSection(theme);
+      expect(section).toMatch(/color-scheme:\s*(light|dark);/);
+    },
+  );
+
+  it.each(["pre", ".callout"] as const)(
+    "%s's own box background is derived from the theme's colours, never Canvas/CanvasText",
+    (selector) => {
+      const start = STYLESHEET.indexOf(`body.article ${selector} {`);
+      expect(start, `article.css names no ${selector} rule`).toBeGreaterThan(-1);
+      const section = STYLESHEET.slice(start, STYLESHEET.indexOf("}", start));
+      const background = /background:\s*([^;]+);/.exec(section)?.[1] ?? "";
+      expect(background).not.toMatch(/\bCanvas\b|\bCanvasText\b/);
+      expect(background).toContain("var(--article-fg)");
+      expect(background).toContain("var(--article-bg)");
+    },
+  );
 });
