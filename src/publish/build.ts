@@ -549,26 +549,26 @@ export function chromeBase(host: BuildHost, rendering: "article" | "slides"): st
  * earns neither there (Fable F7); left undefined for the deck's own
  * resolution, which credits a citation wherever a slide's own content
  * carries it, speaker notes included — the deck's `citationLinesFor`
- * (`core/deck.ts`) walks a slide's own notes on purpose.
+ * (`core/deck.ts`) walks a slide's own notes on purpose, and `render/
+ * slides.ts`'s own face and headline read the same resolution now
+ * (iss-2609070746140986), so the number on the face and the credit line at
+ * the foot always name the same key the same way.
  *
  * A document that names no bibliography at all is an ordinary document, not
- * an empty one (itd-2609051335502171's own Assumption). For the article,
- * that is `EMPTY_RESOLUTION`, not `undefined`: a citation in it is marked
- * unresolved the same way an unknown key is, rather than printed as the
- * literal brackets `html.ts`'s own phase-1 fallback shows for a caller with
- * no resolution at all — the deck's speaker notes, not a reader's article
- * (GLM F4). The deck's own inline rendering never reads this field either
- * way (`html.ts`'s citation case is absent from `slides.ts`'s own
- * `RenderContext`), so its "nothing to resolve" shape is left as `undefined`.
+ * an empty one (itd-2609051335502171's own Assumption), and this always
+ * returns `EMPTY_RESOLUTION` for it rather than `undefined`: a citation is
+ * marked unresolved the same way an unknown key is, never printed as the
+ * literal brackets `html.ts`'s own phase-1 fallback shows a caller with no
+ * resolution at all — which is `undefined`, the shape `render/slides.ts`
+ * itself still falls back to for a slide's speaker notes alone, never for a
+ * reader's own surface (the article, or a slide's headline and face).
  */
 function citationsFor(
   tree: DocumentSource,
   bibliography: string | null | undefined,
   rendering?: Rendering,
-): CitationResolution | undefined {
-  if (bibliography === null || bibliography === undefined) {
-    return rendering === "article" ? EMPTY_RESOLUTION : undefined;
-  }
+): CitationResolution {
+  if (bibliography === null || bibliography === undefined) return EMPTY_RESOLUTION;
   return resolveCitations(
     tree.chapters.map((input) => input.chapter),
     parseBibliography(bibliography),
@@ -672,6 +672,7 @@ export function renderVariant(
       plans[index] ?? { title: null, columns: [] },
       createAssetResolver(input.path, "slides"),
       variant,
+      deckCitations,
     ),
   );
 

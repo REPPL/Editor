@@ -201,7 +201,7 @@ none did, the composer appends the list once, after the last chapter, with
 no invented heading — the brief names no default heading text, so none is
 written.
 
-### The deck: a credit line, not a marker
+### The deck: a credit line, and — on the face — the same marker as the article
 
 `deck.ts`'s `citationLinesFor(slide, citations)` mirrors `footLinesFor`: it
 walks a slide's headline, face and notes for citation inlines, and for each
@@ -213,6 +213,38 @@ footnote line, so an author's own credit always leads. `render/slides.ts`
 renders the kind as `<p class="citation">…</p>`, inside the same
 `<footer class="slide-foot">` a `.credit` div already writes to — no new
 stylesheet rule was needed, `.reveal .slide-foot p` already covers it.
+
+**Amended by iss-2609070746140986** (the fidelity audit of this map, ac-4):
+the design above shipped with the deck's inline citation marker left out of
+`render/slides.ts`'s own `RenderContext` entirely, on the reasoning that "the
+deck names a cited work through a credit line … not through this inline
+marker" (the paragraph this note replaces). That reasoning covers the *foot*,
+but a Section's own prose is read on the face too, wherever a rule's
+continuation puts prose there rather than in the speaker's own notes — and
+the audit's probe showed a rule-opened slide's face printing `[@smith2020]`
+and `[@nosuchkey]` literally, the exact "no rendering quietly prints the
+brackets" the intent's own words forbid. The fix threads the deck's own
+resolution — the same one `citationLinesFor` already reads, so the foot's
+credit line and a resolved marker on the face always name the same key the
+same way — into `render/slides.ts`'s `renderSlides(plan, resolve, variant,
+citations)`, a fourth parameter `contextFor` now carries into the context
+the headline and the face render with. A resolved key renders the identical
+numbered marker `html.ts`'s `renderResolvedCitation` gives the article
+(linked to `#ref-N`, document-wide numbering); an unresolved key renders the
+marked bare key, never the literal brackets, matching a document naming no
+bibliography at all too — `publish/build.ts`'s own `citationsFor` now always
+returns `EMPTY_RESOLUTION` for the deck rather than `undefined` there, the
+same "ordinary document, not an error" shape the article already had (GLM
+F4's own fix, extended to the deck's face). The speaker's own notes are
+deliberately left out of this: `04-surfaces.md` section 5's "not a surface a
+reader reaches" is still true of them, so `render/slides.ts`'s `renderSlide`
+strips `citations` back to `undefined` for the notes alone, and a citation
+written only in the notes keeps the literal text it always had. `present.ts`
+(the app's own present window) resolves the chapter's citations the same way
+`preview.ts` does — reading the bibliography through `doctree.ts`'s
+`readBibliography`, with no rendering filter, `EMPTY_RESOLUTION` for a read
+that fails or a document naming none — so the deck at the lectern and the
+deck at the link agree.
 
 ### The editor: completion and hover, without a new dependency
 
@@ -302,10 +334,10 @@ deck's credit line still names a key the article's list also carries.
 |---|---|
 | A resolved `[@smith2020]` renders a numbered marker and the entry's full reference in the margin; the reference list holds exactly the chapter's cited entries | `src/core/render/html.test.ts` › "a resolved citation" (both cases); `src/core/render/article.test.ts` › "writes a resolved citation as a numbered marker, with the full reference in the margin"; `src/core/bibliography.test.ts` › `resolveCitations` describe block; `src/publish/build.test.ts` › "numbers the article's reference list in first-citation order, one entry per cited key" |
 | Typing `[@smi` offers every matching key; resting on a completed key shows its author, title and date in place | `src/citations.test.ts` › `citationTriggerAt`, `citationCandidates`, "the completion tooltip" (lists every matching key); `completedCitationAt`, `citationHoverSummary` (the hover content, called directly — a real pointer hover is manual check **M11-2**) |
-| `[@smith2020, p. 4]` carries its locator; `^[an inline note]` becomes a margin note; the entry appears once in the article's reference list; the deck carries a source credit line and no reference list; the credit line names a work the article's list also carries | `src/core/bibliography.test.ts` › `citationPartsOf` (`citationMarkerText` was deleted, review round one Fable F18: dead, called only by its own test, duplicating `html.ts`'s `renderResolvedCitation`); `src/core/render/article.test.ts` (existing inline-footnote tests, untouched); `src/core/deck.test.ts` › "a citation's credit line" describe block; `src/publish/build.test.ts` › "agrees: the article's reference list and the deck's credit lines name the same works, in the same order". The PDF half is out of scope (Out, above) |
-| `[@nosuchkey]` is marked unresolved in the preview and listed in the sidebar; no rendering prints the literal brackets — not for an unresolved key, and not for a document that names no bibliography at all (review round one, GLM F4) | `src/core/render/html.test.ts` › "an unresolved citation" describe block; `src/core/render/article.test.ts` › "marks a key that resolves to nothing, never as the literal brackets the author wrote"; `src/preview.test.ts` › "marks an unresolved key rather than printing its brackets", "marks a citation unresolved rather than printing its brackets when the document names no bibliography at all"; `src/publish/build.test.ts` › "marks a citation unresolved, generating nothing else, when the document names no bibliography"; `src/sidebar.test.ts` and `src/document.test.ts` › "the sidebar's citation facts" |
+| `[@smith2020, p. 4]` carries its locator; `^[an inline note]` becomes a margin note; the entry appears once in the article's reference list; the deck carries a source credit line and no reference list; the credit line names a work the article's list also carries; **amended by iss-2609070746140986**: a slide's own face carries the same numbered marker the article uses, wherever a Section's own prose reaches the face rather than the speaker's notes — the face and the foot read the one resolution `citationLinesFor` already reads, so they never disagree | `src/core/bibliography.test.ts` › `citationPartsOf` (`citationMarkerText` was deleted, review round one Fable F18: dead, called only by its own test, duplicating `html.ts`'s `renderResolvedCitation`); `src/core/render/article.test.ts` (existing inline-footnote tests, untouched); `src/core/deck.test.ts` › "a citation's credit line" describe block; `src/publish/build.test.ts` › "agrees: the article's reference list and the deck's credit lines name the same works, in the same order"; `src/core/render/slides.test.ts` › "renders a resolved citation on a slide's face as the numbered marker the article uses (iss-2609070746140986)"; `src/present.test.ts` › "renders a resolved citation on a slide's face as a numbered marker, given the same resolution the credit line reads (iss-2609070746140986)". The PDF half is out of scope (Out, above) |
+| `[@nosuchkey]` is marked unresolved in the preview and listed in the sidebar; no rendering prints the literal brackets — not for an unresolved key, and not for a document that names no bibliography at all (review round one, GLM F4); **amended by iss-2609070746140986**: not for a slide's own face either, resolved or not — the earlier build left `render/slides.ts`'s own `RenderContext` with no citations at all, so the face fell back to the literal brackets the same fallback the speaker's notes still correctly use | `src/core/render/html.test.ts` › "an unresolved citation" describe block; `src/core/render/article.test.ts` › "marks a key that resolves to nothing, never as the literal brackets the author wrote"; `src/preview.test.ts` › "marks an unresolved key rather than printing its brackets", "marks a citation unresolved rather than printing its brackets when the document names no bibliography at all"; `src/publish/build.test.ts` › "marks a citation unresolved, generating nothing else, when the document names no bibliography"; `src/sidebar.test.ts` and `src/document.test.ts` › "the sidebar's citation facts"; `src/core/render/slides.test.ts` › "marks an unresolved citation on a slide's face as the bare key, never as literal brackets (iss-2609070746140986)"; `src/present.test.ts` › "marks an unresolved citation on a slide's face as the bare key, never as literal brackets (iss-2609070746140986)" |
 | A citation written only inside a `.notes` div earns no article entry and no margin note, but the deck still credits it (review round one, Fable F7) | `src/core/bibliography.test.ts` › `resolveCitations` › "gives a .notes-only citation no article entry…", "still counts a .notes-only citation with no rendering filter…"; `src/preview.test.ts` › "gives a citation written only inside a .notes div no article entry"; `src/publish/build.test.ts` › "gives a .notes-only citation no article entry, but still credits it in the deck" |
-| A Section's citation gives its slide a foot credit line naming the work, no margin note, no reference list | `src/core/deck.test.ts` › "names the cited work at the foot of the Section's slide"; `src/core/render/slides.test.ts` › "names the cited work at the foot of the slide, with no reference list anywhere" |
+| A Section's citation gives its slide a foot credit line naming the work, no margin note, no reference list; the speaker's own notes still show a citation as the literal text the author wrote, never the resolved marker the face carries (iss-2609070746140986) | `src/core/deck.test.ts` › "names the cited work at the foot of the Section's slide"; `src/core/render/slides.test.ts` › "names the cited work at the foot of the slide, with no reference list anywhere", "keeps a citation on a slide's speaker notes as the literal text the author wrote, even when the deck resolves citations elsewhere (iss-2609070746140986)" |
 | No bibliography and no citation: every rendering is ordinary, nothing reported as an error | `src/core/bibliography.test.ts` › "resolves nothing and lists nothing for a chapter with no citations", "resolves nothing against an empty bibliography"; `src/publish/build.test.ts` › "renders a chapter with neither a citation nor a bibliography as an ordinary chapter"; `src/preview.test.ts` › "renders an ordinary document when it names no bibliography" |
 | Legible at 390/820/1280 CSS px | No new breakpoint; the reference list and the citation marker use `article.css`'s existing rules. Manual check **M11-1** |
 | Degrades in a plain Markdown tool | Untouched: the canon's own forms, proven before this intent (`src/core/markdown.ts`'s own tests). Manual check **M11-4** |

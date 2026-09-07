@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import { pathResolver } from "../assets";
-import { parseBibliography, resolveCitations } from "../bibliography";
+import { EMPTY_BIBLIOGRAPHY, parseBibliography, resolveCitations } from "../bibliography";
 import { buildDeck, type DeckOptions } from "../deck";
 import { parseChapter } from "../parse";
 import { isLinkable } from "./html";
@@ -20,9 +20,16 @@ import {
   renderSlides,
 } from "./slides";
 
-/** The fragment for one chapter. */
+/**
+ * The fragment for one chapter.
+ *
+ * `options.citations`, when given, is handed to `renderSlides` too — the
+ * same resolution `buildDeck` used for the foot's own credit line — so a
+ * test can assert on the headline and the face exactly as `publish/
+ * build.ts`'s own `renderVariant` now wires them (iss-2609070746140986).
+ */
 function markup(source: string, resolve = pathResolver(), options: DeckOptions = {}): string {
-  return renderSlides(buildDeck(parseChapter(source), options), resolve);
+  return renderSlides(buildDeck(parseChapter(source), options), resolve, null, options.citations);
 }
 
 describe("the fragment", () => {
@@ -207,6 +214,58 @@ describe("the fragment", () => {
     // itd-2609051336019782's own row: "none; the deck carries credit lines
     // only" — a numbered reference list is an article and PDF construct.
     expect(html).not.toMatch(/reference-list|class="refs"/);
+  });
+
+  it("renders a resolved citation on a slide's face as the numbered marker the article uses (iss-2609070746140986)", () => {
+    // A rule's continuation carries its prose on the face — the audience's
+    // own surface — rather than in the notes a heading-opened paragraph goes
+    // to, which is where the earlier bug's literal brackets reached a reader.
+    const source = ["## Beginnings", "", "---", "", "As shown [@carroll1999].", ""].join("\n");
+    const bibliography = parseBibliography(
+      "@book{carroll1999, author = {Carroll, Carol}, title = {Reading by Lamplight}, year = {1999}}",
+    );
+    const citations = resolveCitations([parseChapter(source)], bibliography);
+    const html = markup(source, undefined, { citations });
+    expect(html).toContain(
+      '<div class="face"><p>As shown <span class="citation">[<a href="#ref-1">1</a>]</span>.</p></div>',
+    );
+    expect(html).not.toContain("[@carroll1999]");
+    // The foot's own credit line is unchanged by the face carrying a marker.
+    expect(html).toContain('<footer class="slide-foot"><p class="citation">Carroll, 1999</p></footer>');
+  });
+
+  it("marks an unresolved citation on a slide's face as the bare key, never as literal brackets (iss-2609070746140986)", () => {
+    const source = ["## Beginnings", "", "---", "", "As shown [@nosuchkey].", ""].join("\n");
+    const citations = resolveCitations([parseChapter(source)], EMPTY_BIBLIOGRAPHY);
+    const html = markup(source, undefined, { citations });
+    expect(html).not.toContain("[@nosuchkey]");
+    expect(html).toContain(
+      '<div class="face"><p>As shown <span class="citation-key unresolved">nosuchkey</span>.</p></div>',
+    );
+  });
+
+  it("keeps a citation on a slide's speaker notes as the literal text the author wrote, even when the deck resolves citations elsewhere (iss-2609070746140986)", () => {
+    // The same slide carries a citation on its face (resolved, from the
+    // rule's continuation) and one in its notes (the heading-opened prose):
+    // the foot's own credit line and the face's marker read the resolution,
+    // the notes still show exactly what the author typed.
+    const source = [
+      "## Beginnings",
+      "",
+      "As noted privately [@carroll1999].",
+      "",
+      "---",
+      "",
+      "As shown [@carroll1999].",
+      "",
+    ].join("\n");
+    const bibliography = parseBibliography(
+      "@book{carroll1999, author = {Carroll, Carol}, title = {Reading by Lamplight}, year = {1999}}",
+    );
+    const citations = resolveCitations([parseChapter(source)], bibliography);
+    const html = markup(source, undefined, { citations });
+    expect(html).toContain('<span class="citation">[@carroll1999]</span>');
+    expect(html).toContain('<span class="citation">[<a href="#ref-1">1</a>]</span>');
   });
 
   it("escapes the author's text rather than trusting it", () => {

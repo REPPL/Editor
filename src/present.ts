@@ -25,10 +25,16 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { dataResolver, referencesOf, type Resolver } from "./core/assets";
+import {
+  EMPTY_RESOLUTION,
+  parseBibliography,
+  resolveCitations,
+  type CitationResolution,
+} from "./core/bibliography";
 import { buildDeck } from "./core/deck";
 import { parseChapter } from "./core/parse";
 import { DECK_CONFIG, renderSlides } from "./core/render/slides";
-import { inShell, pendingDeck, readAsset, type DeckSource } from "./doctree";
+import { inShell, pendingDeck, readAsset, readBibliography, type DeckSource } from "./doctree";
 import Reveal, { type RevealEngine } from "./vendor/reveal/reveal.esm.js";
 
 export type { RevealEngine };
@@ -357,13 +363,25 @@ export function createNotesView(host: HTMLElement): NotesView {
  * Pure: text in, markup out. It reads no file, writes none, and holds nothing
  * between calls, so presenting the same chapter twice gives the same deck and
  * presenting new text gives the new talk.
+ *
+ * `citations`, when given, is handed to both `buildDeck` (the foot's own
+ * credit line) and `renderSlides` (the headline and the face's own numbered
+ * marker) — the one resolution `publish/build.ts`'s own `deckCitations`
+ * feeds both of, so the deck at the lectern agrees with the deck at the link
+ * about what a citation on the face says (iss-2609070746140986).
  */
 export function deckFragment(
   text: string,
   resolve: Resolver,
   variant: string | null = null,
+  citations: CitationResolution | undefined = undefined,
 ): string {
-  return renderSlides(buildDeck(parseChapter(text), { variant }), resolve, variant);
+  return renderSlides(
+    buildDeck(parseChapter(text), { variant, citations }),
+    resolve,
+    variant,
+    citations,
+  );
 }
 
 /**
@@ -388,6 +406,30 @@ export async function readAssets(
     }
   }
   return found;
+}
+
+/**
+ * The chapter's citations, resolved against the document's own bibliography.
+ *
+ * Reads the bibliography the same way `main.ts`'s own `loadForPreview` does
+ * (`doctree.ts`'s `readBibliography`), and resolves it with no rendering
+ * filter — the deck's own resolution, matching `publish/build.ts`'s
+ * `deckCitations`, since the credit line at the foot and a resolved marker
+ * on the face must agree about the same key (iss-2609070746140986). A
+ * document naming no bibliography, or a read that fails, is `EMPTY_RESOLUTION`
+ * rather than an error: presenting a chapter never stops over a citation, the
+ * same "ordinary document" rule every other rendering follows.
+ */
+async function citationsFor(text: string): Promise<CitationResolution> {
+  let bibliography: string | null;
+  try {
+    bibliography = await readBibliography();
+  } catch (error) {
+    console.warn(`bibliography: ${String(error)}`);
+    return EMPTY_RESOLUTION;
+  }
+  if (bibliography === null) return EMPTY_RESOLUTION;
+  return resolveCitations([parseChapter(text)], parseBibliography(bibliography));
 }
 
 /**
@@ -468,13 +510,14 @@ export function mountDeck(
 /** Build and show the deck the shell is holding. */
 export async function show(source: DeckSource, started: boolean): Promise<boolean> {
   const assets = await readAssets(source.text, source.chapterPath);
+  const citations = await citationsFor(source.text);
   document.title = source.chapterTitle;
   // The document's default variant, which is the one a publish builds: the
   // deck at the lectern is the deck at the link, blocks and all.
   const variant = source.variant === "" ? null : source.variant;
   return mountDeck(
     document,
-    deckFragment(source.text, dataResolver(assets), variant),
+    deckFragment(source.text, dataResolver(assets), variant, citations),
     started,
   );
 }

@@ -26,12 +26,15 @@ export interface RenderContext {
   /**
    * The document's citations, resolved once by `bibliography.ts`.
    *
-   * Present for the article, where a citation renders as a numbered marker;
-   * absent for the deck, whose speaker notes are not a surface a reader
-   * reaches (`04-surfaces.md` section 5) and which names a cited work through
-   * a credit line of its own (`deck.ts`), not through this inline marker.
-   * Absent is also the phase-1 fallback: the literal text the author wrote,
-   * which is what a plain tool shows too.
+   * Present for the article and for a slide's own headline and face, where a
+   * citation renders as a numbered marker; absent for a slide's speaker
+   * notes, which are not a surface a reader reaches (`04-surfaces.md` section
+   * 5) and which are credited through the foot's own credit line
+   * (`deck.ts`), not through this inline marker (iss-2609070746140986: the
+   * face used to fall back to the literal brackets an author wrote, the same
+   * fallback still correct for the notes alone). Absent is also the phase-1
+   * fallback: the literal text the author wrote, which is what a plain tool
+   * shows too.
    */
   readonly citations?: CitationResolution | undefined;
   /**

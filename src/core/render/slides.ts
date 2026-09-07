@@ -15,6 +15,7 @@
  */
 
 import { pathResolver, type Resolver } from "../assets";
+import type { CitationResolution } from "../bibliography";
 import { placementOf } from "../canon";
 import type { DeckPlan, FootLine, Slide } from "../deck";
 import type { Block } from "../tree";
@@ -97,9 +98,18 @@ function headlineTag(slide: Slide): string {
   return `h${String(Math.min(Math.max(slide.level, 1), 6))}`;
 }
 
-/** The context every slide is rendered in. */
-function contextFor(resolve: Resolver, variant: string | null): RenderContext {
-  return { resolve, rendering: "slides", variant };
+/**
+ * The context a slide's headline and face are rendered in — the audience's
+ * own surface, where a resolved citation carries the same numbered marker
+ * the article uses and an unresolved key stands as the marked bare key,
+ * never as the literal brackets an author wrote (iss-2609070746140986).
+ */
+function contextFor(
+  resolve: Resolver,
+  variant: string | null,
+  citations: CitationResolution | undefined,
+): RenderContext {
+  return { resolve, rendering: "slides", variant, citations };
 }
 
 /**
@@ -215,12 +225,18 @@ function renderSlide(slide: Slide, context: RenderContext): string {
   const face =
     slide.face.length === 0 ? "" : `<div class="face">${renderFlow(slide.face, context)}</div>`;
   const foot = renderFoot(slide.foot, context);
+  // Speaker notes are not a surface a reader reaches (`04-surfaces.md`
+  // section 5) and the deck names a cited work through the foot's own credit
+  // line, not through this inline marker — so a citation there keeps the
+  // literal text the author wrote, exactly as it did before `context` itself
+  // carried a resolution for the headline and the face (iss-2609070746140986).
+  const notesContext: RenderContext = { ...context, citations: undefined };
   const notes =
     slide.notes.length === 0
       ? ""
       : `<aside class="notes"${attributes([["data-source", slide.notesSource]])}>${renderFlow(
           slide.notes,
-          context,
+          notesContext,
         )}</aside>`;
   // The divider's class reaches the section element and never the rendered
   // text: the attribute was consumed by the parse.
@@ -237,13 +253,21 @@ function renderSlide(slide: Slide, context: RenderContext): string {
  * A column of one slide is one `<section>`; a column of several is a
  * `<section>` holding them, which is how moving down reaches a Sub-section and
  * moving right reaches the next Section.
+ *
+ * `citations`, when given, is the same resolution the deck's own credit
+ * lines were built from (`deck.ts`'s `DeckOptions.citations`) — a slide's
+ * face reads the one resolution the foot already names, so the two never
+ * disagree about a key's number (iss-2609070746140986). Left undefined, a
+ * citation on the face keeps the phase-1 literal text, exactly as before a
+ * caller threaded one through.
  */
 export function renderSlides(
   plan: DeckPlan,
   resolve: Resolver = pathResolver(),
   variant: string | null = null,
+  citations: CitationResolution | undefined = undefined,
 ): string {
-  const context = contextFor(resolve, variant);
+  const context = contextFor(resolve, variant, citations);
   return plan.columns
     .map((column) => {
       const only = column.slides[0];

@@ -16,6 +16,8 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { pathResolver } from "./core/assets";
+import { EMPTY_BIBLIOGRAPHY, parseBibliography, resolveCitations } from "./core/bibliography";
+import { parseChapter } from "./core/parse";
 import { DECK_CONFIG, DECK_STYLESHEET } from "./core/render/slides";
 import {
   createNotesView,
@@ -134,6 +136,35 @@ describe("presenting a chapter", () => {
     expect(second).toContain("And another paragraph.");
     // Nothing accumulated: the same text builds the same deck.
     expect(deckFragment("# One\n\n## Beginnings\n\nA.\n", pathResolver())).toBe(first);
+  });
+
+  it("renders a resolved citation on a slide's face as a numbered marker, given the same resolution the credit line reads (iss-2609070746140986)", () => {
+    // A rule's continuation puts its prose on the face — the surface the
+    // audience reads — rather than in the speaker's own notes.
+    const source = ["## Beginnings", "", "---", "", "As shown [@carroll1999].", ""].join("\n");
+    const citations = resolveCitations(
+      [parseChapter(source)],
+      parseBibliography(
+        "@book{carroll1999, author = {Carroll, Carol}, title = {Reading by Lamplight}, year = {1999}}",
+      ),
+    );
+    const fragment = deckFragment(source, pathResolver(), null, citations);
+    expect(fragment).not.toContain("[@carroll1999]");
+    expect(fragment).toContain('<span class="citation">[<a href="#ref-1">1</a>]</span>');
+    expect(fragment).toContain('<footer class="slide-foot"><p class="citation">Carroll, 1999</p></footer>');
+  });
+
+  it("marks an unresolved citation on a slide's face as the bare key, never as literal brackets (iss-2609070746140986)", () => {
+    const source = ["## Beginnings", "", "---", "", "As shown [@nosuchkey].", ""].join("\n");
+    const citations = resolveCitations([parseChapter(source)], EMPTY_BIBLIOGRAPHY);
+    const fragment = deckFragment(source, pathResolver(), null, citations);
+    expect(fragment).not.toContain("[@nosuchkey]");
+    expect(fragment).toContain('<span class="citation-key unresolved">nosuchkey</span>');
+  });
+
+  it("keeps a citation literal in the deck when the present window is given no resolution", () => {
+    const fragment = deckFragment("## Beginnings\n\nAs shown [@carroll1999].\n", pathResolver());
+    expect(fragment).toContain('<span class="citation">[@carroll1999]</span>');
   });
 });
 
