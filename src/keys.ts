@@ -1145,9 +1145,12 @@ export const BINDINGS: readonly Binding[] = [
     owner: "editor",
   },
 
-  // The sidebar's own rows. Every chord here is carried by an editor row as
-  // well; which one answers is decided by the pane that holds the keyboard,
-  // never by the chord. See `scopeOf`.
+  // The sidebar's own rows. Every chord here but one is carried by an
+  // editor row as well; which one answers is decided by the pane that holds
+  // the keyboard, never by the chord. See `scopeOf`. The exception is
+  // `sidebar-hide`'s bare `h`: an unmodified letter is the editing
+  // surface's own text and carries no row there, so it answers only inside
+  // the sidebar's scope (itd-2609071216221686, map #36).
   {
     id: "sidebar-next-node",
     label: "Next node",
@@ -1180,6 +1183,18 @@ export const BINDINGS: readonly Binding[] = [
     id: "sidebar-open-node",
     label: "Open the chapter here",
     chords: ["Return"],
+    group: "panes",
+    owner: "sidebar",
+  },
+  {
+    // `h` hides the sidebar and hands the keyboard back to the editor,
+    // unconditionally: unlike `sidebar-quit`, it closes the drawer even
+    // when it was already open before the keyboard arrived. `C-x o` is the
+    // route back in; it already opens a hidden sidebar on its way into it
+    // (itd-2609071216221686, map #36, which refines map #30's vocabulary).
+    id: "sidebar-hide",
+    label: "Hide the sidebar",
+    chords: ["h"],
     group: "panes",
     owner: "sidebar",
   },

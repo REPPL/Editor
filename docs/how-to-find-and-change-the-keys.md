@@ -38,7 +38,10 @@ Two kinds of row are left out. A chord the window's menu answers, marked `menu`
 in the keys panel, has no command behind it in the page, so offering it would
 be a dead end. A chord the sidebar answers is the tree's: `M-x` is open over
 the text, and a row that moves a cursor in a pane you are not in belongs to
-that pane. Reach those by giving the tree the keyboard with `C-x o`.
+that pane. Reach those by giving the tree the keyboard with `C-x o`. Once
+there, `h` hides the sidebar again and hands the keyboard straight back to
+the text; `C-x o` reaches a hidden sidebar the same way it reaches a shown
+one, opening it as it moves the keyboard in.
 
 ## Ask what one chord does
 

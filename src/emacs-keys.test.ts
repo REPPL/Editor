@@ -406,9 +406,9 @@ describe("the binding table", () => {
   });
 
   it("gives the sidebar's rows their own scope, and answers none of them here", () => {
-    // The six rows the tree answers. They are the table's, so the keys panel
-    // lists them; they are not the editing surface's, so the Emacs handler
-    // must not bind a single one of them.
+    // The seven rows the tree answers. They are the table's, so the keys
+    // panel lists them; they are not the editing surface's, so the Emacs
+    // handler must not bind a single one of them.
     const sidebar = BINDINGS.filter((binding) => scopeOf(binding) === "sidebar");
     expect(sidebar.map((binding) => binding.id)).toEqual([
       "sidebar-next-node",
@@ -416,6 +416,7 @@ describe("the binding table", () => {
       "sidebar-expand-node",
       "sidebar-collapse-node",
       "sidebar-open-node",
+      "sidebar-hide",
       "sidebar-quit",
     ]);
     for (const binding of sidebar) {

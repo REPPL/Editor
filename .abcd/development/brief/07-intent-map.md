@@ -52,6 +52,7 @@ Three kinds:
 | 33 | Make the text bigger or smaller from the keyboard | standalone | — | 1 |
 | 34 | Move through and reshape the book by heading | standalone | — | 1 |
 | 35 | Open whatever is in front of me | standalone | — | 1 |
+| 36 | Hide the sidebar from the sidebar | standalone | — | 1 |
 
 ## The intents
 
@@ -244,6 +245,25 @@ nonce-and-claim mechanism a chosen destination travels under.
 Order: phase 1, with 1 and 29, which give it something to open and a
 shape to imitate for a bare file. Amended into the map after the
 maintainer asked for one chord that opens a file or a folder.
+
+**36. Hide the sidebar from the sidebar** — standalone.
+Surfaces: the sidebar (one more row in its own scope, `h`, that hides the
+drawer and hands the keyboard back to the editor).
+Overlaps: intent 30, which built the pane cycle, the tree's own movement,
+expand, collapse, open and cancel vocabulary, and the rule that focus is
+single and exclusive — the boundary is that 30 owns all of that
+unchanged, and 36 adds one row inside the scope 30 already gave the
+sidebar, reusing `C-x o`'s own existing route into a hidden sidebar
+rather than widening it; and map #1's toggle, `C-x C-b`, which keeps
+showing and hiding the sidebar from the editing surface regardless of
+which pane holds the keyboard — 36 leaves it untouched and gives the
+sidebar a second, its own, route to the same state.
+Plumbing excluded: none beyond what 30 already built.
+Order: phase 1, with 30, which it refines. Filed from the maintainer's
+words "when in the sidebar, s for show sidebar (if hidden) and h for
+hide sidebar (if shown)"; the planning interview settled the route to a
+hidden sidebar as `C-x o` rather than a bare `s`, which is not bound
+(`../research/notes/2026-09-06-decomposition-calibration.md`).
 
 ### Bundle: The deck (phase 1)
 

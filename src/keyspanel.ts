@@ -25,7 +25,7 @@ import { openOverlay, type Overlay } from "./overlay";
 const OWNER_NOTES: Readonly<Record<string, string>> = {
   shell: "menu",
   codemirror: "editor",
-  // Which pane answers the row, for the six that answer in one pane only.
+  // Which pane answers the row, for the seven that answer in one pane only.
   sidebar: "sidebar",
 };
 

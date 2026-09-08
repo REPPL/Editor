@@ -747,6 +747,7 @@ describe("one pane at a time", () => {
       for (const binding of BINDINGS) {
         if (scopeOf(binding) !== "sidebar") continue;
         if (binding.id === "sidebar-open-node") continue;
+        if (binding.id === "sidebar-hide") continue;
         if (binding.id === "sidebar-quit") continue;
         for (const chord of binding.chords) press(app, chord);
       }
@@ -766,7 +767,7 @@ describe("one pane at a time", () => {
     const sidebarRows = BINDINGS.filter(
       (binding) => scopeOf(binding) === "sidebar",
     );
-    expect(sidebarRows.length).toBe(6);
+    expect(sidebarRows.length).toBe(7);
 
     for (const binding of sidebarRows) {
       expect(binding.chords.length).toBeGreaterThan(0);
@@ -798,6 +799,7 @@ describe("one pane at a time", () => {
       "C-f",
       "C-b",
       "Return",
+      "h",
       "C-g",
       "Escape",
       "Down",
@@ -830,6 +832,15 @@ describe("one pane at a time", () => {
       '.keys-row[data-binding="sidebar-next-node"]',
     );
     expect(row?.textContent).toContain("sidebar");
+
+    // The hide row itself: listed under the sidebar's own group, with its
+    // label and its chord (itd-2609071216221686, map #36).
+    const hideRow = overlay.element.querySelector<HTMLElement>(
+      '.keys-row[data-binding="sidebar-hide"]',
+    );
+    expect(hideRow?.textContent).toContain("Hide the sidebar");
+    expect(hideRow?.textContent).toContain("h");
+    expect(hideRow?.textContent).toContain("sidebar");
     overlay.close();
   });
 });
@@ -1074,6 +1085,73 @@ describe("the drawer", () => {
     press(app, "C-g");
     // At 1280 the column does not move: `takeFocus` opened nothing, so
     // `releaseFocus` closes nothing.
+    expect(app.sidebar.open).toBe(true);
+  });
+
+  // itd-2609071216221686, map #36: `h` hides the sidebar and hands the
+  // keyboard back, and `C-x o` reaches a hidden sidebar the same way it
+  // reaches a shown one.
+
+  it("hides the drawer with h and hands the keyboard back to the text", async () => {
+    await mount();
+    app.sidebar.setOpen(false);
+    const before = documentText(app.view);
+    const line = cursorPosition(app.view).line;
+
+    press(app, "C-x o");
+    expect(app.sidebar.open).toBe(true);
+    expect(app.focus.pane).toBe("sidebar");
+
+    expect(press(app, "h")).toBe(true);
+    expect(app.sidebar.open).toBe(false);
+    expect(app.sidebar.element.dataset["open"]).toBe("no");
+    expect(app.focus.pane).toBe("editor");
+    // Nothing opened, nothing typed, and the cursor is where she left it.
+    expect(app.chapterPath).toBe(ALICE_PATH);
+    expect(documentText(app.view)).toBe(before);
+    expect(cursorPosition(app.view).line).toBe(line);
+  });
+
+  it("hides the sidebar with h even when it was already open before focus arrived", async () => {
+    await mount();
+    expect(app.sidebar.open).toBe(true);
+
+    press(app, "C-x o");
+    expect(app.sidebar.open).toBe(true);
+    press(app, "h");
+
+    // Unlike `sidebar-quit` (see "leaves a sidebar that was already open
+    // exactly as it was", above), `h` always hides, whether or not
+    // `takeFocus` is the one that opened it.
+    expect(app.sidebar.open).toBe(false);
+    expect(app.focus.pane).toBe("editor");
+  });
+
+  it("shows a hidden sidebar again on C-x o, and moves the keyboard into it", async () => {
+    await mount();
+    press(app, "C-x o");
+    press(app, "h");
+    expect(app.sidebar.open).toBe(false);
+    expect(app.focus.pane).toBe("editor");
+
+    press(app, "C-x o");
+    expect(app.sidebar.open).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
+    expect(app.focus.pane).toBe("sidebar");
+    expect(app.sidebar.focused).toBe(true);
+  });
+
+  it("leaves h to the text, unclaimed, while the cursor is in the editor", async () => {
+    await mount();
+    expect(app.focus.pane).toBe("editor");
+    // Not a claim about what the browser does with it: a claim that no
+    // binding intercepts it, so it falls through to the text exactly as
+    // every other letter does. jsdom runs no default action for a keydown,
+    // which is why insertion itself is out of reach here — see the file
+    // header — and why the sidebar's own answer, above, asserts `true`
+    // while this one asserts `false`.
+    expect(press(app, "h")).toBe(false);
+    expect(app.focus.pane).toBe("editor");
     expect(app.sidebar.open).toBe(true);
   });
 });

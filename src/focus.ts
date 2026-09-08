@@ -489,6 +489,14 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
         // which the application does through the same hook a click calls.
         sidebar.activateCursor();
         return;
+      case "sidebar-hide":
+        // Unlike `sidebar-quit`, this closes the drawer even when it was
+        // already open before the keyboard arrived — `h` is a hide, not
+        // only a leave, so `releaseFocus`'s own "close only what I opened"
+        // rule (itd-2609051921482691) is not enough here on its own.
+        sidebar.setOpen(false);
+        toEditor();
+        return;
       case "sidebar-quit":
         toEditor();
         return;
