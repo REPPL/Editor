@@ -13,7 +13,7 @@ resolution: "the build and export-panel test fixtures now carry invented titles"
 impact: internal
 ---
 
-src/publish/build.test.ts's presentation() fixture is named, titled ("Macromarketing 2026") and headed after the real examples/presentation folder, which the new no-examples-reference rule and AGENTS.md's privacy rule both forbid
+src/publish/build.test.ts's presentation() fixture is named, titled and headed after the real examples/an example folder folder, which the new no-examples-reference rule and AGENTS.md's privacy rule both forbid
 
 ## Grounds
 
