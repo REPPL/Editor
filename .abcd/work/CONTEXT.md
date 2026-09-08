@@ -11,14 +11,14 @@ public on GitHub under the maintainer's account and licensed MIT.
 
 ## Current phase
 
-Phases one and two have shipped: twenty intents under
+Phases one and two have shipped: twenty-one intents under
 `../development/intents/shipped/`, each with its closed spec and an ingested
 fidelity audit. Phase one is the deck and the editing surface; phase two is
 the article — the Tufte page with a preview window in the app, reader
 controls, citations from a bibliography file, hidden content, keyboard
 movement on the page — plus three the maintainer asked for while using the
 app: a new document from nothing, the outline vocabulary, and one chord that
-opens a file or a folder. Releases 0.1.0 to 0.3.0 are cut in `CHANGELOG.md`
+opens a file or a folder. Releases 0.1.0 to 0.3.1 are cut in `CHANGELOG.md`
 and tagged locally; nothing is pushed. The app builds as a release bundle.
 The maintainer's example documents are local test material under the
 gitignored `examples/` folder, and nothing committed names one; a harness

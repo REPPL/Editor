@@ -3,6 +3,22 @@
 Every release is a dated heading below; the newest is first. Each line
 cites the record it reports.
 
+## 0.3.1 — 2026-09-08
+
+A patch cut from the maintainer's first sitting at the 0.3.0 app. It ships one intent, filed and planned in that sitting, and nothing else. Each line cites the record it reports.
+
+### Added
+
+- **Hide the sidebar from the sidebar.** While the sidebar holds the keyboard, `h` folds it away and puts the cursor back in the text; moving to the other pane with `C-x o` already reaches a hidden sidebar and shows it on the way in, so the round trip needs no second chord, and a bare `s` stays text in the editor. The row sits with the sidebar's own rows in the keys panel. (itd-2609071216221686, spc-2609081444287807)
+
+### Decisions taken
+
+No new architecture decision record; two dated lines appended to the decision log, `.abcd/work/DECISIONS.md`, on 2026-09-08: the settled routing (`h` hides, `C-x o` shows, `s` declined) from the maintainer's planning answer, and the build's choice to hide unconditionally rather than reuse the cancel row's narrower open-what-I-opened rule.
+
+### Not yet verified
+
+The automated suites pass — 1027 frontend tests and 237 shell tests, every gate clean — and the intent's fidelity audit is ingested; the three manual rows under `.abcd/.work.local/logs/acceptance/spc-2609081444287807.md` (three widths, the key log in both panes, the keys panel) are unticked.
+
 ## 0.3.0 — 2026-09-07
 
 Phase two, the article. This cut ships eight intents: the five that make a document readable as a Tufte page — the page itself with a preview window in the app, the reader's controls over it, citations from a bibliography file, the hidden things a curious reader finds, and moving through the page by keyboard — plus three the maintainer asked for while using the 0.2.1 app: starting a document from nothing, the outline vocabulary of Emacs's Markdown and Org modes, and one chord that opens a file or a folder. It answers the maintainer's four reports from the first 0.3.0 build, resolves the slide-mapping and release-harness questions 0.2.1 left open, takes the maintainer's example documents out of the repository, and lands the fixes from a three-reviewer pass over the whole phase. Every line below cites the record it reports; each intent names its closed spec.
