@@ -1,6 +1,6 @@
 ---
-id: itd-2609061653559060
-slug: show-markdown-tables-nicely-formatted-in-the-editing-surface
+id: itd-2609081931493520
+slug: build-multiple-windows-in-editor-the-same-as-emacs-split-the
 spec_id: null
 kind: null
 suggested_kind: null
@@ -12,7 +12,7 @@ origin: researcher-authored
 production_mode: dictated-and-formatted
 ---
 
-# Show Markdown tables nicely formatted in the editing surface: always aligned, with cell text that wraps over line breaks, if possible
+# Build multiple windows in Editor, the same as Emacs: split the editing area, move between the splits, and close one or all of the others
 
 ## Press Release
 
@@ -20,7 +20,7 @@ production_mode: dictated-and-formatted
 
 ## Why This Matters
 
-Show Markdown tables nicely formatted in the editing surface: always aligned, with cell text that wraps over line breaks, if possible
+Build multiple windows in Editor, the same as Emacs: split the editing area, move between the splits, and close one or all of the others
 
 ## Mechanism
 

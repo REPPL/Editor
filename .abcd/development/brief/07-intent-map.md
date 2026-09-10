@@ -53,6 +53,11 @@ Three kinds:
 | 34 | Move through and reshape the book by heading | standalone | — | 1 |
 | 35 | Open whatever is in front of me | standalone | — | 1 |
 | 36 | Hide the sidebar from the sidebar | standalone | — | 1 |
+| 37 | Show and hide the sidebar from wherever the keyboard is | standalone | — | 1 |
+| 38 | `C-x o` moves the keyboard and never changes what is shown | standalone | — | 1 |
+| 39 | Keep Markdown tables aligned while I type them | standalone | — | 1 |
+| 40 | Show progress through the chapter as a cat on a rainbow trail | standalone | — | 1 |
+| 41 | See what a prefix can do, without leaving the prefix | standalone | — | 1 |
 
 ## The intents
 
@@ -263,7 +268,115 @@ Order: phase 1, with 30, which it refines. Filed from the maintainer's
 words "when in the sidebar, s for show sidebar (if hidden) and h for
 hide sidebar (if shown)"; the planning interview settled the route to a
 hidden sidebar as `C-x o` rather than a bare `s`, which is not bound
-(`../research/notes/2026-09-06-decomposition-calibration.md`).
+(`../research/notes/2026-09-06-decomposition-calibration.md`). Amended by
+37 and 38: `h` is unchanged, but the route back to a hidden sidebar is
+`F2` now rather than `C-x o`, and `C-x C-b` is a chord on 37's own row
+rather than a toggle only the editing surface can hear.
+
+**37. Show and hide the sidebar from wherever the keyboard is** —
+standalone.
+Surfaces: the binding table (`F2` in front of `C-x C-b` on the
+`toggle-sidebar` row) and the pane reader in `src/focus.ts` (a second row
+every pane answers, beside the pane cycle's own).
+Overlaps: intent 36, whose `h` hides the tree from inside it — the
+boundary is that 36 owns the sidebar's own row and 37 owns the chord that
+works from every pane, and both reach the same two calls; map #1's toggle
+— 37 keeps `C-x C-b` on the row and frees it from being answered in the
+editing surface alone, which is the amendment 36's fourth criterion
+carries; and intent 38, which owns where the keyboard goes and never what
+is shown.
+Plumbing excluded: none. The row, the command and the second reader all
+exist; this adds a chord, an id and a hook.
+Order: phase 1, with 30, 36 and 38. Filed from the maintainer's settled
+sidebar rule, and from the 0.3.1 defect in which the tree became
+unreachable (`iss-2609081707572166`); the evidence for `F2` over `C-c C-s`
+is `../research/notes/2026-09-08-emacs-default-divergences.md`.
+
+**38. `C-x o` moves the keyboard and never changes what is shown** —
+standalone.
+Surfaces: the pane cycle (a hidden tree is not a pane, and a walk that
+finds nowhere to go says so in the modeline).
+Overlaps: intent 30, which built the cycle — the boundary is that 30 owns
+the walk and 38 states which places are on it; intent 36, whose third
+criterion said `C-x o` shows a hidden sidebar — 38 retires that, and the
+amendment is recorded against 36 rather than left to be inferred; and
+intent 37, which owns what shows and hides the tree.
+Plumbing excluded: none. One clause in the availability question and one
+sentence in the modeline.
+Order: phase 1, with 30, 36 and 37. Filed from the maintainer's settled
+rule and from `iss-2609081707572166`, the critical defect in which the
+chord was mute before a document was loaded.
+
+**39. Keep Markdown tables aligned while I type them** — standalone.
+Surfaces: the editing surface (one `EditorState.transactionFilter`, which
+appends the realignment of the one table the caret is in to the author's own
+transaction), pipe-table source geometry as a module of its own, and the
+binding table (`C-c C-t` in the editing group).
+Overlaps: map #1's canon, which owns what a table *is* and how it renders —
+the boundary is that the canon owns the construct and 39 owns the whitespace
+between its pipes, and 39 asks `core/parse.ts` whether a thing is a table
+rather than deciding for itself; map #32's `M-q`, which remains the only
+thing that reflows prose — no other construct is reformatted by 39 at all;
+and the round-trip byte-fidelity discipline, which
+`adr-2609092000099546` narrows from a flat prohibition to three conditions an
+author's own edit must meet, and against which 39 is the first feature
+measured.
+Plumbing excluded: the alignment of a table nested in a fenced div or a
+blockquote, an on-demand realign chord, a view-only alignment decoration, a
+persisted preference, any repair of a malformed table, and a character-width
+table. Cell text wrapping *within* its column is recorded as dropped, with
+its reason, rather than left unmet.
+Order: phase 1. Filed from the maintainer's own words about a table going out
+of true as it is written; the byte-fidelity question it raised is settled by
+`adr-2609092000099546`, and both clauses of this brief are corrected to say
+so — `05-internals.md` § 2 and § Disciplines below.
+
+**40. Show progress through the chapter as a cat on a rainbow trail** —
+standalone.
+Surfaces: the modeline (one more cell, between the line-and-column cell and
+the prefix cell), and the one function the modeline already reaches into the
+editing state through.
+Overlaps: intent 2, which owns the modeline's shape and the rule that every
+cell naming an action names its chord — the boundary is that 40 adds the one
+cell that stands for no action, so it is the one cell with no tooltip and no
+row in the binding table; and map #37's own footer work, whose message budget
+this cell must not spend — 40 takes its width from the chapter title, the cell
+that yields, and never from the message.
+Plumbing excluded: any animation, timer or transition at all; the scroll
+position as the measure; progress across the whole document; the cat anywhere
+but the footer; a number drawn on the screen; and anything persisted.
+The "legible on three device classes" discipline is recorded as **dropped**
+for this element rather than restated as met: the cell is present at 1280 CSS
+pixels and above and absent below, drawing and accessible label together, and
+nothing stands in for it at 820 or 390.
+Order: phase 1, with 36, 37, 38, 39 and 41. Filed from the maintainer's own
+words about the cat in their Emacs modeline; the width question it raised is
+settled at 1280 (cond-2609100513433908) and the message budget it pressed on
+is recorded separately as `iss-2609100445317801`.
+
+**41. See what a prefix can do, without leaving the prefix** — standalone.
+Surfaces: the editing surface and both key readers (the help character on a
+prefix already in progress), a filtered view over the binding table, and the
+`keys-panel` row (`F1` beside `C-h b` and `C-x ?`).
+Overlaps: intent 2, which owns the binding table's shape, the keys panel and
+the one cancel contract — the boundary is that 2 owns the panel that lists
+the whole table grouped, and 41 adds a prefix-scoped view beside it, reusing
+that panel's own renderer and that cancel contract rather than defining
+either; intent 30, which built the second key reader for the panes the text
+cannot hear — 41 adds one branch to it and touches neither the pane cycle nor
+the rows each pane answers; intent 37, which owns `F2` and the rows every
+pane answers — the boundary is that `F1` is one more chord on a row the
+editing surface alone answers, so nothing about that reach changes; and map
+#32, whose `C-h k` names what a chord reaches — `C-h` becoming a row changes
+that command's answer for `C-h` itself, which is recorded as an amendment
+against 32 rather than left to be discovered.
+Plumbing excluded: which reader keeps which prefix, and the notation the
+vendored key reader spells a chain in.
+Order: phase 1, with 30, 36, 37 and 38. Filed from the maintainer's settled
+vocabulary question (`iss-2609081929528202`), of whose four additions this is
+the one that is a build rather than a chord choice; the which-key idle popup
+is deliberately out of scope and is filed separately if it is wanted after
+living with this.
 
 ### Bundle: The deck (phase 1)
 
@@ -549,7 +662,7 @@ and no spec is the owner of one: the discipline is.
 
 | Discipline | Forbids | Binds from |
 |---|---|---|
-| **Round-trip byte-fidelity** | Reflowed lines, invented escapes, realigned tables, dropped comments. Any path that reads and writes the source returns it byte for byte except where the author edited | Phase 1; tested hard by intents 13 and 18 |
+| **Round-trip byte-fidelity** | Lines reflowed, escapes invented, tables realigned or comments dropped by the serialiser on its own initiative. Any path that reads and writes the source returns it byte for byte except where the author edited; an author's own edit may reformat the construct their caret is in, bounded and undoable in one press (`adr-2609092000099546`) | Phase 1; tested hard by intents 13 and 18 |
 | **No machine in the document** | The author's machine inside a document folder: absolute local paths, local hostnames, usernames, machine-local settings. References are relative or named roots the app resolves | Phase 1 |
 | **One source, always** | A second copy of the text anywhere. Every rendering is a function of the one tree; nothing is authored twice, and no rendering is ever an input | Phase 1 |
 | **Variant fidelity** | A filtered block, or its footnotes and citations, surviving into another variant's rendering, reference list, PDF, or link; any page or path revealing that other variants exist | Phase 3 |

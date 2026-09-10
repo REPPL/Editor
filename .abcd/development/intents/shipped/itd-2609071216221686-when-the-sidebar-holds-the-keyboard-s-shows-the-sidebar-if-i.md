@@ -61,6 +61,15 @@ sidebar is reachable at all, which is why the maintainer declined it:
 `s` in the editing surface is the letter s, and with the sidebar hidden
 there is no "in the sidebar" for `s` to mean show from.
 
+(Amended 2026-09-09, superseded by `itd-2609091722353838` and
+`itd-2609091722296239`. The paragraph above states what was expected when
+this intent shipped, and it held: the route existed. It is retired rather
+than extended. `C-x o` now moves the keyboard among the panes that are
+shown and changes none of them, so the cycle no longer reaches a drawer it
+would have to open; `F2` is the dedicated route to a hidden sidebar, from
+every pane, and `C-x C-b` is its second chord. The bare `s` stays unbound,
+for the reason this paragraph already gives.)
+
 ## Scope Conditions
 
 - Population: Alice, the maintainer, editing a document she has open with <!-- cond: cond-2609081444289771 -->
@@ -100,18 +109,40 @@ there is no "in the sidebar" for `s` to mean show from.
 - Given the cursor in the editing text, when Alice presses `h`, then the
   letter h is inserted at the cursor and the sidebar is untouched.
 - Given the sidebar hidden and the cursor in the editing text, when Alice
-  presses `C-x o`, then the sidebar shows and focus moves into it, with
-  the cursor placed the same way `C-x o` already places it on a sidebar
-  that was already shown.
+  presses `C-x o`, then focus stays in the editing surface — a hidden
+  sidebar is not a pane the cycle visits — and the modeline announces that
+  there is nowhere else to go, rather than the chord doing nothing with no
+  report.
+  (Amended 2026-09-09, superseded by `itd-2609091722353838`, *`C-x o` moves
+  the keyboard and never changes what is shown*. As shipped this criterion
+  read: "then the sidebar shows and focus moves into it, with the cursor
+  placed the same way `C-x o` already places it on a sidebar that was
+  already shown." Showing a hidden sidebar is `F2`'s job now
+  (`itd-2609091722296239`); the route through `takeFocus` is retired, not
+  extended. Recorded here rather than left to be inferred, following
+  `iss-2609052143457583`.)
 - Given the sidebar shown or hidden, when Alice presses `C-x C-b` from the
-  editing surface, then the sidebar toggles exactly as it did before this
-  intent.
+  editing surface, then the sidebar shows or hides, and it does the same
+  from every other pane, because the chord is one of the two the row
+  carries rather than a toggle bound only in the text.
+  (Amended 2026-09-09, superseded by `itd-2609091722296239`, *Show and hide
+  the sidebar from wherever the keyboard is*. As shipped this criterion
+  read: "then the sidebar toggles exactly as it did before this intent" —
+  which was a toggle answered only by the editing surface's own CodeMirror
+  extension, and so unreachable from the tree or from a panel
+  (`iss-2609081707572166`). `C-x C-b` is now the second chord on the row
+  `F2` names — Emacs's own `list-buffers`, pointed at Editor's chapter list
+  — answered by both readers.)
 - Given the keys panel open, when it is read, then the row for `h` is
   listed under the sidebar's own group, with a label and the chord `h`.
 - Given the window at 390 CSS pixels, where the sidebar is a drawer rather
-  than a column, when Alice runs `C-x o` into the drawer and `h` back out
-  of it, then the drawer opens and closes exactly as it does at 1280 and
-  820 CSS pixels, nothing scrolls sideways, and no step needs the pointer.
+  than a column, when Alice shows the drawer, walks into it with `C-x o`
+  and presses `h` back out of it, then the drawer opens and closes exactly
+  as it does at 1280 and 820 CSS pixels, nothing scrolls sideways, and no
+  step needs the pointer.
+  (Amended 2026-09-09, superseded by `itd-2609091722353838`: as shipped,
+  the drawer was shown by the same `C-x o` that walked into it; it is shown
+  by `F2` now, and the rest of this criterion is unchanged.)
 - Inherited: one source, always — the drawer's open-or-closed state is
   read and written in exactly the place it already lives, nowhere
   duplicated for this chord; legible on three device classes — the flow

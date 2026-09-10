@@ -20,3 +20,5 @@ predecessor.
 | adr-2609051324157479 | [Publishing pushes to a private GitHub repository deployed by Cloudflare Pages, with stable ids and versioned hashes](2609051324157479-publishing-private-repo-cloudflare-pages.md) | accepted |
 | adr-2609051324167479 | [The PDF is rendered by Typst in the publish pipeline in a journal layout](2609051324167479-pdf-engine-is-typst.md) | accepted |
 | adr-2609051324177479 | [Reader annotations live in sidecar files beside chapters, private by default, publishable as layers](2609051324177479-annotations-are-sidecar-files.md) | accepted |
+| adr-2609091832455881 | [The editing surface becomes a tree of windows, and the pane cycle's first slot becomes plural](2609091832455881-editing-windows-are-a-split-tree.md) | proposed |
+| adr-2609092000099546 | [Byte fidelity forbids the serialiser reformatting, not the author's own edit reformatting what they are editing](2609092000099546-byte-fidelity-forbids-the-serialiser-not-the-author.md) | accepted |

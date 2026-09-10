@@ -64,7 +64,7 @@ what a click opens.
 | No machine in the document `itd-2609051336080960` | nothing here writes to a chapter; the cursor, the expansion set and the pane live in the page and are never persisted |
 | One source, always `itd-2609051336090390` | the rows are read from the one tree `src/core/outline.ts` derives, and every chord is resolved through `bindingById`, never against a hard-coded key |
 | Degrade gracefully in a plain tool `itd-2609051336110536` | no construct is written; the canon is untouched |
-| Legible on three device classes `itd-2609051336128348` | `src/focus.test.ts` › "opens the drawer with the keyboard and closes it behind Return", plus manual check M30-1 at 1280, 820 and 390 |
+| Legible on three device classes `itd-2609051336128348` | `src/focus.test.ts` › "shows the drawer with F2, walks into it, and leaves it shown behind Return" (renamed 2026-09-09 from "opens the drawer with the keyboard and closes it behind Return", with the rule that the cycle changes nothing about what is shown — `itd-2609091722353838`), plus manual check M30-1 at 1280, 820 and 390 |
 | Network only on publish `itd-2609051336158553` | `src/focus.test.ts` › "attempts no network request while moving between panes" |
 
 ## Design
@@ -198,6 +198,18 @@ and behind cancel. No width is read in TypeScript — the media query in
 `src/style.css` is the only place one appears, which is what lets jsdom prove
 the behaviour and leaves the appearance to the manual check.
 
+(Amended 2026-09-09, superseded by `itd-2609091722353838`, *`C-x o` moves the
+keyboard and never changes what is shown*, and `itd-2609091722296239`, *Show
+and hide the sidebar from wherever the keyboard is*. As built, `takeFocus()`
+opened a closed drawer and `releaseFocus()` closed the one it had opened,
+through an `openedForFocus` flag. The cycle now visits only panes that are
+shown, so that branch could never run again; it is deleted with its flag, and
+`takeFocus()` shows nothing and `releaseFocus()` hides nothing. `F2` shows a
+hidden tree and `h` hides a shown one, at every width. What the rest of this
+paragraph says about widths is unchanged: no width is read in TypeScript.
+Recorded here rather than left to be inferred, following
+`iss-2609052143457583`.)
+
 ### Returning to the editor
 
 Three things return the keyboard to the text, and all three go through
@@ -238,7 +250,7 @@ half-typed in the sidebar shows in the cell that already exists.
 | With the publish panel or settings open, three presses visit sidebar, that panel, editor in that order, the modeline naming each, because a registered panel cycled away from stays open; with the keys panel or the insert palette open instead, two presses visit sidebar, editor, and the overlay itself has closed rather than holding a third place (negative case: a third press finding the overlay still open fails this criterion) | `src/focus.test.ts` › "cycles editor, sidebar, panel, editor in one fixed order", run as a table over the five panels, branching on `panel.overlay` |
 | In the text, `C-n`, `C-p`, `C-f`, `C-b` and Return run the editing surface's own actions and no node moves; in the sidebar, printable characters insert nothing and no editing chord fires | `src/focus.test.ts` › "leaves the tree alone while the cursor is in the text", "types nothing into the chapter while the tree has the keyboard" |
 | The keys panel lists every chord this flow answers with an id, a label and its chords; no chord the sidebar or a panel answers is absent from the table; no row this spec adds is answered by nothing | `src/focus.test.ts` › "answers every sidebar row and lists every chord it answers" — the sweep in both directions over `scopeOf(binding) === "sidebar"`; `src/emacs-keys.test.ts` › "gives no two rows the same chord", made scope-aware, and "answers no chord the table does not list" |
-| At 820 px the whole flow runs in the drawer: it opens with the keyboard, behaves as above, closes on Return and on cancel, nothing scrolls sideways, no step needs the pointer | `src/focus.test.ts` › "opens the drawer with the keyboard and closes it behind Return", "closes the drawer on cancel having changed nothing"; manual check M30-1 |
+| At 820 px the whole flow runs in the drawer: it opens with the keyboard, behaves as above, closes on Return and on cancel, nothing scrolls sideways, no step needs the pointer — **amended 2026-09-09** to: the drawer is shown by `F2`, the flow runs in it, and it stays shown behind Return and behind cancel, because the cycle changes nothing about what is shown (`itd-2609091722353838`, `itd-2609091722296239`) | `src/focus.test.ts` › "shows the drawer with F2, walks into it, and leaves it shown behind Return", "leaves the drawer shown on cancel, having changed nothing" (the two tests this row named, renamed with the rule); manual check M30-1 |
 | Inherits: round-trip byte-fidelity; no machine in the document; one source, always; degrade gracefully; three device classes; network only on publish | the byte-fidelity and network tests named above; the remaining three are structural and argued in Scope |
 
 Manual checks, run with `npm run tauri dev` and recorded as an unticked list in

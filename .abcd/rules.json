@@ -1,5 +1,52 @@
 {
   "disabled": false,
-  "domains": {},
+  "domains": {
+    "RECORDS": {
+      "recall": [
+        "amend",
+        "amendment",
+        "supersede",
+        "superseded",
+        "criterion",
+        "acceptance criteria",
+        "audit notes",
+        "verdict",
+        "fidelity",
+        "shipped intent",
+        "closed spec",
+        "stale"
+      ],
+      "rules": [
+        "A shipped intent's acceptance criterion is amended in place, never silently rewritten: quote what it said, date the amendment, and name the record or commit that superseded it. The precedent is iss-2609052143457583; visible prose, not an HTML comment.",
+        "Where an Audit Notes verdict below an amended criterion predates the rewrite, say so in the amendment \u2014 the verdict is the stale artefact, not the criterion. A NOT_MET verdict beside an already-amended criterion otherwise reads as a live failure (iss-2609091757014163).",
+        "Never hand-edit prose inside an Audit Notes verdict. `abcd intent audit ingest` writes one hunk at the heading and touches nothing above it, which is what makes criteria structurally hard to amend silently; a verdict edited by hand has no such protection and no provenance (iss-2609100633302137). If a verdict's evidence must change, re-run the audit, or add a dated note beside it rather than rewriting it.",
+        "An exception that is itself a rule: never quote replaced text when the replacement was a privacy scrub. Naming what was removed puts the banned name back into a committed record; say what class of thing was removed and cite the record instead.",
+        "A closed spec that says a thing was declined while the tree does that thing is a record that reads false. Amend it, and name which question was actually answered \u2014 a later decision on a different question is not a reversal of the first."
+      ]
+    },
+    "SCRATCHEDITS": {
+      "recall": [
+        "git checkout",
+        "git restore",
+        "git stash",
+        "revert",
+        "undo",
+        "discard",
+        "scratch",
+        "probe",
+        "temporarily",
+        "non-vacuity",
+        "verify the test fails",
+        "clean the tree"
+      ],
+      "rules": [
+        "Never use `git checkout -- <path>`, `git restore`, `git stash`, `git reset --hard`, or `git clean` to undo a scratch edit. They discard to HEAD, not to the working state, and this repository's branches routinely carry a whole session of unstaged work (iss-2609100620246542: 93 lines of src/app.ts destroyed this way, recovered only by luck from a stale dist source map).",
+        "To make a temporary edit and undo it \u2014 proving a test is not vacuous, probing behaviour \u2014 copy the file aside and copy it back: `cp <path> /tmp/x.bak` then `cp /tmp/x.bak <path>`. Force the restore (`cp -f`, or `command cp`) because an interactive `cp -i` alias will stall a background job mid-restore and leave the file half-changed.",
+        "After any restore, verify it rather than assuming it: `git diff --numstat -- <path>` against what you expected to be there, and grep for a marker of each distinct piece of work the file should contain.",
+        "The session's opening `git status` snapshot is a point in time, not the current state. Never reason about whether a file is clean from it \u2014 run `git status --short -- <path>` at the moment you need the answer.",
+        "Proving a test fails without its fix is required, not optional, but it is done by editing forward and back, never by reverting to HEAD."
+      ]
+    }
+  },
   "schema_version": 1
 }

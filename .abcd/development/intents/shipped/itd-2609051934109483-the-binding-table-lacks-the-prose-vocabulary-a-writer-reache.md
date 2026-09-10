@@ -181,11 +181,41 @@ all, and that is the falsification.
   the modeline shows the zap-to-char prompt and afterwards names
   `Capitalise word`, each on one line, with nothing clipped and no
   horizontal scrolling anywhere on the surface.
+  (Amended 2026-09-10, superseded in one particular by
+  `itd-2609091722353594`, *See what a prefix can do, without leaving the
+  prefix*. This criterion's own case is unaffected: `C-h k` then `M-c` still
+  names `Capitalise word`, on one line, at every width. What changes is
+  `C-h k`'s answer for one chord — `C-h` itself. That intent adds a
+  `prefix-help` row carrying `C-h`, so `C-h` becomes the only chord in the
+  table that is both a row and the first step of a longer chord, and
+  `describeKey` looks a chord up as a row before asking whether it is a
+  prefix: `C-h k` then `C-h` now names **What can follow this prefix** and
+  stops, where it previously waited for a second step and would then have
+  named `C-h b` or `C-h k`. This is what GNU Emacs answers for `C-h k C-h`,
+  and it was accepted deliberately rather than worked around, because the
+  general rule — name the row if there is one — is worth more than an
+  exception for one chord. The prefix-reading behaviour this criterion's own
+  case depends on is untouched: `C-h k` then `C-x` then `C-s` still reads
+  the two steps as one sequence and names **Save the chapter**. Recorded
+  here rather than left to be inferred, following `iss-2609052143457583`.)
 - **Given** the seventeen rows added, **when** the binding table's
   conformance sweep runs, **then** it passes unchanged: every row carries
   a label and at least one chord, no chord collides, and every chord the
   sweep presses reaches the editor rather than the web view or the
   platform.
+  (Amended 2026-09-10, superseded in one particular by
+  `itd-2609091722353594`, *See what a prefix can do, without leaving the
+  prefix*. The three sub-claims still hold, and hold for the seventeen rows
+  this intent added. "Passes unchanged" does not: that intent gives `C-h` a
+  row while it remains a suppression entry taken out of CodeMirror's keymap
+  only, which makes it the one chord that is both listed and suppressed, so
+  the sweep "suppresses a chord instead of listing it, never both" gains one
+  named exception, asserted in both directions. The other sweeps are
+  untouched. The audit of this criterion already qualified "unchanged" —
+  ac-8 in Audit Notes below records that two sweep tests were tightened in
+  the delivered range for another intent's fix — so this is the second time
+  the word has had to give, and it is amended here rather than qualified
+  again from outside. Recorded following `iss-2609052143457583`.)
 - Inherits: round-trip byte-fidelity; no machine in the document; one
   source, always; degrade gracefully in a plain tool; legible on three
   device classes; network only on publish.

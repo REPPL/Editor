@@ -161,6 +161,18 @@ the key through `overlay.ts`'s new `onKey(event): boolean` hook, consulted
 after the cancel chords and before movement; returning true keeps the prompt
 open for another step, which is how `C-h k` reads `C-x C-s` as one sequence
 against `chordIndex()` and then names the row, or says the chord is not bound.
+
+**Amended 2026-09-10**, superseded in one particular by
+`itd-2609091722353594` (`spc-2609091733496272`): the sentence above describes
+the order `describeKey` resolves a chord in — name the row if the table has
+one, else keep reading if it is a prefix, else say it is not bound — and that
+order is unchanged. What changes is that one chord is now both. That intent
+adds a `prefix-help` row carrying `C-h`, so `C-h k` then `C-h` names **What
+can follow this prefix** and stops, where before there was no row for `C-h`
+and the prompt read on for the second step of `C-h b` or `C-h k`. The
+row-first order wins because it is the general rule, and because it is what
+GNU Emacs answers for `C-h k C-h`. `C-h` is the only chord in the table that
+is both a row and a prefix, so no exception is written for the case.
 `M-z` selects from the point to and including the next occurrence of the
 character and calls `killSelection(view)`, which runs the package's own
 `killRegion` through the tracked handler, so the killed text is on the one kill
@@ -227,7 +239,7 @@ unreadable.
 | AC5 — `M-x`, `tw`, `Transpose words` swaps the words; `M-x` then `C-g` changes not one byte | `src/command-palette.test.ts` "filters on the initials of a label and runs the row's command"; "changes not one byte when it is cancelled" |
 | AC6 — `C-x C-c` asks when dirty, `C-g` returns with the edits kept; quits silently when clean | `src/emacs-keys.test.ts` "asks before C-x C-c quits and keeps the edits on C-g"; "quits without asking when nothing is unsaved" |
 | AC7 — at 390 pixels the `M-z` prompt and the `C-h k` answer each sit on one line, nothing clipped, nothing scrolling | `src/prose.test.ts` "keeps every prompt and message inside the modeline's budget" (character budget and single-line assertion) plus manual check M-4 (a 390-pixel window on the real engine) |
-| AC8 — the conformance sweep passes unchanged | `src/emacs-keys.test.ts`, existing and unedited: "answers no chord the table does not list", "suppresses a chord instead of listing it, never both", "claims every step of every modified chord the page owns", "matches every chord in the table against the event it would arrive as" |
+| AC8 — the conformance sweep passes unchanged | `src/emacs-keys.test.ts`, existing and unedited: "answers no chord the table does not list", "suppresses a chord instead of listing it, never both", "claims every step of every modified chord the page owns", "matches every chord in the table against the event it would arrive as". **Amended 2026-09-10**, superseded in one particular by `itd-2609091722353594` (`spc-2609091733496272`): "existing and unedited" no longer holds for the second of the four. That spec gives `C-h` a row while it remains a `SUPPRESSED` entry (`where: "codemirror"`, so that CodeMirror's own delete-backward cannot answer it), which makes it the one chord that is both, and "suppresses a chord instead of listing it, never both" gains one named exception, asserted in both directions — the chord must be listed, it must still be suppressed, and the exception set must contain only genuinely suppressed chords. The other three sweeps are untouched, and the three sub-claims this criterion enumerates — every row carries a label and a chord, no chord collides, every chord the sweep presses reaches the editor — all still hold |
 | AC9 — inherits the six disciplines | Byte-fidelity: AC2's assertions plus existing "opens a hazardous chapter and saves it byte for byte". Degrade gracefully: `src/prose.test.ts` "never wraps a line so that a word opens a block construct". Network: existing "attempts no network request while editing". One source: `src/command-palette.test.ts` "lists every runnable row of the table and every insert form". Legibility: AC7. No machine in the document: no command writes one |
 | Manual | `.abcd/.work.local/logs/acceptance/spc-2609051938278499.md`: M-1 each of the eighteen chords pressed on a real Mac keyboard in the shell, with the key log open; M-2 the dead-key chords `M-e` and `M-a` against a real Option key; M-3 `M-x`, `M-/` and `M-@` reaching the editor rather than the web view or the platform; M-4 the 390-pixel window; M-5 `C-x C-c` closing the real window, dirty and clean |
 

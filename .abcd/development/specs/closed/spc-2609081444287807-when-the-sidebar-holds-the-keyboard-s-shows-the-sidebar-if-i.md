@@ -145,6 +145,24 @@ this spec proves by testing existing behaviour rather than adding to it —
 named directly in Acceptance Mapping so the audit does not read its absence
 as a gap.
 
+**Amended 2026-09-09**, with the intent's own third criterion, superseded by
+`itd-2609091722353838` (`spc-2609091724073619`) and `itd-2609091722296239`
+(`spc-2609091724077315`): the cycle no longer reaches a drawer that is not
+shown, so this route is retired rather than extended. `sidebarTarget`
+requires `sidebar.open` before the cycle will visit the sidebar at all, and
+`F2` is the chord that shows it. `takeFocus`'s own open-a-closed-drawer
+branch, which nothing could reach any more, is deleted with `openedForFocus`
+and `releaseFocus`'s matching close: `takeFocus` now shows nothing and
+`releaseFocus` hides nothing, so the paragraph above about the two calls not
+fighting describes a collision that can no longer happen — `sidebar-hide`'s
+own `setOpen(false)` is the only call in that sequence that changes what is
+shown, and `sidebar-quit` leaves the drawer exactly as it found it. The two
+tests this section named are renamed with it: "shows a hidden sidebar again on `C-x o`, and
+moves the keyboard into it" is now "shows a hidden sidebar again on F2, and
+C-x o then moves the keyboard into it", and "opens the drawer with the
+keyboard and closes it behind Return" is now "shows the drawer with F2, walks
+into it, and leaves it shown behind Return".
+
 ### `C-x C-b` untouched
 
 `toggle-sidebar` is an `editor`-owned row, answered only while the pane is
@@ -160,8 +178,8 @@ change; it is cited here rather than duplicated.
 |---|---|
 | `h` in the sidebar hides it, focus returns to the editing surface, and the cursor is where she left it with nothing opened and nothing changed | `src/focus.test.ts` › "hides the drawer with h and hands the keyboard back to the text" |
 | `h` in the editing text is left to the text, not intercepted by any binding | `src/focus.test.ts` › "leaves h to the text, unclaimed, while the cursor is in the editor" |
-| `C-x o` with the sidebar hidden shows it and moves focus in, the same way it already does on a sidebar that was shown | `src/focus.test.ts` › "shows a hidden sidebar again on C-x o, and moves the keyboard into it" (new, over `takeFocus`'s existing behaviour); `src/focus.test.ts` › "opens the drawer with the keyboard and closes it behind Return" (map #30's own test, unmoved, over the same call) |
-| `C-x C-b` still toggles the sidebar exactly as before | `src/emacs-keys.test.ts` › "shows and hides the sidebar on C-x C-b" (map #1's own test, unmoved) |
+| `C-x o` with the sidebar hidden shows it and moves focus in, the same way it already does on a sidebar that was shown — **amended 2026-09-09** to: `C-x o` leaves a hidden sidebar hidden and the modeline says there is nowhere else to go, and `F2` shows it (`itd-2609091722353838`, `itd-2609091722296239`) | `src/focus.test.ts` › "shows a hidden sidebar again on F2, and C-x o then moves the keyboard into it"; `src/focus.test.ts` › "shows the drawer with F2, walks into it, and leaves it shown behind Return"; `src/focus.test.ts` › "stays in the text and says so when the sidebar is hidden" |
+| `C-x C-b` still toggles the sidebar exactly as before — **amended 2026-09-09** to: `C-x C-b` shows and hides it, from every pane, as the second chord on the row `F2` names (`itd-2609091722296239`) | `src/emacs-keys.test.ts` › "shows and hides the sidebar on C-x C-b" (map #1's own test, widened by one round trip); `src/focus.test.ts` › "answers C-x C-b from the tree as well as from the text" |
 | The keys panel lists the new row under the sidebar's own group, with its label and chord | `src/focus.test.ts` › "lists every row this flow answers in the keys panel" (widened): the `sidebar-hide` row's text contains its label, its chord, and the `sidebar` pane note |
 | `h` hides even a sidebar that was already open before the keyboard arrived, unlike `sidebar-quit` | `src/focus.test.ts` › "hides the sidebar with h even when it was already open before focus arrived" |
 | At 390 CSS pixels the drawer behaves the same | jsdom proves the mechanism, not the width, exactly as map #30's own build does: `src/focus.test.ts` › "hides the drawer with h and hands the keyboard back to the text" over the two-call open/close path; manual check M36-1 at 1280, 820 and 390 |

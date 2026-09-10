@@ -46,10 +46,26 @@ the keys panel like every other action, and one cancel chord still cancels
 anything.
 
 On a narrow window the sidebar is a drawer rather than a column, and the
-flow does not change: `C-x o` slides the drawer open and gives it the
-keyboard, the tree moves under the same chords, Return opens the chapter
-and closes the drawer behind it, and `C-g` closes it having changed
-nothing.
+flow does not change: `F2` slides the drawer open, `C-x o` gives it the
+keyboard, the tree moves under the same chords, Return opens the chapter and
+hands the keyboard back, `C-g` leaves the tree having changed nothing, and
+`F2` or a bare `h` slides the drawer shut again.
+
+(Amended 2026-09-09, superseded by `itd-2609091722353838`, *`C-x o` moves the
+keyboard and never changes what is shown*, and `itd-2609091722296239`, *Show
+and hide the sidebar from wherever the keyboard is*. Three clauses of this
+paragraph are amended, all for one reason: showing and hiding the drawer is
+now `F2`'s work alone, and no chord that moves the keyboard changes what is
+shown. As originally shipped it read "`C-x o` slides the drawer open and gives
+it the keyboard" — the chord did both, and now does only the second; "Return
+opens the chapter and closes the drawer behind it" — Return now hands the
+keyboard back without hiding anything; and "`C-g` closes it having changed
+nothing" — `C-g` now leaves the drawer exactly as it found it, which is what
+"having changed nothing" always claimed and did not quite do. The narrative is
+amended rather than left standing, because a press release describing gestures
+the app no longer makes is a record that reads false; the flow it describes is
+otherwise unchanged, and is one chord longer at this width, which is the cost
+`itd-2609091722296239` accepted.)
 
 ## Why This Matters
 
@@ -120,7 +136,18 @@ combination becomes its precondition.
   "full Emacs bindings" means, since every chord here is a row in that
   table rather than a chord of its own invention.
 - Widths: the flow holds at 1280, 820 and 390 CSS pixels, with the sidebar <!-- cond: cond-2609051925372330 -->
-  as a column at the widest and as a drawer at the narrower two.
+  as a column at the widest and as a drawer at the narrower two while it is
+  shown, and off the page at all three while it is hidden.
+  (Amended 2026-09-10 following `iss-2609091754178640`. As shipped this
+  condition read "with the sidebar as a column at the widest and as a drawer
+  at the narrower two", which names the shape the sidebar takes and says
+  nothing about the state it takes it in — and the stylesheet honoured
+  `data-open="no"` only inside the drawer's own media query, so above 820 CSS
+  pixels the column stood there whether the sidebar was shown or hidden and
+  the condition read as a promise that it always would. Hiding is honoured at
+  every width now, so the condition says which state each shape describes.
+  The flow itself is unchanged: it runs with the sidebar shown. Recorded here
+  rather than left to be inferred, following `iss-2609052143457583`.)
 - Boundary with intent 1, *Open a folder and see the book* <!-- cond: cond-2609051925372563 -->
   (`itd-2609051335399446`): 1 owns the sidebar itself — the tree drawn
   from the file system, its Parts, Chapters and heading levels, its
@@ -177,6 +204,16 @@ combination becomes its precondition.
   three-step cycle a registered panel holds. (Negative case: a third press
   finding the overlay still open and holding the third place, rather than
   the editor, fails this criterion.)
+  (Amended in `5c476f5`, recorded here 2026-09-10 because the amendment
+  carried no provenance of its own. As first shipped this criterion promised
+  one three-step cycle for every panel: "with the keys panel or the insert
+  palette open, three `C-x o` presses visit the sidebar, that panel, then the
+  editor". `iss-2609052115254279` showed that an overlay left open behind the
+  text goes on claiming Return, so `panelTarget.release` cancels an overlay
+  the moment the keyboard leaves it, and the walk for an overlay-backed panel
+  is two steps rather than three. The criterion was rewritten to say so; the
+  `ac-5 — NOT_MET` verdict in Audit Notes below predates the rewrite and is
+  the stale artefact, not the criterion. Surfaced by `iss-2609091757014163`.)
 - Given the cursor in the editing text, when Alice presses `C-n`, `C-p`,
   `C-f`, `C-b` or Return, then the editing surface's own actions run and no
   sidebar node moves, expands, collapses or opens; and given focus in the
@@ -189,10 +226,20 @@ combination becomes its precondition.
   panel answers is absent from the table, and no row this intent adds is
   answered by nothing.
 - Given the window at 820 CSS pixels, where the sidebar is a drawer, when
-  Alice runs the whole flow from `C-x o` through movement and expansion to
-  Return and to `C-g`, then the drawer opens with the keyboard, behaves as
-  above, closes on Return and on cancel, nothing scrolls horizontally, and
-  no step requires the pointer.
+  Alice shows the drawer and runs the whole flow from `C-x o` through
+  movement and expansion to Return and to `C-g`, then the drawer behaves as
+  above, stays shown behind Return and behind cancel, nothing scrolls
+  horizontally, and no step requires the pointer.
+  (Amended 2026-09-09, superseded by `itd-2609091722353838`, *`C-x o` moves
+  the keyboard and never changes what is shown*. As shipped this criterion
+  read: "then the drawer opens with the keyboard, behaves as above, closes
+  on Return and on cancel". The cycle no longer opens a drawer on its way in
+  or closes one on its way out — showing and hiding the drawer is `F2`'s
+  job, `itd-2609091722296239` — so what the flow proves at this width is the
+  movement, not the drawer's state. The other four criteria naming `C-x o`
+  are unaffected: each describes the cycle among panes that are shown, which
+  this rule leaves exactly as it was. Recorded here rather than left to be
+  inferred, following `iss-2609052143457583`.)
 - Inherits: round-trip byte-fidelity; no machine in the document; one
   source, always; degrade gracefully in a plain tool; legible on three
   device classes; network only on publish.

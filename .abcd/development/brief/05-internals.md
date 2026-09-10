@@ -102,8 +102,12 @@ Every node carries:
 - its **variant set**: empty means every variant.
 
 Serialising an unedited tree reproduces the file byte for byte. Serialising
-an edited tree changes only the spans that were edited: no reflowed
-paragraph, no re-escaped character, no realigned table.
+an edited tree changes only the spans that were edited: the serialiser
+reformats nothing on its own initiative — no reflowed paragraph, no
+re-escaped character, no realigned table. An author's own edit may reformat
+the construct their caret is in, as `M-q` reflows a paragraph, on three
+conditions: the edit is the occasion, the construct the caret is in is the
+limit, and one undo undoes it (`adr-2609092000099546`).
 
 ## 3. The Markdown canon
 
