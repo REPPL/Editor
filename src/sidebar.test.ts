@@ -7,6 +7,9 @@
  * it does to that slot on a chapter row is what is proved here.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { createSidebar, type ChapterFacts, type SidebarHooks } from "./sidebar";
@@ -149,5 +152,70 @@ describe("the hidden-construct badge on a chapter row (itd-2609051335518134, map
     sidebar.show(treeOf(chapter("01-a.md", "A")), new Map(), facts);
     expect(sidebar.element.querySelector(".tree-badge-citation")).not.toBeNull();
     expect(sidebar.element.querySelector(".tree-badge-egg")).not.toBeNull();
+  });
+});
+
+/**
+ * What hiding the sidebar hides (`iss-2609091754178640`).
+ *
+ * `setOpen` writes `data-open`, and that much is proven in `src/focus.test.ts`
+ * against the chords that call it. What the attribute is worth is a claim about
+ * the stylesheet, and jsdom applies no media query, so the rule is read here as
+ * text: hiding has to be honoured wherever the sidebar is drawn, and it was
+ * honoured only inside the drawer's own query, which left a hidden tree on
+ * screen as a column above 820 CSS pixels. The pixels themselves stay a manual
+ * check (M30-1); what is provable here is that no width guards the rule.
+ */
+describe("the stylesheet's rule for a hidden sidebar", () => {
+  /**
+   * The stylesheet with every media block dropped: what applies at every width.
+   *
+   * The file is Prettier-formatted, so a rule inside a query is indented and
+   * one outside it is not, but reading the braces is the claim itself rather
+   * than a claim about the formatter.
+   */
+  function atEveryWidth(css: string): string {
+    let kept = "";
+    let at = 0;
+    for (;;) {
+      const start = css.indexOf("@media", at);
+      if (start < 0) return kept + css.slice(at);
+      kept += css.slice(at, start);
+      let depth = 0;
+      let index = css.indexOf("{", start);
+      for (; index < css.length; index += 1) {
+        if (css[index] === "{") depth += 1;
+        else if (css[index] === "}") {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+      }
+      at = index + 1;
+    }
+  }
+
+  const css = readFileSync(join(__dirname, "style.css"), "utf8");
+
+  it("takes the sidebar off the page at every width, in one rule", () => {
+    expect(css.match(/\.sidebar\[data-open="no"\]/g)).toHaveLength(1);
+    expect(atEveryWidth(css)).toMatch(
+      /\.sidebar\[data-open="no"\] \{\s*display: none;\s*\}/,
+    );
+  });
+
+  it("leaves the drawer's query holding the drawer's shape and nothing else", () => {
+    const drawer = css.slice(css.indexOf("@media (max-width: 820px)"));
+    const block = drawer.slice(0, drawer.indexOf("\n}\n"));
+    // The right query: the sidebar's, not the modeline's at the same width.
+    expect(block).toContain(".sidebar {");
+    expect(block).not.toContain("data-open");
+  });
+
+  it("gives the width back to the editing surface rather than leaving a gap", () => {
+    // `.layout` is a flex row, so the hidden element takes its track with it;
+    // the surface beside it grows into what the track held.
+    const everywhere = atEveryWidth(css);
+    expect(everywhere).toMatch(/\.layout \{[^}]*display: flex;/);
+    expect(everywhere).toMatch(/\.editor-pane \{[^}]*flex: 1 1 auto;/);
   });
 });

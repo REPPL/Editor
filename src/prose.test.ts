@@ -7,6 +7,9 @@
  * against what Emacs does with the same keystroke.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -825,6 +828,18 @@ describe("the prompts", () => {
     expect(document.querySelector(".prompt")).toBeNull();
   });
 
+  it("names the row a chord that is both a leaf and a prefix reaches", () => {
+    // `C-h` is the one chord in the table that is both: the first step of
+    // `C-h b` and `C-h k`, and the `prefix-help` row's own chord
+    // (`itd-2609091722353594`). `describeKey` looks a chord up as a row before
+    // asking whether it is a prefix, so it names the row and stops — which is
+    // what GNU Emacs answers for `C-h k C-h`.
+    describeKey({ host, announce });
+    pressKey("h", ["C"]);
+    expect(said[said.length - 1]).toBe("C-h is What can follow this prefix");
+    expect(document.querySelector(".prompt")).toBeNull();
+  });
+
   it("says a chord is not bound when the table does not carry it", () => {
     describeKey({ host, announce });
     pressKey("j", ["M"]);
@@ -856,5 +871,40 @@ describe("the prompts", () => {
       expect(message.length, message).toBeLessThanOrEqual(MODELINE_BUDGET);
     }
     expect(messages.length).toBeGreaterThan(100);
+  });
+
+  /*
+   * The other half of the budget (`iss-2609100445317801`).
+   *
+   * The test above holds every message to 52 characters. It says nothing about
+   * whether 52 characters of room exist, and the modeline gave the message
+   * cell a line of its own only at 520 CSS pixels and below — so between 521
+   * and however wide the window was, the budget was a promise about the
+   * messages and not about the line they are read on. jsdom applies no media
+   * query and measures no text, so the stylesheet is read here as text; the
+   * pixels stay a manual check.
+   */
+  it("keeps a line the budget fits on at every width", () => {
+    const css = readFileSync(join(__dirname, "style.css"), "utf8");
+
+    // Below the breakpoint the message has a line to itself, and the
+    // breakpoint is the sidebar's: 820, the width the shell's own checks name.
+    const ownLine = css.indexOf("flex: 1 0 100%");
+    expect(ownLine).toBeGreaterThan(-1);
+    const query = css.slice(css.lastIndexOf("@media", ownLine), ownLine);
+    expect(/max-width:\s*(\d+)px/.exec(query)?.[1]).toBe("820");
+
+    // Above it the cell shares the line, and the budget is held open there by
+    // a floor stated in the budget's own units.
+    const floor = /\n\.modeline-message \{[^}]*min-width: min\((\d+)ch, 100%\);/
+      .exec(css)?.[1];
+    expect(Number(floor)).toBe(MODELINE_BUDGET);
+
+    // A floor no other cell can push through: the chapter title is the one
+    // cell with no bound, and it is the one that yields.
+    const chapter = /\n\.modeline-chapter \{[^}]*\}/.exec(css)?.[0] ?? "";
+    expect(chapter).toContain("min-width: 0;");
+    expect(chapter).toContain("text-overflow: ellipsis;");
+    expect(chapter).toMatch(/flex: 0 1 auto;/);
   });
 });

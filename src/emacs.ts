@@ -38,15 +38,18 @@ import {
   setSearchQuery,
 } from "@codemirror/search";
 import type { Extension } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import type { EditorView, KeyBinding } from "@codemirror/view";
 import { EmacsHandler, emacs, emacsKeys } from "@replit/codemirror-emacs";
 
 import {
   SUPPRESSED,
   bindingById,
   canonicalChord,
+  chordFromEvent,
+  chordIndexIn,
   fromKeymapSpec,
   scopeOf,
+  withoutSuppressed,
 } from "./keys";
 
 /** What the modeline reports about the Emacs handler. */
@@ -63,8 +66,13 @@ export interface EmacsStatus {
  * An index signature rather than a fixed set of methods: another part of the
  * application registers a command against a row of the table, and the chord
  * that reaches it is the row's, not a second copy written here.
+ *
+ * The optional argument is for the one row whose answer depends on what was
+ * already half-typed: `prefix-help` is handed the prefix it is to describe
+ * (`itd-2609091722353594`). Every other command ignores it, and a command
+ * written as `() => void` still satisfies this.
  */
-export type EditorCommands = Record<string, () => void>;
+export type EditorCommands = Record<string, (argument?: string) => void>;
 
 /**
  * The binding ids whose action lives in the application rather than in the
@@ -82,6 +90,9 @@ export const APP_COMMAND_IDS: readonly string[] = [
   "toggle-key-log",
   "keys-panel",
   "insert-palette",
+  // The sidebar's own toggle. This is the route from the text, on either of
+  // the row's two chords; a pane the editing surface cannot hear reads the
+  // same row through `src/focus.ts` (`itd-2609091722296239`).
   "toggle-sidebar",
   "reload-document",
   // The type scale. `C-x C-0` needs the guard below to reach its command; the
@@ -153,6 +164,18 @@ export const APP_COMMAND_IDS: readonly string[] = [
   "outline-widen",
   "outline-occur",
   "query-replace-regex",
+  // The region case changes. Here rather than bound straight to the handler,
+  // for the reason the prose vocabulary is here: with no region there is
+  // nothing to change and a refusal to announce, and the modeline is the
+  // application's (`iss-2609091920011632`). `changeCaseRegion` below is the
+  // mechanism both rows run, and it returns the refusal rather than saying it.
+  "upcase-region",
+  "downcase-region",
+  // The table-alignment mode switch (`itd-2609061653559060`). Here rather than
+  // in the editing surface because the answer is a modeline message, and the
+  // modeline is the application's; the flag itself lives in `src/tables.ts`,
+  // which is where the filter that reads it lives.
+  "toggle-table-alignment",
 ];
 
 const handlerByView = new WeakMap<EditorView, EmacsHandler>();
@@ -196,8 +219,85 @@ function trackHandlers(): void {
       );
       return { command: swallowed };
     }
+
+    // `C-h` on a live chain: the general fallback Emacs applies to any prefix
+    // whose own map does not bind the help character. Caught here because
+    // `findCommand` clears the chain on its way to returning nothing, so this
+    // is the last moment the prefix still exists. It cannot collide with
+    // `swallowedChord` above, which answers only Control-and-a-digit.
+    //
+    // The chain and the count are both spent, for the reason the guard above
+    // records: a count left behind is the count the next key is read with, and
+    // a chain left behind would be a prefix the modeline goes on showing under
+    // an overlay that has taken over reading it. Spending both is also what
+    // makes the cancel free — by the time `C-g` closes the overlay there is no
+    // prefix left to cancel (`itd-2609091722353594`).
+    const prefix = prefixHelpFor(this, event);
+    if (prefix !== null) {
+      const data = this.$data;
+      data.keyChain = "";
+      data.count = 0;
+      run("prefix-help", prefix);
+      // The same route `swallowedChord` claims its chord by: the package's own
+      // plugin returns `!!result`, and CodeMirror `preventDefault`s a handler
+      // that returns true, which is what stops `C-h` reaching the browser or a
+      // lower keymap.
+      return { command: "null" };
+    }
+
     return inherited.call(this, event);
   };
+}
+
+/**
+ * The table's spelling of a chain the package's key reader is holding.
+ *
+ * Forward, never backward: the chain was built by the package out of chords
+ * this module bound with `toPackageChord`, so mapping the table through the
+ * same call is the one comparison that cannot drift. An inverse would be a
+ * second notation table, and two notation tables disagree.
+ *
+ * Null for a chain no row of the table opens, which is a chain the package owns
+ * alone — nothing is intercepted there and the package resolves it exactly as
+ * it does today.
+ *
+ * O(chords × steps) on one keystroke that opens a panel: roughly a hundred and
+ * sixty chords of at most three steps, on no hot path, and deliberately not
+ * optimised.
+ */
+function tablePrefixFor(chain: string): string | null {
+  for (const chord of chordIndexIn("editor").keys()) {
+    const steps = chord.split(" ");
+    for (let taken = 1; taken < steps.length; taken += 1) {
+      const prefix = steps.slice(0, taken).join(" ");
+      if (toPackageChord(prefix) === chain) return prefix;
+    }
+  }
+  return null;
+}
+
+/**
+ * The prefix a `C-h` should describe, or null if this is not that.
+ *
+ * `if (!chain) return null` is the whole of what keeps a bare `C-h` exactly
+ * what it is today: with no chain the key goes to the package's own reader,
+ * which holds `C-h` as the prefix `C-h b` and `C-h k` were bound through. One
+ * key, two jobs, told apart by whether a prefix is already in progress —
+ * which is the rule GNU Emacs itself uses.
+ *
+ * The chord comes from the `prefix-help` row rather than from a literal, so
+ * this module names no key of its own.
+ */
+function prefixHelpFor(
+  handler: EmacsHandler,
+  event: KeyboardEvent,
+): string | null {
+  const chain = handler.$data.keyChain;
+  if (!chain) return null;
+  const chord = canonicalChord(chordFromEvent(event));
+  const help = bindingById("prefix-help");
+  if (!help?.chords.map(canonicalChord).includes(chord)) return null;
+  return tablePrefixFor(chain);
 }
 
 /**
@@ -508,6 +608,65 @@ function registerEditorChords(): void {
   for (const chord of bindingById("scroll-down")?.chords ?? []) {
     EmacsHandler.bindKey(toPackageChord(chord), "editor:scroll-down");
   }
+
+  // `prefix-help`: the command is registered and **no chord is bound**. That
+  // asymmetry is the whole point, and it is why the row is not in
+  // `APP_COMMAND_IDS`: binding its `C-h` would overwrite the prefix entry
+  // `C-h b` and `C-h k` depend on, which is the one thing this row must not
+  // cost (`itd-2609091722353594`). The chord is answered by the guard in the
+  // `handleKeyboard` wrapper above instead.
+  //
+  // The command exists so that `runBinding` resolves the row at its first
+  // step, which is what makes the row do something useful from `M-x`: with no
+  // prefix to describe, the application announces that instead. It is no
+  // longer what keeps `defaultKeymap`'s `Ctrl-h` off the chapter — the third
+  // step searches `codemirrorKeymap`, so the `C-h` suppression reaches
+  // `runBinding` as well as the keyboard (`iss-2609100519025566`).
+  EmacsHandler.addCommands({
+    "editor:prefix-help": () => {
+      run("prefix-help");
+    },
+  });
+}
+
+/**
+ * What both region case changes say when there is no region to change.
+ *
+ * GNU Emacs signals `mark-is-not-active` here. Editor claims `C-x C-u` and
+ * `C-x C-l` either way — that is what keeps the browser off them — so with
+ * nothing to change the chord has to say so rather than swallowing the
+ * keystroke and reporting nothing (`iss-2609091920011632`).
+ */
+export const NO_REGION_TO_CHANGE = "No region to change case";
+
+/**
+ * Change the case of the region, in the direction the chord names.
+ *
+ * The command is the package's own `changeCase`, called with the arguments
+ * its `C-x C-u` binding already carries and the direction the row asked for.
+ * Only the direction is Editor's, so a region is upper-cased and lower-cased
+ * exactly as the package did it.
+ *
+ * With point collapsed the package's own behaviour is to replace every empty
+ * range by itself, which is a no-op nobody can see. The refusal is returned
+ * rather than announced, the way the prose commands return theirs: the
+ * modeline belongs to the application, and one caller announcing for both
+ * rows is why this refusal is written once (`iss-2609091920011632`).
+ */
+export function changeCaseRegion(
+  view: EditorView,
+  dir: 1 | -1,
+): string | null {
+  if (view.state.selection.ranges.every((range) => range.empty)) {
+    return NO_REGION_TO_CHANGE;
+  }
+  const command = EmacsHandler.commands["changeCase"];
+  if (!command) {
+    console.warn("changeCase: the keymap no longer carries this command");
+    return null;
+  }
+  EmacsHandler.execCommand(command, handlerFor(view), { dir, region: true }, 1);
+  return null;
 }
 
 /**
@@ -555,6 +714,30 @@ export function emacsAnsweredChords(): ReadonlySet<string> {
 }
 
 /**
+ * CodeMirror's own keymaps, as the surface is allowed to have them.
+ *
+ * The three packages ship one flat keymap each and Editor installs all three
+ * below the Emacs layer, minus every chord `SUPPRESSED` takes out of
+ * CodeMirror's keymap. This is the one place that list is built, and it is
+ * built once for two readers: `src/editor.ts` installs it, and `runBinding`
+ * searches it when it resolves a row by chord.
+ *
+ * One list rather than two filters is the whole point. `runBinding` used to
+ * iterate the three raw keymaps, so a row whose chord is suppressed here could
+ * still reach the command the suppression exists to keep away — the
+ * `prefix-help` row's `C-h` would have run `defaultKeymap`'s delete-backward
+ * when it was chosen from `M-x` (`iss-2609100519025566`). A second filter
+ * beside this one could drift from it again; a shared list cannot.
+ */
+export function codemirrorKeymap(): readonly KeyBinding[] {
+  return [
+    ...withoutSuppressed(defaultKeymap),
+    ...withoutSuppressed(historyKeymap),
+    ...withoutSuppressed(searchKeymap),
+  ];
+}
+
+/**
  * Bind the command a package key group carries under a reachable spelling.
  *
  * `spec` is the key of `emacsKeys`; `chord` is the table's notation for the
@@ -578,7 +761,7 @@ function rebindUnreachable(spec: string, chord: string): void {
  * command was never registered, both of which are programming errors rather
  * than something the author did.
  */
-function run(id: string): void {
+function run(id: string, argument?: string): void {
   if (!commands) {
     console.warn(`${id}: no application is mounted`);
     return;
@@ -588,7 +771,7 @@ function run(id: string): void {
     console.warn(`${id}: no command is registered`);
     return;
   }
-  command();
+  command(argument);
 }
 
 /**
@@ -653,6 +836,11 @@ function runPackageBinding(handler: EmacsHandler, binding: unknown): boolean {
  * one of them. A row none of the three answers returns a refusal rather than
  * doing nothing quietly.
  *
+ * The third way searches `codemirrorKeymap`, the same list the surface
+ * installs, so a chord `SUPPRESSED` takes out of CodeMirror's keymap is out of
+ * reach here too. Resolving against the raw keymaps instead let a row reach the
+ * command its own suppression exists to keep away (`iss-2609100519025566`).
+ *
  * Only an `editor` row is run. The last two ways resolve a row *by chord*, and
  * a chord is only unique inside a scope: `Return` is "Open the chapter here"
  * in the tree and a newline in the text, so running a `sidebar` row here would
@@ -682,13 +870,11 @@ export function runBinding(view: EditorView, id: string): string | null {
     if (runPackageBinding(handler, emacsKeys[spec])) return null;
   }
 
-  for (const keymap of [defaultKeymap, historyKeymap, searchKeymap]) {
-    for (const entry of keymap) {
-      const spec = entry.mac ?? entry.key;
-      if (spec === undefined) continue;
-      if (!chords.includes(canonicalChord(fromKeymapSpec(spec)))) continue;
-      if (entry.run?.(view)) return null;
-    }
+  for (const entry of codemirrorKeymap()) {
+    const spec = entry.mac ?? entry.key;
+    if (spec === undefined) continue;
+    if (!chords.includes(canonicalChord(fromKeymapSpec(spec)))) continue;
+    if (entry.run?.(view)) return null;
   }
   return `${binding.label} did nothing here`;
 }

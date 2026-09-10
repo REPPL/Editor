@@ -170,6 +170,26 @@ describe("the keys panel", () => {
     expect(chords?.textContent).toContain("C-x C-s");
   });
 
+  it("lists F1 on the keys-panel row and C-h on the prefix-help row", () => {
+    const overlay = openKeysPanel();
+    const panel = overlay.element.querySelector<HTMLElement>(
+      '[data-binding="keys-panel"]',
+    );
+    const panelChords = panel?.nextElementSibling?.textContent ?? "";
+    for (const chord of bindingById("keys-panel")?.chords ?? []) {
+      expect(panelChords, chord).toContain(chord);
+    }
+    expect(panelChords).toContain("F1");
+
+    // And the overlay's own row, which says it is what follows a prefix rather
+    // than a chord to press on its own (`itd-2609091722353594`).
+    const help = overlay.element.querySelector<HTMLElement>(
+      '[data-binding="prefix-help"]',
+    );
+    expect(help?.textContent).toContain("What can follow this prefix");
+    expect(help?.nextElementSibling?.textContent).toContain("C-h");
+  });
+
   it("renders a row added to the table without a second edit", () => {
     // The panel reads `BINDINGS` at open time, so a row that exists in the
     // table is a row on screen: nothing here enumerates actions of its own.

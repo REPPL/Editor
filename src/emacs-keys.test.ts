@@ -17,7 +17,7 @@ import { defaultKeymap, historyKeymap } from "@codemirror/commands";
 import { searchKeymap, searchPanelOpen } from "@codemirror/search";
 import { EditorSelection } from "@codemirror/state";
 import { EmacsHandler, emacsKeys } from "@replit/codemirror-emacs";
-import type { EditorView } from "@codemirror/view";
+import type { EditorView, KeyBinding } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp, type App, type AppServices } from "./app";
@@ -29,9 +29,12 @@ import {
   lineSeparatorOf,
 } from "./editor";
 import {
+  NO_REGION_TO_CHANGE,
+  codemirrorKeymap,
   emacsAnsweredChords,
   emacsStatus,
   packageKeymapInstalled,
+  runBinding,
   toPackageChord,
 } from "./emacs";
 import {
@@ -44,12 +47,17 @@ import {
   chordIndex,
   chordIndexIn,
   fromKeymapSpec,
+  isSuppressed,
+  isSuppressedIn,
   keymapChords,
   readingBindings,
   scopeOf,
 } from "./keys";
 import { installKeyLog } from "./keyspike";
 import { createModeline } from "./modeline";
+import { completionsUnder } from "./prefix-help";
+import { MODELINE_BUDGET } from "./prose";
+import { setTableAlignment, tableAlignmentOn } from "./tables";
 
 /** A document with enough shape for movement chords to be visible. */
 const SAMPLE = [
@@ -278,6 +286,29 @@ function place(view: EditorView, at: number): void {
   view.dispatch({ selection: EditorSelection.cursor(at) });
 }
 
+/**
+ * Close whatever overlay holds the keyboard, on the table's own cancel chord.
+ *
+ * At the document, because that is where an overlay holding the keyboard hears
+ * a key: dispatching at the editing surface would be read by the overlay
+ * first anyway, and this says which of the two the test means.
+ */
+function escapeOverlay(): void {
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Escape",
+      code: "Escape",
+      bubbles: true,
+      cancelable: true,
+    }),
+  );
+}
+
+/** The rows the editing surface can run, which is what it offers the overlay. */
+const EDITOR_IDS: readonly string[] = BINDINGS.filter(
+  (binding) => scopeOf(binding) === "editor",
+).map((binding) => binding.id);
+
 describe("the binding table", () => {
   it("gives every action an id, a label, and at least one chord", () => {
     for (const binding of BINDINGS) {
@@ -354,29 +385,68 @@ describe("the binding table", () => {
     expect(chordIndexIn("editor").has("C-n")).toBe(true);
     expect(chordIndexIn("sidebar").has("C-n")).toBe(true);
 
-    // `other-window` is the one row every pane answers — the reader in
-    // `src/focus.ts` runs it from the tree and from a panel as well as from
-    // the text — so its chords are the one place where per-scope uniqueness
-    // is not enough: no row in any scope may share them.
-    const cycle = bindingById("other-window");
-    expect(cycle?.chords).toEqual(["C-x o"]);
-    for (const chord of cycle?.chords ?? []) {
-      const key = canonicalChord(chord);
-      const claimants = BINDINGS.filter((binding) =>
-        binding.chords.map(canonicalChord).includes(key),
-      ).map((binding) => binding.id);
-      expect(claimants, key).toEqual(["other-window"]);
-      // And it is reachable from the text, which is where the cycle starts.
-      expect(chordIndexIn("editor").has(key)).toBe(true);
+    // Two rows are answered by every pane — the reader in `src/focus.ts`
+    // runs them from the tree and from a panel as well as from the text — so
+    // their chords are the place where per-scope uniqueness is not enough:
+    // no row in any scope may share them. `other-window` is the chord that
+    // leaves a pane; `toggle-sidebar` is the chord that shows and hides the
+    // tree from wherever the keyboard is (`itd-2609091722296239`).
+    const everywhere: Record<string, readonly string[]> = {
+      "other-window": ["C-x o"],
+      "toggle-sidebar": ["F2", "C-x C-b"],
+    };
+    for (const [id, expected] of Object.entries(everywhere)) {
+      const row = bindingById(id);
+      expect(row?.chords, id).toEqual(expected);
+      for (const chord of row?.chords ?? []) {
+        const key = canonicalChord(chord);
+        const claimants = BINDINGS.filter((binding) =>
+          binding.chords.map(canonicalChord).includes(key),
+        ).map((binding) => binding.id);
+        expect(claimants, key).toEqual([id]);
+        // And each is reachable from the text, which is where both start.
+        expect(chordIndexIn("editor").has(key)).toBe(true);
+      }
     }
+  });
+
+  it("gives the region case changes one chord each, in opposite directions", () => {
+    // `C-x C-l` is Emacs's `downcase-region` and carries its own row: the
+    // package binds it to the same upcase `C-x C-u` carries, and the table
+    // inherited the conflation (`iss-2609091729471352`).
+    const up = bindingById("upcase-region");
+    const down = bindingById("downcase-region");
+    expect(up?.chords).toEqual(["C-x C-u"]);
+    expect(down?.chords).toEqual(["C-x C-l"]);
+    expect(down?.label).toBe("Lower-case the region");
+    expect(down?.group).toBe(up?.group);
+    expect(down?.owner).toBe(up?.owner);
+    expect(emacsAnsweredChords().has("C-x C-u")).toBe(true);
+    expect(emacsAnsweredChords().has("C-x C-l")).toBe(true);
   });
 
   it("suppresses a chord instead of listing it, never both", () => {
     const listed = chordIndex();
-    for (const { chord, why } of SUPPRESSED) {
+    // `C-h` is the one chord that is both, and it is both for two different
+    // keymaps. It is taken out of CodeMirror's so that delete-backward cannot
+    // answer it, and it is a row because the Emacs layer answers it after a
+    // prefix (`itd-2609091722353594`). Every other entry here is a chord
+    // Editor hands back to the browser, and the sweep below still holds them
+    // to the rule — including the direction that would let a typo add a
+    // second name to this set unnoticed.
+    const ANSWERED_ELSEWHERE = new Set(["C-h"]);
+    for (const { chord, where, why } of SUPPRESSED) {
       expect(why.length).toBeGreaterThan(0);
+      if (ANSWERED_ELSEWHERE.has(chord)) {
+        expect(where).toBe("codemirror");
+        expect(listed.has(canonicalChord(chord))).toBe(true);
+        continue;
+      }
       expect(listed.has(canonicalChord(chord))).toBe(false);
     }
+    expect(
+      [...ANSWERED_ELSEWHERE].every((chord) => isSuppressed(chord)),
+    ).toBe(true);
   });
 
   it("reserves the chords other specs will wire, and answers none of them", () => {
@@ -718,6 +788,11 @@ describe("the Emacs keymap inside CodeMirror", () => {
     expect(view.state.doc.line(1).text).toContain("alice");
   });
 
+  // The region case changes are pressed under "Editor's own chords" below,
+  // over a mounted application: the mechanism is this layer's, and the refusal
+  // with no region is announced in the modeline, which is the application's
+  // (`iss-2609091920011632`).
+
   it("claims every step of every modified chord the page owns", () => {
     // "The page owns it" means the Emacs layer answers it: the package's own
     // bindings plus the ones Editor adds through the same handler. A chord
@@ -861,9 +936,17 @@ describe("cancelling", () => {
 /**
  * A chapter written to be hard on anything that reads and writes it.
  *
- * A 544-character line, a ragged table, an HTML comment, a fenced div, tabs,
+ * A 544-character line, a ragged table, a well-formed table that is nowhere
+ * near aligned and holds an escaped pipe, an HTML comment, a fenced div, tabs,
  * trailing whitespace, and no trailing newline. Nothing here is exotic; every
  * one of them is something an author's real chapter carries.
+ *
+ * The two tables are what hold the seventh criterion of
+ * `itd-2609061653559060`: table alignment rides on the author's own edit and on
+ * nothing else, so a chapter opened, moved through and saved with nothing typed
+ * comes back byte for byte, ragged tables and all. The second table is
+ * well-formed and misaligned on purpose — the ragged one would be refused
+ * whatever ran over it, and this one would not.
  */
 const HAZARDOUS = [
   "# A hazardous chapter",
@@ -876,6 +959,10 @@ const HAZARDOUS = [
   "|---|:--|--:|",
   "| Alice |a|",
   "| Bob | a longer cell that makes the table ragged | x | y |",
+  "",
+  "| Cell | Escaped |",
+  "|-|---:|",
+  "| a |    x \\| y |",
   "",
   "<!-- pagebreak -->",
   "",
@@ -957,6 +1044,53 @@ describe("byte fidelity", () => {
     }
     expect(documentText(view)).toBe(HAZARDOUS);
     view.destroy();
+    host.remove();
+  });
+});
+
+describe("the table-alignment mode switch (map #39)", () => {
+  it("announces the mode on every press of C-c C-t", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const app = createApp(host, {
+      chooseFolder: () => Promise.resolve(null),
+      openFolder: (path) => Promise.resolve(documentTree(path, [])),
+      readChapter: () => Promise.resolve(HAZARDOUS),
+      writeChapter: () => Promise.resolve(),
+      confirmDiscard: () => Promise.resolve(true),
+    });
+    const only = chapter("01-hazard.md", "hazard", "document/01-hazard.md");
+    await app.openChapter(only);
+    const saying = (): string =>
+      app.modeline.element.querySelector(".modeline-message")?.textContent ?? "";
+
+    // The chord reaches its command through the row's own place in
+    // `APP_COMMAND_IDS`, not through a second copy of the chord, and the
+    // message reaches the modeline through the application's own `announce`.
+    const chords = bindingById("toggle-table-alignment")?.chords ?? [];
+    expect(chords).toEqual(["C-c C-t"]);
+    expect(tableAlignmentOn()).toBe(true);
+
+    expect(pressSequence(app.view, "C-c C-t")).toBe(true);
+    expect(tableAlignmentOn()).toBe(false);
+    expect(saying()).toBe("Table alignment off");
+    // The press itself realigns nothing: it writes a boolean, and the chapter
+    // is exactly what it was.
+    expect(documentText(app.view)).toBe(HAZARDOUS);
+
+    expect(pressSequence(app.view, "C-c C-t")).toBe(true);
+    expect(tableAlignmentOn()).toBe(true);
+    expect(saying()).toBe("Table alignment on");
+    expect(documentText(app.view)).toBe(HAZARDOUS);
+
+    // Both messages fit the modeline's budget, as every announcement must.
+    for (const message of ["Table alignment on", "Table alignment off"]) {
+      expect(message.length, message).toBeLessThanOrEqual(MODELINE_BUDGET);
+      expect(message.endsWith("."), message).toBe(false);
+    }
+
+    setTableAlignment(true);
+    app.destroy();
     host.remove();
   });
 });
@@ -1202,7 +1336,94 @@ describe("Editor's own chords", () => {
     expect(chooseCalls).toBe(1);
   });
 
-  it("opens the keys panel on C-h b and on C-x ?", () => {
+  it("upper-cases a region on C-x C-u and lower-cases one on C-x C-l", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    // The package binds both chords to the identical upcase call
+    // (`iss-2609091729471352`), so this is where the two part company: the
+    // same region, twice, and the second run must not repeat the first.
+    // Editor's own command answers both chords, so neither is left to the
+    // package's binding for it.
+    expect(EmacsHandler.commands["editor:upcase-region"]).toBeDefined();
+    expect(EmacsHandler.commands["editor:downcase-region"]).toBeDefined();
+
+    const from = app.view.state.doc.line(1).from + 2;
+    const to = app.view.state.doc.line(1).to;
+    const select = (): void => {
+      app.view.dispatch({ selection: EditorSelection.range(from, to) });
+    };
+
+    select();
+    expect(pressSequence(app.view, "C-x C-u")).toBe(true);
+    expect(app.view.state.doc.line(1).text).toBe("# ALICE AND BOB");
+
+    select();
+    expect(pressSequence(app.view, "C-x C-l")).toBe(true);
+    expect(app.view.state.doc.line(1).text).toBe("# alice and bob");
+    expect(app.view.state.doc.line(1).text).not.toBe("# ALICE AND BOB");
+  });
+
+  it("refuses either region chord with no region, in the modeline", async () => {
+    // Both chords are claimed either way, so with the mark unset the silence
+    // was a claim with nothing behind it: GNU Emacs signals
+    // `mark-is-not-active` here (`iss-2609091920011632`).
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    const said = (): string => app.modeline.element.textContent ?? "";
+    // House voice: a modeline message ends in no full stop.
+    expect(NO_REGION_TO_CHANGE.endsWith(".")).toBe(false);
+
+    place(app.view, 2);
+    expect(pressSequence(app.view, "C-x C-u")).toBe(true);
+    expect(documentText(app.view)).toBe(SAMPLE);
+    expect(app.view.state.selection.main.head).toBe(2);
+    expect(said()).toContain(NO_REGION_TO_CHANGE);
+
+    // A run with a region says nothing, which is how the second refusal below
+    // is a refusal of its own rather than the first one still on screen.
+    app.view.dispatch({
+      selection: EditorSelection.range(
+        app.view.state.doc.line(1).from + 2,
+        app.view.state.doc.line(1).to,
+      ),
+    });
+    expect(pressSequence(app.view, "C-x C-u")).toBe(true);
+    expect(app.view.state.doc.line(1).text).toBe("# ALICE AND BOB");
+    expect(said()).not.toContain(NO_REGION_TO_CHANGE);
+
+    place(app.view, 2);
+    expect(pressSequence(app.view, "C-x C-l")).toBe(true);
+    expect(app.view.state.doc.line(1).text).toBe("# ALICE AND BOB");
+    expect(said()).toContain(NO_REGION_TO_CHANGE);
+  });
+
+  it("keeps a row's own refusal on screen when the prefix overlay ran it", async () => {
+    // The overlay's wiring announced whatever `runBinding` returned, and an
+    // application row announces its own refusal and then returns null — so the
+    // empty string wiped the message the row had just put up
+    // (`iss-2609100543005984`). Reached through the overlay rather than the
+    // chord, because the chord route never had the fault.
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    const said = (): string => app.modeline.element.textContent ?? "";
+
+    place(app.view, 2);
+    // `C-x` opens the prefix, `C-h` the overlay over it, `C-u` completes
+    // `C-x C-u` from inside it.
+    expect(pressSequence(app.view, "C-x")).toBe(true);
+    expect(pressSequence(app.view, "C-h")).toBe(true);
+    expect(document.querySelector(".prefix-help")).not.toBeNull();
+    expect(pressSequence(app.view, "C-u")).toBe(true);
+
+    expect(documentText(app.view)).toBe(SAMPLE);
+    expect(said()).toContain(NO_REGION_TO_CHANGE);
+  });
+
+  it("opens the keys panel on C-h b, on C-x ? and on F1", () => {
+    // Every chord the row carries, read off the row: `F1` is the third
+    // (`itd-2609091722353594`), and it reaches the panel from the editing
+    // surface exactly where the other two do.
+    expect(bindingById("keys-panel")?.chords).toContain("F1");
     for (const chord of bindingById("keys-panel")?.chords ?? []) {
       expect(pressSequence(app.view, chord), chord).toBe(true);
       const panel = document.querySelector(".keys-panel");
@@ -1218,6 +1439,104 @@ describe("Editor's own chords", () => {
       );
       expect(document.querySelector(".keys-panel")).toBeNull();
     }
+  });
+
+  // The prefix overlay, reached through a real editing surface
+  // (`itd-2609091722353594`). Every one of these presses the chords rather
+  // than calling the module, because the whole of what the guard in
+  // `emacs.ts` adds is that the key is caught while the package's own chain is
+  // still live — a test that called `openPrefixHelp` would prove none of it.
+
+  it("opens the prefix overlay on C-h after C-x, listing every chord under it with its label", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    const before = documentText(app.view);
+
+    expect(pressSequence(app.view, "C-x")).toBe(true);
+    expect(emacsStatus(app.view).prefix).toBe("C-x");
+    expect(press(app.view, "C-h")).toBe(true);
+
+    const overlay = document.querySelector<HTMLElement>(".prefix-help");
+    expect(overlay).not.toBeNull();
+    const lines = overlay?.querySelectorAll<HTMLElement>(".keys-row") ?? [];
+    expect(lines.length).toBe(completionsUnder("C-x", EDITOR_IDS).length);
+
+    const save = overlay?.querySelector<HTMLElement>(
+      '.keys-row[data-chord="C-x C-s"]',
+    );
+    expect(save?.textContent).toContain("Save the chapter");
+    expect(save?.nextElementSibling?.querySelector("kbd")?.textContent).toBe(
+      "C-s",
+    );
+
+    // Nothing was inserted in the chapter, and the prefix is spent rather than
+    // left behind under an overlay that has taken over reading it.
+    expect(documentText(app.view)).toBe(before);
+    expect(emacsStatus(app.view).prefix).toBe("");
+  });
+
+  it("runs the chord typed into the prefix overlay and closes it", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    expect(pressSequence(app.view, "C-x")).toBe(true);
+    expect(press(app.view, "C-h")).toBe(true);
+    expect(press(app.view, "C-s")).toBe(true);
+    await Promise.resolve();
+    expect(written).toEqual({ path: "document/01-alice.md", text: SAMPLE });
+    expect(document.querySelector(".prefix-help")).toBeNull();
+    expect(emacsStatus(app.view).prefix).toBe("");
+  });
+
+  it("leaves no prefix behind when C-g closes the prefix overlay", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    const before = documentText(app.view);
+    expect(pressSequence(app.view, "C-x")).toBe(true);
+    expect(press(app.view, "C-h")).toBe(true);
+    expect(press(app.view, "C-g")).toBe(true);
+    expect(document.querySelector(".prefix-help")).toBeNull();
+    // Nothing to cancel: the prefix was spent when the overlay opened.
+    expect(emacsStatus(app.view).prefix).toBe("");
+    expect(documentText(app.view)).toBe(before);
+    expect(written).toBeNull();
+  });
+
+  it("lists only the rows under C-x n when C-h follows the second step", async () => {
+    await app.openFolder("document");
+    await app.openChapter(tree.root.chapters[0]!);
+    expect(pressSequence(app.view, "C-x n")).toBe(true);
+    expect(emacsStatus(app.view).prefix).toBe("C-x n");
+    expect(press(app.view, "C-h")).toBe(true);
+
+    const overlay = document.querySelector<HTMLElement>(".prefix-help");
+    const lines = [...(overlay?.querySelectorAll<HTMLElement>(".keys-row") ?? [])];
+    expect(lines.length).toBe(2);
+    expect(lines.map((line) => line.textContent)).toEqual([
+      "Narrow to this section",
+      "Widen",
+    ]);
+    expect(
+      overlay?.querySelector('.keys-row[data-chord="C-x C-s"]'),
+    ).toBeNull();
+  });
+
+  it("leaves a bare C-h the prefix it already was", () => {
+    // The guard's `if (!chain) return null` is the whole of this: with nothing
+    // half-typed, `C-h` is the prefix the package holds it as, and the two
+    // chords under it complete exactly as they did.
+    expect(press(app.view, "C-h")).toBe(true);
+    expect(document.querySelector(".prefix-help")).toBeNull();
+    expect(emacsStatus(app.view).prefix).toBe("C-h");
+
+    expect(press(app.view, "b")).toBe(true);
+    expect(document.querySelector(".keys-panel")).not.toBeNull();
+    escapeOverlay();
+    expect(document.querySelector(".keys-panel")).toBeNull();
+
+    expect(press(app.view, "C-h")).toBe(true);
+    expect(press(app.view, "k")).toBe(true);
+    expect(document.querySelector(".prompt")).not.toBeNull();
+    escapeOverlay();
   });
 
   it("opens the insert palette on C-c i", async () => {
@@ -1239,9 +1558,23 @@ describe("Editor's own chords", () => {
   });
 
   it("shows and hides the sidebar on C-x C-b", () => {
+    // Map #1's own chord, still answered from the text. It is no longer a
+    // toggle bound only here: it is the second chord on the row `F2` names,
+    // and `src/focus.ts` answers both from a pane the surface cannot hear
+    // (`itd-2609091722296239`, which amends map #36's fourth criterion).
     expect(app.sidebar.element.dataset["open"]).toBe("yes");
     expect(pressSequence(app.view, "C-x C-b")).toBe(true);
     expect(app.sidebar.element.dataset["open"]).toBe("no");
+    expect(pressSequence(app.view, "C-x C-b")).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
+  });
+
+  it("shows and hides the sidebar on F2 as well", () => {
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
+    expect(pressSequence(app.view, "F2")).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("no");
+    expect(pressSequence(app.view, "F2")).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
   });
 
   it("reloads the document on C-x C-r", async () => {
@@ -1643,6 +1976,112 @@ describe("Editor's own chords", () => {
     expect(other.modeline.element.textContent).toContain("1 entries unreadable");
     other.destroy();
     otherHost.remove();
+  });
+});
+
+/**
+ * One answer to "may CodeMirror answer this chord", for the keyboard and for
+ * the palette.
+ *
+ * `runBinding` resolved a row against the three raw keymaps while the editing
+ * surface installed them filtered, so a row whose chord `SUPPRESSED` takes out
+ * of CodeMirror's keymap could still reach the command the suppression exists
+ * to keep away (`iss-2609100519025566`). Both readers now share
+ * `codemirrorKeymap`, and these three tests hold the asymmetry closed from
+ * both sides: the suppressed chord is out of reach, and nothing else is.
+ */
+describe("suppression, from the keyboard and from M-x", () => {
+  let host: HTMLElement;
+  let view: EditorView;
+
+  /** The three keymaps as their packages ship them, unfiltered. */
+  const raw: readonly KeyBinding[] = [
+    ...defaultKeymap,
+    ...historyKeymap,
+    ...searchKeymap,
+  ];
+
+  /** Whether a keymap entry is the one `runBinding` would resolve a row by. */
+  const answers = (entry: KeyBinding, chords: readonly string[]): boolean => {
+    const spec = entry.mac ?? entry.key;
+    if (spec === undefined) return false;
+    return chords.includes(canonicalChord(fromKeymapSpec(spec)));
+  };
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    view = createEditor(host, SAMPLE);
+  });
+
+  afterEach(() => {
+    view.destroy();
+    host.remove();
+  });
+
+  it("refuses a row rather than reaching the command its chord is suppressed for", () => {
+    // `prefix-help` carries `C-h`, suppressed in CodeMirror's keymap precisely
+    // so that `defaultKeymap`'s `Ctrl-h` — delete-backward — cannot answer it.
+    // The row resolves at `runBinding`'s first step today, through the
+    // editor-owned command registered for it, so the third step is reached
+    // only with that command out of the way. Taking it away is what puts the
+    // suppression itself under test rather than the registration that happens
+    // to shadow it: the next row to carry a suppressed chord will have no such
+    // shadow.
+    const row = bindingById("prefix-help");
+    expect(row?.chords).toEqual(["C-h"]);
+    expect(isSuppressedIn("C-h", "codemirror")).toBe(true);
+
+    const own = EmacsHandler.commands["editor:prefix-help"];
+    expect(own).toBeDefined();
+    delete EmacsHandler.commands["editor:prefix-help"];
+    try {
+      place(view, 2);
+      const said = runBinding(view, "prefix-help");
+      expect(documentText(view)).toBe(SAMPLE);
+      expect(view.state.selection.main.head).toBe(2);
+      expect(said).toBe("What can follow this prefix did nothing here");
+    } finally {
+      EmacsHandler.commands["editor:prefix-help"] = own!;
+    }
+  });
+
+  it("takes only the suppressed chords out of CodeMirror's own keymaps", () => {
+    const kept = codemirrorKeymap();
+    const dropped = raw.filter((entry) => !kept.includes(entry));
+    // Worth nothing if it dropped nothing.
+    expect(dropped.length).toBeGreaterThan(0);
+    for (const entry of dropped) {
+      const spellings = [entry.mac, entry.key].filter(
+        (spec): spec is string => spec !== undefined,
+      );
+      expect(
+        spellings.some((spec) =>
+          isSuppressedIn(fromKeymapSpec(spec), "codemirror"),
+        ),
+        spellings.join(" / "),
+      ).toBe(true);
+    }
+  });
+
+  it("leaves every other row resolving through the keymap loop exactly as before", () => {
+    const kept = codemirrorKeymap();
+    let reached = 0;
+    for (const binding of BINDINGS.filter(
+      (row) => scopeOf(row) === "editor",
+    )) {
+      const chords = binding.chords.map(canonicalChord);
+      if (chords.some((chord) => isSuppressedIn(chord, "codemirror"))) continue;
+      const before = raw.filter((entry) => answers(entry, chords));
+      const after = kept.filter((entry) => answers(entry, chords));
+      expect(after, binding.id).toEqual(before);
+      if (after.length > 0) reached += 1;
+    }
+    // Rows CodeMirror's keymaps really do answer, so the sweep above is over
+    // something. They resolve at an earlier step where the Emacs layer or
+    // Editor claims the chord; what matters here is that the loop still finds
+    // for them what it always found.
+    expect(reached).toBeGreaterThan(0);
   });
 });
 

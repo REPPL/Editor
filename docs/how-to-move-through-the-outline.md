@@ -84,8 +84,11 @@ Markdown mode's own `C-c C-l` already publishes the document (see
 
 Press `C-x b` and type a few letters of a chapter's title: a filterable list
 opens, the same list the sidebar draws from, and choosing one opens it with
-the cursor where you last left it. `C-x C-b` still shows or hides the
-sidebar itself, which is the tier-two vocabulary's chapter list.
+the cursor where you last left it. `C-x C-b` shows the chapter list itself —
+the sidebar — the way Emacs's `list-buffers` sits beside `switch-to-buffer`;
+`F2` is the same row's first chord, and either hides the tree again on a
+second press (see
+[Find and change the keys](how-to-find-and-change-the-keys.md)).
 
 Press `C-x C-k` to close the open chapter. With nothing unsaved, the window
 returns to no chapter open and the sidebar and the folder stay exactly

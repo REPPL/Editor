@@ -83,7 +83,18 @@ export interface Sidebar {
   expansion(): ReadonlySet<string>;
   /** Restore an expansion set taken before a reload. */
   setExpansion(ids: Iterable<string>): void;
-  /** Whether the drawer is open. Always true beside a wide window. */
+  /**
+   * Whether the drawer is shown.
+   *
+   * `setOpen` writes it at every width, and this is the one place the state
+   * is kept. What is drawn follows it at every width too: `style.css` honours
+   * `data-open="no"` outside the drawer's own media query, so a false here
+   * takes the drawer off a narrow window and the column off a wide one
+   * (`iss-2609091754178640`). It is load-bearing for the pane cycle, which
+   * visits panes that are shown (`src/focus.ts`, `itd-2609091722353838`) —
+   * and which asks a separate question about where the keyboard actually is,
+   * for exactly that reason.
+   */
   readonly open: boolean;
   /** Open or close the drawer. */
   setOpen(open: boolean): void;
@@ -99,19 +110,32 @@ export interface Sidebar {
   readonly cursor: number;
   /** Move the cursor, clamped to the ends. A book has a shape; it does not wrap. */
   setCursor(index: number): void;
-  /** Take the keyboard: open the drawer, put the cursor somewhere it can start. */
+  /**
+   * Take the keyboard, putting the cursor somewhere it can start.
+   *
+   * Shows nothing. The drawer's shown-or-hidden state is the caller's, and
+   * the pane cycle only ever hands the keyboard to a tree already shown
+   * (`itd-2609091722353838`); `toggle-sidebar` on `F2` is what shows one
+   * (`itd-2609091722296239`).
+   */
   takeFocus(): void;
   /**
    * Notice that the keyboard arrived by a route the tree did not drive.
    *
    * A click on a row lands on the row's own button, so the keyboard is in the
    * tree without `takeFocus` having put it there: the cursor mark and the
-   * modeline have to agree with that, and moving the focus again — or opening
-   * a drawer nobody asked to open — would be answering a gesture Alice did
+   * modeline have to agree with that, and moving the focus again — or showing
+   * a drawer nobody asked to see — would be answering a gesture Alice did
    * not make.
    */
   adoptFocus(): void;
-  /** Give the keyboard back, closing the drawer only if `takeFocus` opened it. */
+  /**
+   * Give the keyboard back.
+   *
+   * Hides nothing, for the same reason `takeFocus` shows nothing: leaving a
+   * pane is not hiding it. `sidebar-hide` and `toggle-sidebar` are the rows
+   * that hide the drawer, and they call `setOpen` themselves.
+   */
   releaseFocus(): void;
   /** Whether the tree holds the keyboard. */
   readonly focused: boolean;
@@ -234,8 +258,6 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
    */
   let cursorKey: string | null = null;
   let focused = false;
-  /** Whether `takeFocus` opened the drawer, and so whether it may close it. */
-  let openedForFocus = false;
   let tree: DocumentTree | null = null;
   let outlines: ReadonlyMap<string, Outline> = new Map();
   let facts: ReadonlyMap<string, ChapterFacts> = new Map();
@@ -654,12 +676,13 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
      * heading inside it she last opened — because starting anywhere else asks
      * her to find her place again. With nothing open it starts on the first
      * row, the only row it can name without guessing.
+     *
+     * The drawer is not shown on the way in. It used to be, which made
+     * `C-x o` a focus move and a layout change wearing one chord; the cycle
+     * now visits only panes that are already shown, and `F2` is what shows a
+     * hidden one (`itd-2609091722353838`, `itd-2609091722296239`).
      */
     takeFocus() {
-      if (!open) {
-        openedForFocus = true;
-        this.setOpen(true);
-      }
       const start = revealSelected();
       if (start !== null && rowList.some((row) => row.key === start)) {
         cursorKey = start;
@@ -680,10 +703,14 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
     /**
      * Notice the keyboard already being here.
      *
-     * The drawer is open — the keyboard could not have landed in it otherwise
-     * — and the focus is on whatever Alice pointed at, so neither is touched.
-     * A cursor is placed only where there is none, so the row she clicked is
-     * not overruled by the one that was selected.
+     * Neither the focus nor the drawer is touched. The focus is on whatever
+     * Alice pointed at, or wherever Tab left it. The drawer may be shown or
+     * hidden — a hidden tree is off the page at every width now
+     * (`iss-2609091754178640`), but the keyboard can still be inside one the
+     * state calls hidden, and showing a tree nobody asked to see would be
+     * answering a gesture she did not make. A cursor is placed only where
+     * there is none, so the row she clicked is not overruled by the one that
+     * was selected.
      */
     adoptFocus() {
       const active = element.ownerDocument.activeElement;
@@ -698,14 +725,17 @@ export function createSidebar(hooks: SidebarHooks): Sidebar {
       paintCursor();
     },
 
+    /**
+     * Give the keyboard back.
+     *
+     * The cursor mark goes with it, and nothing else moves: the drawer is
+     * left exactly as shown or as hidden as it was, because leaving a pane
+     * is not hiding it (`itd-2609091722353838`).
+     */
     releaseFocus() {
       focused = false;
       element.dataset["focused"] = "no";
       element.blur();
-      if (openedForFocus) {
-        openedForFocus = false;
-        this.setOpen(false);
-      }
     },
 
     expandAtCursor() {

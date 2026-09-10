@@ -629,11 +629,23 @@ export const BINDINGS: readonly Binding[] = [
     owner: "codemirror",
   },
   {
+    // The pair of region case changes. `C-x C-l` is Emacs's `downcase-region`
+    // and belongs to the row below: the package binds it to the same upcase
+    // call `C-x C-u` carries, so this row inherited a chord that lowered
+    // nothing (`iss-2609091729471352`). Both are answered by Editor's own
+    // command now — see `registerEditorChords` in `src/emacs.ts`.
     id: "upcase-region",
     label: "Upper-case the region",
-    chords: ["C-x C-u", "C-x C-l"],
+    chords: ["C-x C-u"],
     group: "editing",
-    owner: "keymap",
+    owner: "editor",
+  },
+  {
+    id: "downcase-region",
+    label: "Lower-case the region",
+    chords: ["C-x C-l"],
+    group: "editing",
+    owner: "editor",
   },
   {
     id: "insert-blank-line",
@@ -752,9 +764,18 @@ export const BINDINGS: readonly Binding[] = [
     // `C-h b` is `describe-bindings`. WebKit may read a bare `C-h` as a
     // backspace in editable content, so `C-x ?` — written from the physical
     // key as `C-x S-/` — sits in the same row and costs nothing if it does.
+    //
+    // `F1` is the third chord, the key Emacs has given help on for as long as
+    // it has had one, aliased there to the whole `C-h` prefix map and here to
+    // the one thing that map is worth reaching: the panel that lists the
+    // table (`itd-2609091722353594`). It is a leaf and never a prefix, so
+    // `F1 b` is not a sequence, and it reaches the panel from the editing
+    // surface and from nowhere else — exactly where the row's other two
+    // chords reach it. Adding the row to what every pane answers would have
+    // widened `C-h b` and `C-x S-/` with it, which the maintainer declined.
     id: "keys-panel",
     label: "Show the keys panel",
-    chords: ["C-h b", "C-x S-/"],
+    chords: ["C-h b", "C-x S-/", "F1"],
     group: "control",
     owner: "editor",
   },
@@ -766,9 +787,40 @@ export const BINDINGS: readonly Binding[] = [
     owner: "editor",
   },
   {
+    // A mode switch, not a command: it never rewrites a byte, and there is
+    // nothing to press that aligns a table (`itd-2609061653559060`). `C-c C-t`
+    // is a complete two-step chord under the `C-c` prefix nineteen other rows
+    // already share, and it sits under no existing prefix — `C-c C-s` is the
+    // bold and italic prefix and this is not beneath it — so it neither
+    // creates a leaf under a prefix nor turns a prefix into a leaf, which is
+    // the hazard `iss-2609061510051784` recorded. The vendored keymap claims
+    // nothing in the `C-c` space at all.
+    id: "toggle-table-alignment",
+    label: "Align tables as I type",
+    chords: ["C-c C-t"],
+    group: "editing",
+    owner: "editor",
+  },
+  {
+    // `F2` first, because it is the chord that always works: the row has to
+    // be reachable from every pane, not only from the editing surface, and a
+    // function key is answerable by both readers — the surface's own
+    // CodeMirror extension and `src/focus.ts`'s document-level one — where a
+    // `C-x` sequence bound only in the first is not
+    // (`itd-2609091722296239`). `C-c C-s` is not available for this: it is
+    // already the two-step prefix bold (`C-c C-s b`) and italic
+    // (`C-c C-s i`) sit under (`itd-2609061318091323`), and the vendored
+    // package resolves a prefix the instant a multi-step binding is
+    // registered beneath it, so it can never also be a leaf.
+    //
+    // `C-x C-b` stays, freed from being a toggle only the text could reach,
+    // as Emacs's own `list-buffers` chord pointed at Editor's chapter list —
+    // the tree `C-x b` already searches by name. The divergence is named and
+    // accepted: Emacs's `list-buffers` refreshes a list that never closes,
+    // where a second press here hides the tree.
     id: "toggle-sidebar",
     label: "Show or hide the sidebar",
-    chords: ["C-x C-b"],
+    chords: ["F2", "C-x C-b"],
     group: "document",
     owner: "editor",
   },
@@ -958,6 +1010,22 @@ export const BINDINGS: readonly Binding[] = [
     id: "describe-key",
     label: "Describe the next key",
     chords: ["C-h k"],
+    group: "control",
+    owner: "editor",
+  },
+  {
+    // Emacs's `describe-prefix-bindings`, on demand: with a prefix
+    // half-typed, the help character lists what can follow it
+    // (`itd-2609091722353594`). The chord is a bare `C-h`, and it is
+    // deliberately *not* in `APP_COMMAND_IDS`: binding it in the package
+    // would overwrite the prefix entry `C-h b` and `C-h k` depend on. The
+    // row is answered by the guard in `emacs.ts`'s `handleKeyboard` wrapper
+    // while a chain is live, and by the branch in `src/focus.ts` while that
+    // reader holds a prefix — which is why `C-h` on its own still opens the
+    // `C-h` prefix in the text and still claims nothing at all in the tree.
+    id: "prefix-help",
+    label: "What can follow this prefix",
+    chords: ["C-h"],
     group: "control",
     owner: "editor",
   },
@@ -1239,9 +1307,19 @@ export const SUPPRESSED: readonly Suppression[] = [
     // Taken out of CodeMirror's keymap only: in the Emacs keymap `C-h` is the
     // first step of `C-h b`, and clearing it there would close the keys panel
     // off rather than free the key.
+    //
+    // The one chord that is both suppressed and listed, and it is each for a
+    // different keymap. It is taken out of CodeMirror's so that
+    // delete-backward cannot answer it, and it carries the `prefix-help` row
+    // because the Emacs layer answers it after a prefix
+    // (`itd-2609091722353594`). Every other entry here is a chord Editor
+    // hands back to the browser; this one and `M-s` below are the two that
+    // are not, and this one is the first that is also a row. The invariant
+    // sweep in `emacs-keys.test.ts` names the exception and asserts it in
+    // both directions rather than excusing it.
     chord: "C-h",
     where: "codemirror",
-    why: "the describe-bindings prefix; Backspace deletes backward",
+    why: "the describe-bindings prefix, and the prefix-help row after a prefix; Backspace deletes backward",
   },
   {
     // Not a chord Editor gives back to the browser, the way every other
@@ -1566,9 +1644,11 @@ export function withoutSuppressed<T extends KeymapSpec>(
  * invariant that no two rows share a chord is stated inside a scope, which is
  * what lets `C-n` be next line and next node without either being ambiguous.
  *
- * `other-window` is an editor row that every pane answers, because it is the
- * chord that leaves a pane; it is the one row whose scope is not the whole
- * story, and it collides with nothing in either.
+ * Two editor rows are answered by every pane, because neither is about the
+ * pane it is pressed in: `other-window`, the chord that leaves a pane, and
+ * `toggle-sidebar`, the chord that shows and hides the tree from wherever the
+ * keyboard is (`itd-2609091722296239`). They are the rows whose scope is not
+ * the whole story, and their chords collide with nothing in either scope.
  */
 export type BindingScope = "editor" | "sidebar";
 

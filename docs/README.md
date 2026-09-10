@@ -30,6 +30,10 @@ Task-oriented. Open one when you have something specific to do.
 - [Edit prose with Emacs commands](how-to-edit-prose-with-emacs-commands.md) —
   reflow a paragraph, move by sentence, complete a word from the document, and
   run any command by name from `M-x`.
+- [Write a table](how-to-write-a-table.md) — let the columns square
+  themselves up as you type, the four tables Editor leaves alone, what happens
+  to a wide character and to a long cell, and the chord that turns alignment
+  off for the session.
 - [Move through the outline](how-to-move-through-the-outline.md) — move,
   fold, promote, demote and move a heading, narrow to a section, switch
   chapter by name, and find every line that holds a word.

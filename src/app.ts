@@ -28,11 +28,15 @@ import { createDropRouter, type DropRouter, type DropTargets } from "./drop";
 import { createEditor, documentText, placeCursor, revealLine, setDocument } from "./editor";
 import { createFocusModel, type FocusModel, type PanelFocus } from "./focus";
 import {
+  changeCaseRegion,
   queryReplaceRegex,
   releaseEditorCommands,
+  runBinding,
   setEditorCommands,
   type EditorCommands,
 } from "./emacs";
+import { BINDINGS, scopeOf } from "./keys";
+import { openPrefixHelp, prefixHelpNeedsAPrefix } from "./prefix-help";
 import type {
   Chapter,
   ChapterBatch,
@@ -88,6 +92,7 @@ import {
   widenSection,
 } from "./outline-commands";
 import { createSidebar, type ChapterFacts, type Sidebar } from "./sidebar";
+import { setTableAlignment, tableAlignmentOn } from "./tables";
 import {
   setTextScale,
   textScaleMessage,
@@ -283,6 +288,18 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   let detached = false;
   let message = "";
   /**
+   * How many times the application has said something.
+   *
+   * The modeline's message cell is a live region, and a live region has no way
+   * of its own to tell a redraw carrying the standing message from a second
+   * saying of the same words — a refusal the author has just earned for the
+   * second time running. This counter is the difference: `announce` moves it
+   * and `refresh` alone does not, so the cell is written when the author is
+   * told something and left alone on every other redraw
+   * (`iss-2609100647545513`).
+   */
+  let announcements = 0;
+  /**
    * The bibliography's own read failure, set by the most recent
    * `readSidebarData` and read by whichever caller announces next.
    *
@@ -378,10 +395,35 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     focusEditor: () => {
       view.focus();
     },
+    // The one toggle, reached from a pane the editing surface cannot hear.
+    // The row's other route, from the text, runs the same call below.
+    toggleSidebar: () => {
+      toggleSidebar();
+    },
+    announce: (text) => {
+      announce(text);
+    },
+    // The same overlay the editing surface opens, over the rows this pane
+    // answers and dispatched through this reader's own `run`. The application
+    // adds only what neither reader owns: where it mounts, and how it speaks.
+    prefixHelp: (request) => {
+      openPrefixHelp({ ...request, host: overlayHost, announce });
+    },
     onChange: () => {
       refresh();
     },
   });
+
+  /**
+   * Show or hide the sidebar.
+   *
+   * One command behind both of the row's chords and both of the readers that
+   * answer them (`itd-2609091722296239`): the drawer's shown-or-hidden state
+   * is written in the one place it already lives.
+   */
+  function toggleSidebar(): void {
+    sidebar.toggle();
+  }
 
   const layout = document.createElement("div");
   layout.className = "layout";
@@ -410,6 +452,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       dirty,
       detached,
       message,
+      announcement: announcements,
     });
     if (dirty !== reportedDirty) {
       reportedDirty = dirty;
@@ -419,6 +462,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
 
   function announce(text: string): void {
     message = text;
+    announcements += 1;
     refresh();
   }
 
@@ -853,8 +897,10 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     "insert-palette": () => {
       openPalette(view, { host: overlayHost, announce });
     },
+    // From the text. A pane the editing surface cannot hear reads the same
+    // row for itself, in `src/focus.ts`, and both reach this one command.
     "toggle-sidebar": () => {
-      sidebar.toggle();
+      toggleSidebar();
     },
     "reload-document": () => {
       void app.reload();
@@ -919,11 +965,71 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     "dabbrev-expand": () => {
       prose(() => dabbrevExpand(view));
     },
+
+    // The region case changes. The mechanism is the Emacs layer's, in
+    // `src/emacs.ts`; what the application adds is the one thing the keymap
+    // cannot say for itself — that there was no region to change
+    // (`iss-2609091920011632`) — announced through the same `prose` wrapper
+    // every other refusal over the text goes out on. One helper, both
+    // directions, so the refusal is written once.
+    "upcase-region": () => {
+      prose(() => changeCaseRegion(view, 1));
+    },
+    "downcase-region": () => {
+      prose(() => changeCaseRegion(view, -1));
+    },
+
+    // The table-alignment mode switch (`itd-2609061653559060`). It writes a
+    // boolean and says which mode Alice is now in; it dispatches nothing
+    // against the document, so turning alignment back on leaves every table
+    // exactly as it is until the next edit inside one. Nothing persists it:
+    // the app starts with alignment on, every time (cond-2609091900422614).
+    "toggle-table-alignment": () => {
+      announce(
+        setTableAlignment(!tableAlignmentOn())
+          ? "Table alignment on"
+          : "Table alignment off",
+      );
+    },
+
     "zap-to-char": () => {
       zapToChar(view, { host: overlayHost, announce });
     },
     "describe-key": () => {
       describeKey({ host: overlayHost, announce });
+    },
+    // The prefix overlay (`itd-2609091722353594`). The prefix is handed over
+    // by whichever reader caught the `C-h`: the editing surface's guard in
+    // `src/emacs.ts` gives the chain it was holding, and the pane reader in
+    // `src/focus.ts` reaches this same module through its own hook, with its
+    // own rows and its own dispatch. Two readers, one answer.
+    //
+    // With no prefix — the palette is the one route that reaches the row that
+    // way, over a text with nothing half-typed — the row says so rather than
+    // opening an overlay over nothing.
+    "prefix-help": (prefix) => {
+      if (prefix === undefined || prefix === "") {
+        announce(prefixHelpNeedsAPrefix());
+        return;
+      }
+      openPrefixHelp({
+        prefix,
+        // The rows the text can actually run. Listing one it cannot would
+        // promise a chord that does nothing.
+        ids: BINDINGS.filter((binding) => scopeOf(binding) === "editor").map(
+          (binding) => binding.id,
+        ),
+        host: overlayHost,
+        announce,
+        run: (id) => {
+          // An application row announces its own refusal and then returns
+          // null, so announcing the empty string here would wipe what the row
+          // just said (`iss-2609100543005984`). `src/command-palette.ts`
+          // guards the same call the same way, and for the same reason.
+          const said = runBinding(view, id);
+          if (said !== null && said !== "") announce(said);
+        },
+      });
     },
     "command-palette": () => {
       openCommandPalette(view, { host: overlayHost, announce });

@@ -1037,7 +1037,7 @@ describe("the keyboard arriving on its own", () => {
 });
 
 describe("the drawer", () => {
-  it("opens the drawer with the keyboard and closes it behind Return", async () => {
+  it("shows the drawer with F2, walks into it, and leaves it shown behind Return", async () => {
     await mount();
     // At 820 CSS pixels the sidebar is a drawer. No width is read here: the
     // media query in `style.css` is the only place one appears, and this is
@@ -1045,9 +1045,13 @@ describe("the drawer", () => {
     app.sidebar.setOpen(false);
     expect(app.sidebar.open).toBe(false);
 
-    press(app, "C-x o");
+    // Showing it is `F2`'s job, not the cycle's (`itd-2609091722296239`).
+    press(app, "F2");
     expect(app.sidebar.open).toBe(true);
     expect(app.sidebar.element.dataset["open"]).toBe("yes");
+
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
 
     press(app, "C-n");
     press(app, "Return");
@@ -1055,21 +1059,25 @@ describe("the drawer", () => {
 
     expect(app.chapterPath).toBe(BOB_PATH);
     expect(app.focus.pane).toBe("editor");
-    expect(app.sidebar.open).toBe(false);
-    expect(app.sidebar.element.dataset["open"]).toBe("no");
+    // What was shown when the keyboard walked in is still shown when it walks
+    // out: the cycle moves the keyboard and changes nothing
+    // (`itd-2609091722353838`).
+    expect(app.sidebar.open).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
   });
 
-  it("closes the drawer on cancel having changed nothing", async () => {
+  it("leaves the drawer shown on cancel, having changed nothing", async () => {
     await mount();
     app.sidebar.setOpen(false);
     const before = documentText(app.view);
 
-    press(app, "C-x o");
+    press(app, "F2");
     expect(app.sidebar.open).toBe(true);
+    press(app, "C-x o");
     press(app, "C-n");
     press(app, "C-g");
 
-    expect(app.sidebar.open).toBe(false);
+    expect(app.sidebar.open).toBe(true);
     expect(app.focus.pane).toBe("editor");
     expect(app.chapterPath).toBe(ALICE_PATH);
     expect(documentText(app.view)).toBe(before);
@@ -1083,18 +1091,20 @@ describe("the drawer", () => {
     press(app, "C-x o");
     expect(app.sidebar.open).toBe(true);
     press(app, "C-g");
-    // At 1280 the column does not move: `takeFocus` opened nothing, so
-    // `releaseFocus` closes nothing.
+    // The column does not move: neither `takeFocus` nor `releaseFocus` shows
+    // or hides anything, so a pane the keyboard walks into and out of is left
+    // exactly as it was found (`itd-2609091722353838`).
     expect(app.sidebar.open).toBe(true);
   });
 
   // itd-2609071216221686, map #36: `h` hides the sidebar and hands the
-  // keyboard back, and `C-x o` reaches a hidden sidebar the same way it
-  // reaches a shown one.
+  // keyboard back. The other half of what map #36 shipped — `C-x o` reaching
+  // a hidden sidebar the same way it reaches a shown one — is retired: the
+  // cycle visits panes that are shown (`itd-2609091722353838`), and `F2` is
+  // the chord that shows a hidden one (`itd-2609091722296239`).
 
   it("hides the drawer with h and hands the keyboard back to the text", async () => {
     await mount();
-    app.sidebar.setOpen(false);
     const before = documentText(app.view);
     const line = cursorPosition(app.view).line;
 
@@ -1121,24 +1131,33 @@ describe("the drawer", () => {
     press(app, "h");
 
     // Unlike `sidebar-quit` (see "leaves a sidebar that was already open
-    // exactly as it was", above), `h` always hides, whether or not
-    // `takeFocus` is the one that opened it.
+    // exactly as it was", above), which leaves the drawer as it found it,
+    // `h` hides it: it is a hide, not only a leave.
     expect(app.sidebar.open).toBe(false);
     expect(app.focus.pane).toBe("editor");
   });
 
-  it("shows a hidden sidebar again on C-x o, and moves the keyboard into it", async () => {
+  it("shows a hidden sidebar again on F2, and C-x o then moves the keyboard into it", async () => {
+    // The two chords compose, and neither does the other's job
+    // (`itd-2609091722353838`). As map #36 shipped it, `C-x o` alone showed a
+    // hidden drawer on its way in; that route is retired
+    // (`itd-2609091722296239` amends map #36's third criterion).
     await mount();
     press(app, "C-x o");
     press(app, "h");
     expect(app.sidebar.open).toBe(false);
     expect(app.focus.pane).toBe("editor");
 
-    press(app, "C-x o");
+    press(app, "F2");
     expect(app.sidebar.open).toBe(true);
     expect(app.sidebar.element.dataset["open"]).toBe("yes");
+    // Showing it moved nothing.
+    expect(app.focus.pane).toBe("editor");
+
+    press(app, "C-x o");
     expect(app.focus.pane).toBe("sidebar");
     expect(app.sidebar.focused).toBe(true);
+    expect(app.sidebar.open).toBe(true);
   });
 
   it("leaves h to the text, unclaimed, while the cursor is in the editor", async () => {
@@ -1153,6 +1172,454 @@ describe("the drawer", () => {
     expect(press(app, "h")).toBe(false);
     expect(app.focus.pane).toBe("editor");
     expect(app.sidebar.open).toBe(true);
+  });
+});
+
+// iss-2609091858449023: where the keyboard is, and where the cycle may go,
+// are two questions about the sidebar and not one.
+//
+// A tree that is not shown is off the page at every width, now that
+// `style.css` honours `data-open="no"` outside the drawer's media query
+// (`iss-2609091754178640`). DOM focus can be on a row of one all the same:
+// the state and the focus are written by different hands, and assistive
+// technology routes the keyboard by its own rules. That is why this group
+// builds the state directly, with `setOpen(false)` and a real `focus()` on a
+// row's button, rather than resting on what the stylesheet draws — and why it
+// is untouched by that fix. The model has to name the sidebar then, because
+// the pane it names is the pane
+// whose reader answers: name the editor and `F2`, `C-x C-b`, `C-x o` and `h`
+// have no reader at all, since `onKeydown` returns early on `editor` and
+// CodeMirror's own listener never fires while `contentDOM` does not hold the
+// focus. So `paneOf` asks whether the tree can hold the keyboard; only the
+// cycle asks whether it is shown.
+//
+// Nothing here goes through `press`. That helper aims at
+// `app.view.contentDOM` whenever the model says `editor`, so it answers from
+// the editing surface exactly when the model is wrong, and could never see
+// this. Every chord below is pressed at whatever really has DOM focus.
+
+describe("a tree that is drawn but not shown", () => {
+  /** Put the keyboard on a tree row's own button, the way Tab would. */
+  function tabToFirstRow(): HTMLElement {
+    const button = app.sidebar.element.querySelector<HTMLButtonElement>(
+      ".tree-row .tree-button",
+    );
+    if (button === null) throw new Error("the tree drew no row to focus");
+    button.focus();
+    return button;
+  }
+
+  /** Press one chord where the keyboard is, not where the model thinks it is. */
+  function pressWhereFocusIs(chord: string): boolean {
+    const active =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : document.body;
+    return pressAt(active, chord);
+  }
+
+  /** A hidden drawer with its rows still drawn, and the keyboard on one. */
+  async function keyboardInAHiddenTree(): Promise<HTMLElement> {
+    await mount();
+    app.sidebar.setOpen(false);
+    expect(app.sidebar.open).toBe(false);
+    expect(app.sidebar.rows().length).toBeGreaterThan(0);
+    return tabToFirstRow();
+  }
+
+  it("names the sidebar while the keyboard is on a row of a hidden tree", async () => {
+    const button = await keyboardInAHiddenTree();
+
+    expect(document.activeElement).toBe(button);
+    expect(app.focus.pane).toBe("sidebar");
+    expect(modeline(app)).toContain("[Sidebar]");
+    expect(app.sidebar.focused).toBe(true);
+    // Naming it showed nothing: the model records where the keyboard is and
+    // moves nothing on the page.
+    expect(app.sidebar.open).toBe(false);
+  });
+
+  it("answers h from a hidden tree the keyboard is really in", async () => {
+    await keyboardInAHiddenTree();
+
+    expect(pressWhereFocusIs("h")).toBe(true);
+    expect(app.sidebar.open).toBe(false);
+    expect(app.focus.pane).toBe("editor");
+  });
+
+  it("answers F2 from a hidden tree the keyboard is really in", async () => {
+    await keyboardInAHiddenTree();
+
+    expect(pressWhereFocusIs("F2")).toBe(true);
+    expect(app.sidebar.open).toBe(true);
+    // Showing the tree the keyboard is already in leaves it there.
+    expect(app.focus.pane).toBe("sidebar");
+  });
+
+  it("answers C-x o from a hidden tree the keyboard is really in", async () => {
+    await keyboardInAHiddenTree();
+
+    expect(pressWhereFocusIs("C-x o")).toBe(true);
+    // The cycle still refuses to *visit* a tree that is not shown. Leaving
+    // one the keyboard is already in is an ordinary move, and it lands in
+    // the editor with the tree exactly as hidden as it was.
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.open).toBe(false);
+  });
+
+  it("keeps the keyboard in a hidden tree rather than taking it back", async () => {
+    // `reconcile()` runs before every chord this reader answers. It asks
+    // whether the pane can still hold the keyboard, not whether the cycle
+    // would visit it, so a keystroke does not quietly move the keyboard out
+    // of a tree nobody asked to leave. Asking the cycle's question here
+    // would be the same defect one keystroke later.
+    await keyboardInAHiddenTree();
+
+    expect(pressWhereFocusIs("C-n")).toBe(true);
+    expect(app.focus.pane).toBe("sidebar");
+    expect(cursorRow(app)).toBe(`chapter:${BOB_PATH}`);
+    expect(app.sidebar.open).toBe(false);
+  });
+
+  it("opens a chapter from a hidden tree and hands the keyboard back", async () => {
+    // `src/app.ts` decides whether to hand the keyboard back from
+    // `focus.pane === "sidebar"`, so a model naming the editor left it on
+    // the tree button with the chapter loaded behind it.
+    await keyboardInAHiddenTree();
+
+    pressWhereFocusIs("C-n");
+    expect(pressWhereFocusIs("Return")).toBe(true);
+    await settle();
+
+    expect(app.chapterPath).toBe(BOB_PATH);
+    expect(app.focus.pane).toBe("editor");
+  });
+});
+
+// itd-2609091722296239: `F2` shows and hides the sidebar from wherever the
+// keyboard is, and `C-x C-b` is the second chord on the same row — Emacs's own
+// `list-buffers`, pointed at Editor's chapter list.
+
+describe("showing and hiding the sidebar from every pane", () => {
+  it("shows the sidebar on F2 from the text, moving nothing else", async () => {
+    await mount();
+    app.sidebar.setOpen(false);
+    const before = documentText(app.view);
+    const at = cursorPosition(app.view);
+
+    expect(press(app, "F2")).toBe(true);
+
+    expect(app.sidebar.open).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
+    expect(app.focus.pane).toBe("editor");
+    expect(cursorPosition(app.view)).toEqual(at);
+    expect(documentText(app.view)).toBe(before);
+  });
+
+  it("hides the sidebar on F2 from the text, leaving the cursor where it was", async () => {
+    await mount();
+    expect(app.sidebar.open).toBe(true);
+    const before = documentText(app.view);
+    const at = cursorPosition(app.view);
+
+    expect(press(app, "F2")).toBe(true);
+
+    expect(app.sidebar.open).toBe(false);
+    expect(app.sidebar.element.dataset["open"]).toBe("no");
+    expect(app.focus.pane).toBe("editor");
+    expect(cursorPosition(app.view)).toEqual(at);
+    expect(documentText(app.view)).toBe(before);
+  });
+
+  it("hides the sidebar on F2 from inside it, and hands the keyboard back", async () => {
+    await mount();
+    const before = documentText(app.view);
+    const line = cursorPosition(app.view).line;
+
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+
+    // Exactly where `h` leaves it, by the same call.
+    expect(press(app, "F2")).toBe(true);
+    expect(app.sidebar.open).toBe(false);
+    expect(app.sidebar.element.dataset["open"]).toBe("no");
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.focused).toBe(false);
+    expect(app.chapterPath).toBe(ALICE_PATH);
+    expect(documentText(app.view)).toBe(before);
+    expect(cursorPosition(app.view).line).toBe(line);
+  });
+
+  it("shows and hides the sidebar on F2 from a panel, leaving the panel alone", async () => {
+    await mount();
+    const panel = createPublishPanel(publishServices());
+    mountPublishPanel(app, panel);
+    await panel.open();
+    await settle();
+    expect(app.focus.pane).toBe("panel");
+
+    expect(press(app, "F2")).toBe(true);
+    expect(app.sidebar.open).toBe(false);
+    // The panel still has the keyboard, and is still open.
+    expect(app.focus.pane).toBe("panel");
+    expect(modeline(app)).toContain("[Publish]");
+
+    expect(press(app, "F2")).toBe(true);
+    expect(app.sidebar.open).toBe(true);
+    expect(app.focus.pane).toBe("panel");
+    expect(modeline(app)).toContain("[Publish]");
+  });
+
+  it("shows the chapter list on C-x C-b, and hides it on a second press", async () => {
+    // Emacs's own `list-buffers` chord, pointed at the tree it already
+    // draws. The one named divergence: Emacs's own never closes, and a
+    // second press here hides.
+    await mount();
+    app.sidebar.setOpen(false);
+
+    expect(press(app, "C-x C-b")).toBe(true);
+    expect(app.sidebar.open).toBe(true);
+
+    expect(press(app, "C-x C-b")).toBe(true);
+    expect(app.sidebar.open).toBe(false);
+  });
+
+  it("answers C-x C-b from the tree as well as from the text", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+
+    expect(press(app, "C-x C-b")).toBe(true);
+    expect(app.sidebar.open).toBe(false);
+    expect(app.focus.pane).toBe("editor");
+  });
+
+  it("lists both of the toggle's chords in the keys panel, and claims no C-c C-s leaf", async () => {
+    await mount();
+    const overlay = openKeysPanel();
+    const row = overlay.element.querySelector<HTMLElement>(
+      '.keys-row[data-binding="toggle-sidebar"]',
+    );
+    expect(row?.textContent).toContain("Show or hide the sidebar");
+    // The chords sit in the row's own detail cell, in the table's order:
+    // `F2` first, because it is the one that always works.
+    const chords = [
+      ...(row?.nextElementSibling?.querySelectorAll("kbd") ?? []),
+    ].map((key) => key.textContent);
+    expect(chords).toEqual(["F2", "C-x C-b"]);
+    overlay.close();
+
+    // Bold and italic keep `C-c C-s` exactly as they ship: it is a prefix,
+    // and a prefix can never also be a leaf (`itd-2609061318091323`).
+    const leaf = BINDINGS.filter((binding) =>
+      binding.chords.map(canonicalChord).includes(canonicalChord("C-c C-s")),
+    );
+    expect(leaf).toEqual([]);
+    expect(bindingById("outline-bold-region")?.chords).toEqual(["C-c C-s b"]);
+    expect(bindingById("outline-italic-region")?.chords).toEqual(["C-c C-s i"]);
+  });
+});
+
+// itd-2609091722353838: `C-x o` visits panes that are shown, changes none of
+// them, and reports when it found nowhere to go (iss-2609081707572166).
+
+describe("what can follow the prefix, from a pane the text cannot hear", () => {
+  // `C-h` opens nothing in these panes and describes whatever is already
+  // open: the branch that catches it fires only while this reader is holding
+  // a prefix somebody else's chord opened (`itd-2609091722353594`). So the
+  // overlay is reachable here, and `C-h b` is not — which reads as an
+  // inconsistency and is not, and the two negative tests below are what keep
+  // a later change from quietly erasing either half.
+
+  /** The chord each line of the open overlay stands for, in the order drawn. */
+  function chordsOn(): string[] {
+    const overlay = document.querySelector<HTMLElement>(".prefix-help");
+    return [...(overlay?.querySelectorAll<HTMLElement>(".keys-row") ?? [])]
+      .map((row) => row.dataset["chord"])
+      .filter((chord): chord is string => chord !== undefined);
+  }
+
+  it("opens the prefix overlay on C-h with the tree holding the keyboard", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+    const before = documentText(app.view);
+
+    expect(press(app, "C-x")).toBe(true);
+    expect(app.focus.prefix).toBe("C-x");
+    expect(pressAt(app.sidebar.element, "C-h")).toBe(true);
+
+    const overlay = document.querySelector<HTMLElement>(".prefix-help");
+    expect(overlay).not.toBeNull();
+    // The two rows the tree can run under `C-x`, and not the text's
+    // twenty-five: nothing the overlay lists is ever dead.
+    expect(chordsOn()).toEqual(["C-x C-b", "C-x o"]);
+    expect(overlay?.textContent).toContain("Show or hide the sidebar");
+    expect(overlay?.textContent).toContain("Move to the other pane");
+    expect(overlay?.textContent).not.toContain("Save the chapter");
+    expect(
+      overlay?.querySelector('.keys-row[data-chord="C-x C-s"]'),
+    ).toBeNull();
+
+    // The prefix was spent when the overlay opened, so there is no second copy
+    // of it for the modeline and the overlay to disagree about.
+    expect(app.focus.prefix).toBeNull();
+    expect(documentText(app.view)).toBe(before);
+  });
+
+  it("runs the chord typed into the prefix overlay from the tree", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(press(app, "C-x")).toBe(true);
+    expect(pressAt(app.sidebar.element, "C-h")).toBe(true);
+    expect(document.querySelector(".prefix-help")).not.toBeNull();
+
+    // Completing `C-x o` from inside the overlay moves the keyboard on,
+    // through this reader's own dispatch rather than through the text's.
+    expect(pressAt(document.body, "o")).toBe(true);
+    await settle();
+    expect(document.querySelector(".prefix-help")).toBeNull();
+    expect(app.focus.pane).not.toBe("sidebar");
+  });
+
+  it("closes the prefix overlay on C-g from the tree having run nothing", async () => {
+    await mount();
+    press(app, "C-x o");
+    const row = cursorRow(app);
+    expect(press(app, "C-x")).toBe(true);
+    expect(pressAt(app.sidebar.element, "C-h")).toBe(true);
+    expect(pressAt(document.body, "C-g")).toBe(true);
+    await settle();
+    expect(document.querySelector(".prefix-help")).toBeNull();
+    expect(app.focus.pane).toBe("sidebar");
+    expect(cursorRow(app)).toBe(row);
+    expect(app.focus.prefix).toBeNull();
+  });
+
+  it("opens the prefix overlay on C-h with a panel holding the keyboard", async () => {
+    await mount();
+    press(app, bindingById("insert-palette")?.chords[0] ?? "C-c i");
+    expect(app.focus.pane).toBe("panel");
+
+    const field = document.activeElement;
+    expect(field).toBeInstanceOf(HTMLElement);
+    expect(pressAt(field as HTMLElement, "C-x")).toBe(true);
+    expect(app.focus.prefix).toBe("C-x");
+    expect(pressAt(field as HTMLElement, "C-h")).toBe(true);
+
+    // The two rows a panel answers, and only those.
+    expect(document.querySelector(".prefix-help")).not.toBeNull();
+    expect(chordsOn()).toEqual(["C-x C-b", "C-x o"]);
+    expect(app.focus.prefix).toBeNull();
+  });
+
+  it("leaves a bare C-h unclaimed in the tree, opening nothing", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+    // Nothing half-typed, so no branch matches and the key falls through
+    // exactly as it did before this change. `C-h` never opens a prefix here.
+    expect(pressAt(app.sidebar.element, "C-h")).toBe(false);
+    expect(document.querySelector(".prefix-help")).toBeNull();
+    expect(app.focus.prefix).toBeNull();
+    expect(app.focus.pane).toBe("sidebar");
+  });
+
+  it("leaves F1 unclaimed in the tree and in a panel", async () => {
+    await mount();
+    expect(bindingById("keys-panel")?.chords).toContain("F1");
+
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+    // `F1` is the editing surface's chord, exactly where `C-h b` is: the row
+    // is not one every pane answers, and giving it that reach would have
+    // widened `C-h b` and `C-x S-/` with it.
+    expect(pressAt(app.sidebar.element, "F1")).toBe(false);
+    expect(document.querySelector(".keys-panel")).toBeNull();
+    expect(app.focus.pane).toBe("sidebar");
+
+    // And the row's other two chords gained nothing either.
+    for (const chord of ["C-h b", "C-x S-/"]) {
+      expect(pressAt(app.sidebar.element, chord), chord).toBe(false);
+      expect(document.querySelector(".keys-panel"), chord).toBeNull();
+    }
+
+    // Back to the text, which is the one pane that can open the palette, and
+    // then into the palette.
+    press(app, "C-g");
+    expect(app.focus.pane).toBe("editor");
+    press(app, bindingById("insert-palette")?.chords[0] ?? "C-c i");
+    expect(app.focus.pane).toBe("panel");
+    const field = document.activeElement;
+    expect(pressAt(field as HTMLElement, "F1")).toBe(false);
+    expect(document.querySelector(".keys-panel")).toBeNull();
+    expect(app.focus.pane).toBe("panel");
+  });
+});
+
+describe("a cycle with nowhere to go", () => {
+  it("stays in the text and says so when the sidebar is hidden", async () => {
+    await mount();
+    app.sidebar.setOpen(false);
+    const before = documentText(app.view);
+    const at = cursorPosition(app.view);
+
+    expect(press(app, "C-x o")).toBe(true);
+
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.open).toBe(false);
+    expect(app.sidebar.element.dataset["open"]).toBe("no");
+    expect(modeline(app)).toContain("Nowhere else to go");
+    expect(cursorPosition(app.view)).toEqual(at);
+    expect(documentText(app.view)).toBe(before);
+  });
+
+  it("says so with no document loaded at all", async () => {
+    // The state the chord was found dead in: no rows in the tree, no panel
+    // open, and the cycle walking back round to the pane it started in
+    // (`iss-2609081707572166`).
+    host = document.createElement("div");
+    document.body.append(host);
+    app = createApp(host, services);
+    expect(app.sidebar.rows()).toEqual([]);
+
+    expect(press(app, "C-x o")).toBe(true);
+
+    expect(app.focus.pane).toBe("editor");
+    expect(modeline(app)).toContain("Nowhere else to go");
+  });
+
+  it("leaves the tree shown when the keyboard moves on from it", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+
+    press(app, "C-x o");
+
+    // Leaving a pane is not hiding it.
+    expect(app.focus.pane).toBe("editor");
+    expect(app.sidebar.open).toBe(true);
+    expect(app.sidebar.element.dataset["open"]).toBe("yes");
+  });
+
+  it("finds the tree again once F2 has shown it", async () => {
+    await mount();
+    app.sidebar.setOpen(false);
+    press(app, "C-x o");
+    expect(modeline(app)).toContain("Nowhere else to go");
+
+    press(app, "F2");
+    expect(press(app, "C-x o")).toBe(true);
+
+    expect(app.focus.pane).toBe("sidebar");
+    expect(app.sidebar.open).toBe(true);
+  });
+
+  it("says nothing about nowhere to go while a pane is there to reach", async () => {
+    await mount();
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+    expect(modeline(app)).not.toContain("Nowhere else to go");
   });
 });
 

@@ -22,6 +22,7 @@ import type {
   Part,
 } from "./doctree";
 import { createDropRouter, type DropTargets } from "./drop";
+import { TRAIL_STEPS } from "./modeline";
 
 /** A chapter with a level-one heading and three levels below it. */
 const ALICE = [
@@ -294,6 +295,45 @@ describe("the sidebar", () => {
 
     await app.openChapter(alice);
     expect(app.view.state.selection.main.head).toBe(5);
+  });
+
+  it("shows the newly opened chapter's progress, not the one before it", async () => {
+    await app.openFolder("book");
+    const alice = app.chapters.find(
+      (chapter) => chapter.path === "book/01-first/01-alice.md",
+    )!;
+    const bob = app.chapters.find(
+      (chapter) => chapter.path === "book/02-second/01-bob.md",
+    )!;
+    const cell = app.modeline.element.querySelector<HTMLElement>(".modeline-progress")!;
+
+    await app.openChapter(alice);
+    const aliceLength = app.view.state.doc.length;
+    app.view.dispatch({ selection: { anchor: aliceLength } });
+    expect(cell.dataset["step"]).toBe(String(TRAIL_STEPS));
+
+    // The pin. `setDocument` swaps the whole state with `view.setState`, which
+    // builds no `ViewUpdate` and runs no update listener at all, so nothing on
+    // the caret's own redraw path fires on a chapter switch. What redraws the
+    // footer here is `openChapter`'s own `announce("")` — which is there to
+    // clear a message, not to move a cat. If that is ever refactored away this
+    // assertion fails, rather than the footer quietly keeping the previous
+    // chapter's step.
+    await app.openChapter(bob);
+    expect(app.view.state.selection.main.head).toBe(0);
+    expect(cell.dataset["step"]).toBe("0");
+    expect(cell.getAttribute("aria-label")).toBe("Start of the chapter");
+
+    // And the length is the new chapter's too, not the old one's: Bob is far
+    // shorter than Alice, so the same offset is a different proportion of it.
+    const bobLength = app.view.state.doc.length;
+    expect(bobLength).toBeLessThan(aliceLength / 4);
+    const half = Math.round(bobLength / 2);
+    app.view.dispatch({ selection: { anchor: half } });
+    expect(cell.dataset["step"]).toBe(String(Math.round((half / bobLength) * TRAIL_STEPS)));
+    expect(Number(cell.dataset["step"])).toBeGreaterThan(
+      Math.round((half / aliceLength) * TRAIL_STEPS),
+    );
   });
 
   it("shows a one-Part, one-chapter document with no empty rows", async () => {

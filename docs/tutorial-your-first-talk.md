@@ -19,7 +19,11 @@ open, and the cursor sits on a blank line beneath the heading Editor wrote
 from your title.
 
 The bottom line of the window is the modeline. It names the chapter you are
-in, says whether it has unsaved changes, and is where Editor answers you.
+in, says whether it has unsaved changes, and is where Editor answers you. In a
+window 1280 pixels wide or wider it also carries a short trail with a cat at
+its head, which sits where the cursor sits in the chapter: at the left end at
+the top, at the right end at the bottom. It is a decoration, it answers no key,
+and a narrower window does without it.
 
 ## 2. Move about with the keys
 

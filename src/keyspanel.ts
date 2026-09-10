@@ -62,7 +62,9 @@ function render(): { element: HTMLElement; rows: HTMLElement[] } {
     const list = document.createElement("dl");
     list.className = "keys-list";
     for (const binding of inGroup) {
-      list.append(...row(binding, rows));
+      const { term, detail } = bindingLine(binding, binding.chords);
+      rows.push(term);
+      list.append(term, detail);
     }
     section.append(list);
     element.append(section);
@@ -71,8 +73,19 @@ function render(): { element: HTMLElement; rows: HTMLElement[] } {
   return { element, rows };
 }
 
-/** One row: the label, the chords, and where it is answered. */
-function row(binding: Binding, rows: HTMLElement[]): HTMLElement[] {
+/**
+ * One binding line: the label, the owner note, and the chords given.
+ *
+ * The chords are a parameter rather than `binding.chords` because the prefix
+ * overlay draws the same line for one chord of a row and not the others — the
+ * `C-x u` of `undo`, with its four other chords out of scope
+ * (`itd-2609091722353594`). One function, because a binding line drawn two
+ * ways is two things to keep in step.
+ */
+export function bindingLine(
+  binding: Binding,
+  chords: readonly string[],
+): { term: HTMLElement; detail: HTMLElement } {
   const term = document.createElement("dt");
   term.className = "keys-row";
   term.dataset["binding"] = binding.id;
@@ -88,14 +101,13 @@ function row(binding: Binding, rows: HTMLElement[]): HTMLElement[] {
 
   const detail = document.createElement("dd");
   detail.className = "keys-chords";
-  for (const chord of binding.chords) {
+  for (const chord of chords) {
     const key = document.createElement("kbd");
     key.textContent = chord;
     detail.append(key);
   }
 
-  rows.push(term);
-  return [term, detail];
+  return { term, detail };
 }
 
 /** Open the keys panel over `host`. */

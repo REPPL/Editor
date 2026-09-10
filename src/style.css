@@ -5,6 +5,13 @@
   --muted: #6b6459;
   --accent: #2a5d7c;
   --shell: #f2efe9;
+  /* The modeline trail's six bands. Mid-tones on `--paper`, so the fill
+     boundary reads by luminance and not by hue: every band sits between
+     roughly ten and twenty per cent relative luminance against a `#fdfcfa`
+     track, which is at least 4:1 at the weakest band and above the 3:1 WCAG
+     1.4.11 asks of a non-text boundary. The dark block below carries a second,
+     lighter set for the same reason in the other direction. */
+  --trail-colours: #b8402f, #a86a1f, #8a7a18, #2f7a45, #2b5f92, #63407f;
   color-scheme: light dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue",
     sans-serif;
@@ -18,6 +25,10 @@
     --muted: #9b948a;
     --accent: #8ab6d6;
     --shell: #232120;
+    /* Lighter bands over a `#1a1917` track. A single mid-tone set would have
+       put the violet band at about 2.2:1 against the dark paper, which is why
+       there are two. */
+    --trail-colours: #e07a68, #dda05a, #d6c65e, #6fbf85, #6aa4d8, #a98ad0;
   }
 }
 
@@ -56,6 +67,22 @@ body {
   overflow-y: auto;
   background: var(--shell);
   border-right: 1px solid var(--rule);
+}
+
+/*
+ * Hidden is hidden, at every width.
+ *
+ * This rule sat inside the drawer's media query, so above 820 CSS pixels the
+ * tree stayed on the page as a column and `F2`, a bare `h` and `C-x C-b` all
+ * changed a state nothing on screen reported (`iss-2609091754178640`). It
+ * belongs here instead of being repeated in a second, wider query: showing and
+ * hiding the sidebar is one behaviour, and only the shape it takes while shown
+ * — drawer or column — depends on the width. `.layout` is a flex row, so the
+ * hidden element takes its track with it and `.editor-pane`, which is
+ * `flex: 1 1 auto`, has the width back rather than a gap where the tree was.
+ */
+.sidebar[data-open="no"] {
+  display: none;
 }
 
 .sidebar-heading {
@@ -242,7 +269,8 @@ body {
  *
  * At 820 CSS pixels and below the sidebar is a drawer over the surface rather
  * than a column beside it, so the editing surface keeps its full width on a
- * phone and on a narrow window. `toggle-sidebar` opens and closes it.
+ * phone and on a narrow window. `toggle-sidebar` opens and closes it, and it
+ * is hidden by the rule above, which holds at this width and at every other.
  */
 @media (max-width: 820px) {
   .sidebar {
@@ -254,10 +282,6 @@ body {
     flex-basis: min(280px, 85vw);
     width: min(280px, 85vw);
     box-shadow: 0 0 24px rgb(0 0 0 / 25%);
-  }
-
-  .sidebar[data-open="no"] {
-    display: none;
   }
 
   .layout {
@@ -292,12 +316,14 @@ body {
   outline: none;
 }
 
-.keys-panel-heading {
+.keys-panel-heading,
+.prefix-help-heading {
   margin: 0 0 2px;
   font-size: 15px;
 }
 
 .keys-panel-hint,
+.prefix-help-hint,
 .keys-group-heading {
   margin: 0 0 6px;
   font-size: 12px;
@@ -491,8 +517,16 @@ body {
   color: var(--accent);
 }
 
+/* The cell that yields. A chapter title is as long as the author's file name,
+   and nothing else in the line grows without a bound, so this is the cell that
+   gives its room up when the line is short: the message keeps its budget
+   (below) and a title too long for what is left is elided. */
 .modeline-chapter {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modeline-chapter[data-detached="yes"] {
@@ -514,22 +548,110 @@ body {
   color: #b4442a;
 }
 
+/* The message's floor is the budget itself: 52 characters, the number
+   `MODELINE_BUDGET` in `src/prose.ts` holds every message to, in the `ch` of
+   this line's own monospace face. Above the breakpoint below, this floor is
+   what the chapter cell yields to; below it, the cell already has a line of its
+   own. `100%` guards the narrowest windows either way: `ch` is whatever the
+   installed face measures, and a floor wider than the line itself would be the
+   sideways scroll this cell exists to avoid. */
 .modeline-message {
   flex: 1 1 auto;
+  min-width: min(52ch, 100%);
   color: var(--muted);
   text-align: right;
 }
 
+/* The trail through the chapter, and the cat at its head
+   (`itd-2609081938397758`). Decoration carrying one fact: how far into the
+   chapter the caret sits. It stands for no action, so unlike every other cell
+   it carries no chord in a tooltip; and nothing here transitions or animates
+   (cond-2609091733490147) — the cat moves on the redraw the caret's own move
+   already causes, and at no other moment.
+
+   The cell takes its width from the chapter title, which is the cell that
+   yields, and never from the message, whose floor above is the budget itself. */
+.modeline-progress {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  width: clamp(64px, 9vw, 132px);
+  height: 1.15em;
+}
+
+.modeline-track {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+/* One unitless custom property, `--at`, drives both the trail's width and the
+   cat's offset, so the fill and the mark on its boundary cannot disagree. */
+.modeline-trail {
+  width: calc(100% * var(--at, 0));
+  height: 100%;
+  background: linear-gradient(90deg, var(--trail-colours));
+}
+
+/* On a disc of the footer's own background, so the cat is `--ink` on
+   `--shell` wherever along the trail it has got to — the highest-contrast
+   mark in the cell, and the one that carries the position when the rainbow
+   cannot be told apart. Its travel is inset by half its own width at each end,
+   which keeps it inside the cell at nought and at one while the trail still
+   runs from edge to edge. Sized in `em` so it stays in proportion to the line
+   it sits on if the footer's type is ever changed. */
+.modeline-cat {
+  position: absolute;
+  top: 50%;
+  left: calc(0.575em + (100% - 1.15em) * var(--at, 0));
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--ink);
+  background: var(--shell);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* An optional pleasure on a large screen (cond-2609100513433908). Below 1280
+   the footer's own information wins the space and nothing stands in for the
+   trail: `display: none`, so the cell leaves the accessibility tree with the
+   drawing rather than announcing a proportion nobody can see. The footer below
+   this width carries no trace of this cell: it takes no width, leaves no gap,
+   and announces nothing. What it is not is the footer of 0.3.1 — the own-line
+   breakpoint moved from 520 to 820 to answer `iss-2609100445317801`, whose
+   budget above it was unbounded rather than merely tight. That move is not
+   this cell's doing and this cell neither helps nor harms it. The
+   flex `gap` of a `display: none` item is not laid out, so there is no
+   residual space to cancel, and the boundary is left unsmoothed because a
+   transition would be motion (cond-2609091733490147). */
+@media (max-width: 1279px) {
+  .modeline-progress {
+    display: none;
+  }
+}
+
 /*
- * The modeline at the narrowest window the shell allows, 390 CSS pixels.
+ * The modeline from 820 CSS pixels down to the narrowest window the shell
+ * allows, 390.
  *
  * A message is the one cell the author has to read word for word — a refusal,
  * a prompt, the row `C-h k` names — so it gets a line of its own and the cells
  * that only report state share the line above it. Every message the prose
  * commands write is held to a character budget (`MODELINE_BUDGET`) that fits
  * that line, so it is one line, unclipped, and nothing scrolls sideways.
+ *
+ * The breakpoint is the sidebar's, 820, and not the 520 it began as: on a
+ * shared line the budget was a claim about pixels nothing guaranteed, since
+ * the state cells and the chapter title took what they needed first
+ * (`iss-2609100445317801`). At 820 and below the message has its own line;
+ * above it, the floor on `.modeline-message` above holds the same 52
+ * characters open and the chapter title is what gives way.
  */
-@media (max-width: 520px) {
+@media (max-width: 820px) {
   .modeline {
     flex-wrap: wrap;
     gap: 4px 10px;
@@ -537,12 +659,10 @@ body {
     font-size: 11px;
   }
 
+  /* On its own line the message is no longer competing with this cell, so it
+     takes the rest of the line above rather than only what it needs. */
   .modeline-chapter {
     flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .modeline-message {
