@@ -1,0 +1,848 @@
+/*
+ * The Tufte article: one page, a generous measure, and a margin for its notes.
+ *
+ * spc-2609061318090042 is the design record. This is the ONE source: the app's
+ * preview page links it directly, the site build and the folder export copy
+ * its bytes (`src-tauri/src/publish/stage.rs`'s `CHROME` and `chrome_for_folder`
+ * both `include_str!` this file rather than a copy kept in `site/presenter/`),
+ * and `article.test.ts` reads it as a string to prove the rules a jsdom test
+ * can reach. One file, three hosts, so a fix here reaches all of them at once.
+ *
+ * Custom properties are the seam later maps plug into without touching a
+ * selector: map #10 (`itd-2609051335492327`) sets `--article-measure`,
+ * `--article-text-scale` and the palette properties on the root element from
+ * its own toolbar; nothing below reads anything else to decide those three
+ * things. Map #12 and map #26 add their own rules in a section of their own,
+ * beneath the marker comments left for them — a stylesheet a later map can
+ * extend by appending a section, never one it has to re-open this one to
+ * change.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* The measure: the width of a line of reading text. Emacs's own default
+     fill column is 80 characters; a serif face reads comfortably narrower,
+     so the article's default sits at 38em — close to Tufte's own 55
+     characters at this type size — and map #10's "narrow/normal/wide" steps
+     move this one property. */
+  --article-measure: 38em;
+  /* The margin rail's width, beside the measure at 820 and 1280 CSS px. */
+  --article-margin-width: 16em;
+  /* The gap between the measure and the margin rail. */
+  --article-gutter: 2rem;
+  /* A multiplier on the article's own base type size; map #10's text-size
+     control changes only this property. */
+  --article-text-scale: 1;
+
+  /* The palette: three names, one shape. Light is the default; map #10's
+     dark and sepia themes redeclare only these four properties, on the root
+     element, from outside this file. Pinned hex rather than `Canvas`/
+     `CanvasText`/`GrayText`: those resolve by the OS's own colour scheme,
+     which is not the theme a reader chose here — under a dark OS, "Light"
+     must still be light (Fable F2, GLM F15). */
+  --article-bg: #ffffff;
+  --article-fg: #1a1a1a;
+  --article-muted: #595959;
+  --article-rule: color-mix(in srgb, #1a1a1a 25%, transparent);
+}
+
+/* ---------------------------------------------------------------------
+ * The page.
+ * ------------------------------------------------------------------- */
+
+body.article {
+  margin: 0;
+  padding: 1.5rem 1rem 4rem;
+  font: calc(1.0625rem * var(--article-text-scale)) / 1.6 Georgia, "Iowan Old Style",
+    "Times New Roman", serif;
+  background: var(--article-bg);
+  color: var(--article-fg);
+}
+
+/* The whole page is one column at rest; the margin rail in the next section
+   is what widens it. Nothing here fixes a pixel width, so a font the reader
+   enlarges reflows the line rather than spilling past the edge. */
+body.article main {
+  max-width: var(--article-measure);
+  margin: 0 auto;
+}
+
+body.article h1,
+body.article h2,
+body.article h3,
+body.article h4 {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.2;
+  margin: 2rem 0 0.5rem;
+}
+
+body.article h1 {
+  font-size: calc(1.75rem * var(--article-text-scale));
+}
+
+body.article p {
+  margin: 0 0 1rem;
+  /* A long token — a DOI, an unbroken URL a reference carries verbatim —
+     breaks rather than forcing the page wider than the viewport at 390 CSS
+     px, the discipline's own named failure. */
+  overflow-wrap: anywhere;
+}
+
+body.article figure {
+  margin: 1.5rem 0;
+}
+
+body.article img,
+body.article video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+body.article figcaption {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.875rem;
+  color: var(--article-muted);
+  margin-top: 0.5rem;
+}
+
+body.article pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  /* Derived from the chosen theme's own two colours, never the OS's
+     `Canvas`/`CanvasText` (Fable F2): those resolve by the system's colour
+     scheme, which can disagree with the theme a reader picked here. */
+  background: color-mix(in srgb, var(--article-fg) 6%, var(--article-bg));
+}
+
+body.article table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+body.article blockquote {
+  margin: 1.5rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--article-rule);
+}
+
+body.article hr {
+  border: 0;
+  border-top: 1px solid var(--article-rule);
+  margin: 2rem 0;
+}
+
+/* ---------------------------------------------------------------------
+ * The contents list, to four levels.
+ * ------------------------------------------------------------------- */
+
+body.article nav.contents {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0 0 2.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--article-rule);
+}
+
+body.article nav.contents ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+body.article nav.contents ol ol {
+  font-size: 0.95em;
+}
+
+/* A Part's own entry: a label, not a link — it has no heading of its own on
+   the page, so the Chapter nested beneath it is what a reader chooses. */
+body.article nav.contents .part {
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  color: var(--article-muted);
+}
+
+/* ---------------------------------------------------------------------
+ * Margin notes: the generic shape a footnote, a citation, a `.margin` span
+ * and a `.credit` div all share (spc-2609061318090042's seam, resolved by
+ * map #11: a resolved citation's body is the same reference text the
+ * generated list carries, and an unresolved one's is the key alone).
+ *
+ * The one trick that makes "beside the paragraph at 820 and 1280" and
+ * "directly after the paragraph at 390" the same markup: `renderMarginNote`
+ * in `article.ts` writes the note as the paragraph's own next sibling, so its
+ * position in the DOM never changes across a width. Below the margin
+ * breakpoint it is an ordinary block, in the flow exactly where it was
+ * written; at and above it, it is floated into the reserved gutter — CSS
+ * rules alone, per the intent's own falsifiable claim.
+ * ------------------------------------------------------------------- */
+
+body.article .margin-note {
+  display: block;
+  clear: both;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--article-muted);
+  border-left: 2px solid var(--article-rule);
+  /* A citation's own url or a long token in a margin note breaks rather
+     than forcing the page wider than the viewport at 390 CSS px. */
+  overflow-wrap: anywhere;
+}
+
+body.article .margin-note p {
+  margin: 0 0 0.5rem;
+}
+
+body.article .margin-note p:last-child {
+  margin-bottom: 0;
+}
+
+/* An unresolved citation's margin note is the key exactly as the author
+   wrote it, because there is no reference yet to show instead. */
+body.article .margin-note.citation.unresolved {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* The same key, marked the same way, where it sits in the running text —
+   itd-2609051335502171's own rule: never the literal brackets the author
+   wrote, to a reader. */
+body.article .citation-key.unresolved {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
+  color: var(--article-muted);
+  border-bottom: 1px dotted var(--article-rule);
+}
+
+/* ---------------------------------------------------------------------
+ * The generated reference list: one entry per cited key, in first-citation
+ * order. "Every reference list is generated; none is typed"
+ * (`04-surfaces.md` section 3).
+ * ------------------------------------------------------------------- */
+
+body.article .reference-list {
+  margin: 1.5rem 0;
+  padding-left: 1.5rem;
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+
+body.article .reference-list li {
+  margin: 0 0 0.5rem;
+  /* A reference's own url, appended verbatim, breaks rather than forcing
+     the page wider than the viewport at 390 CSS px. */
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------
+ * The callout.
+ * ------------------------------------------------------------------- */
+
+body.article .callout {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--article-rule);
+  border-left-width: 4px;
+  /* Derived from the chosen theme, never the OS's own colours (Fable F2):
+     see `pre`'s own rule above for why. */
+  background: color-mix(in srgb, var(--article-fg) 4%, var(--article-bg));
+}
+
+body.article .callout::before {
+  content: attr(data-kind);
+  display: block;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.75rem;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--article-muted);
+  margin-bottom: 0.4rem;
+}
+
+body.article .callout:not([data-kind])::before,
+body.article .callout[data-kind=""]::before {
+  content: none;
+}
+
+/* ---------------------------------------------------------------------
+ * Images: declared widths, table alignment, and full-bleed.
+ *
+ * The site serves under `style-src 'self'`, which drops a `style` attribute
+ * on an element unread. So a width the author declared reaches the page as
+ * `data-width` — a whole percentage on a scale of fives — and a pipe table's
+ * alignment as `data-align`, and this is where they are answered.
+ * ------------------------------------------------------------------- */
+
+body.article img[data-width="5"] { width: 5%; height: auto; }
+body.article img[data-width="10"] { width: 10%; height: auto; }
+body.article img[data-width="15"] { width: 15%; height: auto; }
+body.article img[data-width="20"] { width: 20%; height: auto; }
+body.article img[data-width="25"] { width: 25%; height: auto; }
+body.article img[data-width="30"] { width: 30%; height: auto; }
+body.article img[data-width="35"] { width: 35%; height: auto; }
+body.article img[data-width="40"] { width: 40%; height: auto; }
+body.article img[data-width="45"] { width: 45%; height: auto; }
+body.article img[data-width="50"] { width: 50%; height: auto; }
+body.article img[data-width="55"] { width: 55%; height: auto; }
+body.article img[data-width="60"] { width: 60%; height: auto; }
+body.article img[data-width="65"] { width: 65%; height: auto; }
+body.article img[data-width="70"] { width: 70%; height: auto; }
+body.article img[data-width="75"] { width: 75%; height: auto; }
+body.article img[data-width="80"] { width: 80%; height: auto; }
+body.article img[data-width="85"] { width: 85%; height: auto; }
+body.article img[data-width="90"] { width: 90%; height: auto; }
+body.article img[data-width="95"] { width: 95%; height: auto; }
+body.article img[data-width="100"] { width: 100%; height: auto; }
+
+body.article th[data-align="left"],
+body.article td[data-align="left"] { text-align: left; }
+body.article th[data-align="center"],
+body.article td[data-align="center"] { text-align: center; }
+body.article th[data-align="right"],
+body.article td[data-align="right"] { text-align: right; }
+
+/* "Running the full measure": in the article, full-bleed means the full
+   width of the reading column, never past it — the article has no gutter
+   to bleed into at 390 CSS px, and bleeding past the measure at 820 and
+   1280 would run an image under the margin notes it shares the page with. */
+body.article .full-bleed {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* ---------------------------------------------------------------------
+ * Video: the poster, the caption, and the source list a plain reader can
+ * still follow as links. `article-video.js` upgrades this to a player when a
+ * source loads; everything here also has to stand with no script at all.
+ * ------------------------------------------------------------------- */
+
+body.article figure.video {
+  position: relative;
+}
+
+body.article figure.video ul.video-sources {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.875rem;
+}
+
+body.article figure.video ul.video-sources li {
+  margin: 0.2rem 0;
+}
+
+/* The script hides the source list once a player is standing in its place;
+   this is the state with no script at all, so the list starts visible. */
+body.article figure.video[data-player-ready] ul.video-sources,
+body.article figure.video[data-player-ready] img {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------
+ * The margin rail: 820 and 1280 CSS px.
+ *
+ * Below this breakpoint every `.margin-note` is the ordinary block above:
+ * in the flow, at the text's own size, directly after the paragraph that
+ * made it — which is the whole of what "folds into the flow" means, because
+ * nothing has moved it there. It was never anywhere else.
+ * ------------------------------------------------------------------- */
+
+@media (min-width: 760px) {
+  body.article main {
+    max-width: calc(
+      var(--article-measure) + var(--article-gutter) + var(--article-margin-width)
+    );
+    padding-right: calc(var(--article-gutter) + var(--article-margin-width));
+  }
+
+  /* Every direct flow child keeps the measure; a margin note is the one
+     child that is allowed to reach past it, into the padding reserved
+     above. `nav.contents` is exempted the same way a margin note is not,
+     so the contents list still uses the whole width the wide layout has. */
+  body.article main > :not(.margin-note):not(nav) {
+    max-width: var(--article-measure);
+  }
+
+  body.article .margin-note {
+    float: right;
+    clear: right;
+    width: var(--article-margin-width);
+    margin: 0.3rem calc(-1 * (var(--article-gutter) + var(--article-margin-width))) 0.75rem 0;
+    border-left-width: 1px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Later maps register here, each in a section of its own.
+ *
+ * Map #10 (`itd-2609051335492327`, reader controls): reads and writes
+ * `--article-measure`, `--article-text-scale`, `--article-bg`,
+ * `--article-fg`, `--article-muted` and `--article-rule` on the root
+ * element; it adds no selector above and needs none.
+ *
+ * Map #12 (`itd-2609051335518134`, the once-only quotation and the easter
+ * eggs) and map #26 (`itd-2609051402083398`, moving by keyboard) each add a
+ * stylesheet section below this comment, never above it.
+ * ------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------
+ * Map #10 (`itd-2609051335492327`, spc-2609061318154502): the reader-controls
+ * toolbar `article-controls.js` builds at load, and the two themes it offers
+ * beside the light default the rules above already carry. Light needs no
+ * rule here — `:root`'s own defaults, above, already are light — so this
+ * section only redeclares the four palette properties for the other two.
+ * ------------------------------------------------------------------- */
+
+/* Each theme pins its own `color-scheme` rather than leaving `:root`'s
+   `light dark` in force: without this, a browser's own dark-mode scrollbar,
+   form control and selection colours followed the OS regardless of which
+   button read as pressed here, and "Light" under a dark OS, or "Dark" under
+   a light one, rendered its box backgrounds from the wrong half of `light
+   dark` while its four custom properties said otherwise (Fable F2). */
+:root[data-article-theme="light"] {
+  color-scheme: light;
+  --article-bg: #ffffff;
+  --article-fg: #1a1a1a;
+  --article-muted: #595959;
+  --article-rule: color-mix(in srgb, #1a1a1a 25%, transparent);
+}
+
+:root[data-article-theme="dark"] {
+  color-scheme: dark;
+  --article-bg: #1b1b1b;
+  --article-fg: #e9e6df;
+  --article-muted: #a9a49a;
+  --article-rule: color-mix(in srgb, #e9e6df 25%, transparent);
+}
+
+:root[data-article-theme="sepia"] {
+  color-scheme: light;
+  --article-bg: #f4ecd8;
+  --article-fg: #3b2f1e;
+  --article-muted: #7a6a52;
+  --article-rule: color-mix(in srgb, #3b2f1e 25%, transparent);
+}
+
+/* The toolbar itself: a small, fixed corner, never a fixed pixel width — it
+   wraps its own groups rather than growing past the viewport, which is what
+   keeps it inside 390 CSS px alongside the largest text and the widest
+   measure (itd-2609051335492327's own falsifiable claim). The toggle button
+   is the toolbar's only permanent footprint; its own body — the three
+   groups and the reset — is a reader's own choice to show, so nothing here
+   sits over the page for the whole read with no way to dismiss it
+   (itd-2609051336128348, Fable F6). */
+body.article .article-controls {
+  position: fixed;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  max-width: calc(100vw - 1.5rem);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.8rem;
+}
+
+body.article .article-controls-toggle {
+  font: inherit;
+  color: inherit;
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+body.article .article-controls-toggle:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+body.article .article-controls-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.5rem;
+  background: var(--article-bg);
+  color: var(--article-fg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+}
+
+body.article .article-controls-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+body.article .article-controls-group legend {
+  padding: 0 0.25rem 0 0;
+  font-size: 0.75em;
+  color: var(--article-muted);
+}
+
+body.article .article-controls button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+}
+
+/* The pressed control is never colour alone (itd-2609061324342715): weight
+   and a leading mark both change too, so a reader who cannot perceive
+   colour still sees which button is current. `aria-pressed` is the state a
+   screen reader hears; this is the state a sighted one sees. */
+body.article .article-controls button[aria-pressed="true"] {
+  font-weight: bold;
+  border-color: var(--article-fg);
+}
+
+body.article .article-controls button[aria-pressed="true"]::before {
+  content: "\2713 ";
+}
+
+body.article .article-controls button:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+body.article .article-controls-reset {
+  font-weight: normal;
+}
+
+/* ---------------------------------------------------------------------
+ * Map #12 (`itd-2609051335518134`, spc-2609061318159422): the once-only
+ * opening quotation and the easter eggs `article-eggs.js` builds and wires
+ * at load. Nothing here is script-conditional in the way it looks: the
+ * opening's flow rule (above, ordinary `body.article` selectors) already
+ * shows it as a plain epigraph with no script at all, and the rules below
+ * style the modal, the panel, the tray and the marker the script builds —
+ * they simply have nothing to select against until it runs.
+ * ------------------------------------------------------------------- */
+
+/* The opening and an egg's panel share one backdrop shape: a fixed overlay
+   the full size of the viewport, so a reader's own scroll position behind
+   it is never how the dialog itself scrolls (itd-2609061324342715: a focus
+   trap must still leave a way to reach the dialog with no pointer, which a
+   backdrop that never moves keeps simple). */
+.egg-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: flex-end;
+  /* Derived from the chosen theme's own foreground, never the OS's
+     `CanvasText` (Fable F2): the backdrop must dim by the same colour the
+     dialog it holds is drawn in. */
+  background: color-mix(in srgb, var(--article-fg) 45%, transparent);
+}
+
+.opening-backdrop {
+  justify-content: center;
+  align-items: center;
+}
+
+.opening-modal {
+  max-width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  margin: 1rem;
+  padding: 1.5rem;
+  background: var(--article-bg);
+  color: var(--article-fg);
+  border-radius: 0.25rem;
+  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, var(--article-fg) 25%, transparent);
+}
+
+/* The opening quotation itself, once it is inside the modal: the plain
+   flow rules above already gave its blockquote and its attribution a
+   shape, and this only removes the flow margins a dialog does not need. */
+.opening-modal .opening {
+  margin: 0;
+}
+
+.opening-dismiss {
+  display: block;
+  margin-top: 1rem;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+.opening-dismiss:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+/* The egg panel: beside the text at 820 and 1280 CSS px — a fixed strip on
+   the trailing edge, never part of the measure's own flow — and the full
+   viewport width at 390, with nothing narrower forcing a horizontal
+   scrollbar or a pinch (this map's own falsifiable claim). */
+.egg-panel {
+  width: min(28rem, 100vw);
+  max-width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 1.5rem;
+  background: var(--article-bg);
+  color: var(--article-fg);
+  position: relative;
+}
+
+@media (max-width: 759px) {
+  .egg-panel-backdrop:not(.opening-backdrop) {
+    justify-content: stretch;
+  }
+
+  .egg-panel {
+    width: 100vw;
+  }
+}
+
+.egg-panel-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+}
+
+.egg-panel-close:focus-visible,
+.egg-marker:focus-visible,
+.egg-tray-item:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+.egg-panel-body {
+  margin-top: 2rem;
+}
+
+.egg-panel-body img,
+.egg-panel-body video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* The marker: a small mark "about where a footnote marker would be" (the
+   intent's own press release), never a fixed pixel box that would refuse to
+   shrink beside the largest text size map #10 offers. */
+.egg-marker {
+  font: inherit;
+  font-size: 0.85em;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0 0.1em;
+  cursor: pointer;
+}
+
+/* The Konami reveal: a flash that is never colour alone
+   (itd-2609061324342715) — the outline and the scale both change, so a
+   reader who cannot perceive colour still sees which marks answered. */
+.egg-marker-revealed {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+  border-radius: 0.15em;
+  transform: scale(1.4);
+}
+
+/* The tray: a plain list at the foot of the page, never a fixed overlay —
+   itd-2609061324342715 requires it reachable "with the tray still reachable
+   by scrolling" at 390 CSS px, which an ordinary block in flow already is. */
+.egg-tray {
+  margin: 3rem auto 0;
+  max-width: var(--article-measure);
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--article-rule);
+}
+
+.egg-tray ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.egg-tray-item {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------
+ * Map #26 (`itd-2609051402083398`, spc-2609061318158216): moving through
+ * the article by keyboard — the contents list, the search panel and the
+ * keys panel `article-keys.js` builds, and the one visible button that
+ * reaches the keys panel without a reader ever needing to know its chord
+ * first (`itd-2609061324342715` forbids a panel reachable only by one).
+ * Every colour below is one of the six custom properties map #10's own
+ * toolbar already reads, so the three reader themes answer these rules
+ * exactly as they answer that one, with no fixed pixel width anywhere
+ * that would refuse to fit inside 390 CSS px.
+ * ------------------------------------------------------------------- */
+
+.article-keys-help {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 10;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--article-fg);
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  max-width: calc(100vw - 1.5rem);
+}
+
+.article-keys-help:focus-visible,
+.article-contents-overlay:focus-visible,
+.article-search-panel:focus-visible,
+.article-keys-panel:focus-visible {
+  outline: 2px solid var(--article-fg);
+  outline-offset: 2px;
+}
+
+.article-contents-overlay,
+.article-search-panel,
+.article-keys-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  width: calc(100vw - 2rem);
+  max-width: 32rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  font: inherit;
+  color: var(--article-fg);
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.4rem;
+  padding: 1rem;
+}
+
+.article-overlay-hint,
+.article-keys-panel-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85em;
+  color: var(--article-muted);
+}
+
+.article-contents-list,
+.article-contents-list ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.article-contents-part {
+  font-weight: bold;
+  list-style: none;
+  margin-left: -1.25rem;
+}
+
+.article-contents-row {
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+/* Never colour alone (`itd-2609061324342715`): weight and an underline
+   both say "this is the row the movement chords are on", the same rule
+   the reader-controls toolbar's own pressed state follows. */
+.article-contents-row[data-current="yes"] {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.article-search-label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.article-search-field {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  font: inherit;
+  color: inherit;
+  background: var(--article-bg);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.article-search-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.85em;
+  color: var(--article-muted);
+}
+
+.article-keys-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+}
+
+.article-keys-list dt {
+  font-weight: bold;
+}
+
+.article-keys-list dd {
+  margin: 0;
+}
+
+.article-keys-list kbd {
+  font: inherit;
+  font-family: ui-monospace, monospace;
+  /* Muted text on the page background, with a rule border: the same pair
+     the body text already proves contrast for, rather than `--article-muted`
+     as a background colour, which carries no contrast guarantee of its own
+     against the text it held (Fable F30). */
+  background: var(--article-bg);
+  color: var(--article-muted);
+  border: 1px solid var(--article-rule);
+  border-radius: 0.2rem;
+  padding: 0.05rem 0.35rem;
+  margin-right: 0.35rem;
+}

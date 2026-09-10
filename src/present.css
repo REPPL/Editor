@@ -1,0 +1,92 @@
+/*
+ * The present window's own chrome: the stage that holds the deck, and the
+ * speaker's notes beside it.
+ *
+ * The deck's stylesheet lays every slide out at the size it is given, so the
+ * notes take a column of the window and the slides reflow into what is left.
+ * Nothing here scales the deck.
+ */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.present-stage {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+.present-stage .reveal {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.present-notes {
+  flex: 0 0 min(34%, 30rem);
+  height: 100%;
+  padding: 1.2rem 1.4rem;
+  overflow-y: auto;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #1c1b19;
+  background: #f2efe9;
+  border-left: 1px solid #d8d4cc;
+}
+
+.present-notes[hidden] {
+  display: none;
+}
+
+.present-notes-heading {
+  margin: 0 0 0.6em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b6459;
+}
+
+.present-notes-body > :first-child {
+  margin-top: 0;
+}
+
+.present-notes-body[data-empty="yes"] {
+  color: #6b6459;
+  font-style: italic;
+}
+
+.present-notes-next {
+  margin: 1.4em 0 0;
+  padding-top: 0.8em;
+  font-size: 0.85rem;
+  color: #6b6459;
+  border-top: 1px solid #d8d4cc;
+}
+
+.present-notes-next:empty {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .present-notes {
+    color: #e8e4dc;
+    background: #232120;
+    border-left-color: #35322c;
+  }
+
+  .present-notes-heading,
+  .present-notes-body[data-empty="yes"],
+  .present-notes-next {
+    color: #9b948a;
+  }
+
+  .present-notes-next {
+    border-top-color: #35322c;
+  }
+}

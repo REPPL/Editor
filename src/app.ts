@@ -1,0 +1,1432 @@
+/**
+ * The application: sidebar, editing surface, modeline, overlays, key log.
+ *
+ * Kept separate from `main.ts` so that a test can build the whole surface
+ * against a detached element without a shell underneath it.
+ *
+ * Three concerns, in this order below: the document session (open, reload, the
+ * conflict, the detached case), the editing session (save, dirty, close), and
+ * the surfaces other specs extend. The extension points are named and few:
+ * `registerCommand` binds a row of the binding table to an action,
+ * `registerPanel` mounts an overlay host, and `onDropTarget` fills in a branch
+ * of the one drop router.
+ */
+
+import type { EditorView } from "@codemirror/view";
+
+import {
+  EMPTY_BIBLIOGRAPHY,
+  parseBibliography,
+  unresolvedCitationKeysIn,
+  type Bibliography,
+} from "./core/bibliography";
+import { unresolvedEggsIn } from "./core/eggs";
+import { outlineOf, type Outline, type OutlineNode } from "./core/outline";
+import { parseChapter } from "./core/parse";
+import { setBibliography } from "./citations";
+import { createDropRouter, type DropRouter, type DropTargets } from "./drop";
+import { createEditor, documentText, placeCursor, revealLine, setDocument } from "./editor";
+import { createFocusModel, type FocusModel, type PanelFocus } from "./focus";
+import {
+  changeCaseRegion,
+  queryReplaceRegex,
+  releaseEditorCommands,
+  runBinding,
+  setEditorCommands,
+  type EditorCommands,
+} from "./emacs";
+import { BINDINGS, scopeOf } from "./keys";
+import { openPrefixHelp, prefixHelpNeedsAPrefix } from "./prefix-help";
+import type {
+  Chapter,
+  ChapterBatch,
+  DocumentMetadata,
+  DocumentTree,
+  DropPayload,
+  Part,
+} from "./doctree";
+import { installKeyLog, type KeyLog } from "./keyspike";
+import { describeChord, openKeysPanel } from "./keyspanel";
+import { createModeline, type Modeline } from "./modeline";
+import { closeOverlay, openListOverlay, type ListEntry } from "./overlay";
+import { openPalette } from "./palette";
+import { openCommandPalette } from "./command-palette";
+import {
+  DEFAULT_FILL_COLUMN,
+  backwardParagraph,
+  backwardSentence,
+  capitalizeWord,
+  dabbrevExpand,
+  deleteHorizontalSpace,
+  deleteIndentation,
+  describeKey,
+  fillParagraph,
+  forwardParagraph,
+  forwardSentence,
+  justOneSpace,
+  moveToWindowLine,
+  transposeLines,
+  transposeWords,
+  zapToChar,
+  type ProseOptions,
+} from "./prose";
+import {
+  backwardSameLevelHeading,
+  boldRegion,
+  cycleOutline,
+  demoteHeading,
+  forwardSameLevelHeading,
+  insertImage,
+  insertLink,
+  italicRegion,
+  moveHeadingDown,
+  moveHeadingUp,
+  narrowToSection,
+  nextHeading,
+  openOccur,
+  openSwitchChapter,
+  previousHeading,
+  promoteHeading,
+  toggleHeadingFold,
+  upHeading,
+  widenSection,
+} from "./outline-commands";
+import { createSidebar, type ChapterFacts, type Sidebar } from "./sidebar";
+import { setTableAlignment, tableAlignmentOn } from "./tables";
+import {
+  setTextScale,
+  textScaleMessage,
+  textScaleStep,
+  TEXT_SCALE_LIMIT,
+} from "./text-scale";
+
+/** What the application needs from the world outside the page. */
+export interface AppServices {
+  /** Ask the user for a folder; null when they cancel. */
+  chooseFolder(): Promise<string | null>;
+  /** Walk a document folder. */
+  openFolder(path: string): Promise<DocumentTree>;
+  /** Read one chapter. */
+  readChapter(path: string): Promise<string>;
+  /** Read many chapters in one round trip, for a redraw. */
+  readChapters?(paths: readonly string[]): Promise<ChapterBatch>;
+  /** Write one chapter. */
+  writeChapter(path: string, text: string): Promise<void>;
+  /** Copy the Markdown files of a drop into a Part. */
+  addChapter?(part: string, nonce: string): Promise<readonly Chapter[]>;
+  /** Read the open document's `document.yaml`. */
+  readDocumentMetadata?(): Promise<DocumentMetadata>;
+  /**
+   * The bibliography file the document names, or null where it names none.
+   *
+   * Read once per redraw, beside every chapter's own text, so the sidebar
+   * can list a chapter's unresolved citation keys (itd-2609051335502171).
+   * Absent outside the shell, where there is no bibliography to read.
+   */
+  readBibliography?(): Promise<string | null>;
+  /** Ask whether unsaved edits may be thrown away; false keeps them. */
+  confirmDiscard(question: string): Promise<boolean>;
+  /**
+   * Leave the application.
+   *
+   * `C-x C-c` asks in the page and then calls this; the shell's own held-back
+   * close calls the same function, so there is one quit and not two. Absent
+   * outside the shell, where there is no window to close.
+   */
+  quit?(): Promise<void>;
+  /**
+   * Tell the shell whether the open chapter has unsaved edits.
+   *
+   * The shell needs its own copy: a close request arrives in Rust, before the
+   * page has any say in it. Absent outside the shell.
+   */
+  reportDirty?(dirty: boolean): void;
+  /**
+   * The type scale this machine last left the surface at, in steps.
+   *
+   * Machine state, kept in the application's own settings and never in a
+   * document folder. Absent outside the shell, where there is nowhere to keep
+   * it and the surface simply opens at its default.
+   */
+  readTextScale?(): Promise<number>;
+  /** Remember the type scale for this machine. Absent outside the shell. */
+  writeTextScale?(steps: number): Promise<void>;
+  /**
+   * Ask the shell's own dialog for a document folder to open, under a
+   * nonce; `null` when the author cancels (`itd-2609061509393380`, map
+   * #35). Absent outside the shell.
+   */
+  pickDocumentFolder?(): Promise<{ nonce: string; name: string } | null>;
+  /** Ask the shell's own dialog for a single file to open, the same way. */
+  pickDocumentFile?(): Promise<{ nonce: string; name: string } | null>;
+  /**
+   * Claim a pick's nonce and open what it named: a folder's whole tree, or a
+   * single file as a one-chapter document, unless it already lives inside a
+   * document folder, in which case the whole document opens with that
+   * chapter selected.
+   */
+  openDocumentSource?(
+    nonce: string,
+  ): Promise<{ tree: DocumentTree; selectedChapter: string | null }>;
+  /** Subscribe to a shell event. Absent outside the shell. */
+  subscribe?<T>(event: string, handler: (payload: T) => void): Promise<() => void>;
+}
+
+/** The mounted application. */
+export interface App {
+  readonly view: EditorView;
+  readonly sidebar: Sidebar;
+  readonly modeline: Modeline;
+  readonly keyLog: KeyLog;
+  /** Which pane holds the keyboard, and the chord that moves it. */
+  readonly focus: FocusModel;
+  readonly drop: DropRouter;
+  /** Whether the open chapter has unsaved edits. */
+  readonly dirty: boolean;
+  /** Whether the open chapter's file has gone from disk. */
+  readonly detached: boolean;
+  /** The open chapter's path, or null when none is open. */
+  readonly chapterPath: string | null;
+  /** The open document's root folder, or null when none is open. */
+  readonly documentRoot: string | null;
+  /** Every chapter of the open document, in the order the sidebar draws them. */
+  readonly chapters: readonly Chapter[];
+  /** Show a document folder in the sidebar. */
+  openFolder(path: string): Promise<void>;
+  /** Ask for a folder and show it. */
+  promptForFolder(): Promise<void>;
+  /** Re-walk, re-read, and redraw, keeping expansion and selection. */
+  reload(): Promise<void>;
+  /** Load a chapter into the editing surface, optionally at a heading. */
+  openChapter(chapter: Chapter, node?: OutlineNode): Promise<void>;
+  /** Write the open chapter back to disk. */
+  save(): Promise<void>;
+  /** Answer a close the shell held back; true when it is safe to close. */
+  confirmClose(): Promise<boolean>;
+  /** Say something in the modeline. */
+  announce(message: string): void;
+
+  // Extension points. Other specs add to the application through these and
+  // through nothing else.
+
+  /** Bind a row of the binding table to an action. */
+  registerCommand(bindingId: string, run: () => void): void;
+  /**
+   * Mount a surface of the application's own, such as an overlay host.
+   *
+   * A panel that hands over a focus contract joins the pane cycle, so
+   * `other-window` reaches it and the modeline names it.
+   */
+  registerPanel(name: string, element: HTMLElement, focus?: PanelFocus): void;
+  /** Fill in a branch of the one drop router. */
+  onDropTarget(target: "text", handler: (payload: DropPayload) => void): void;
+
+  /** Stop listening and let go of the page. */
+  destroy(): void;
+}
+
+/** The placeholder text a fresh window shows. */
+const WELCOME = [
+  "# Editor",
+  "",
+  "Open a document folder with `C-x C-f`, or the Open folder button.",
+  "Save the chapter you are editing with `C-x C-s`.",
+  "Insert a construct with `C-c i`; show every chord with `C-h b`.",
+  "",
+].join("\n");
+
+/**
+ * The two answers the quit question takes, the safe one first.
+ *
+ * The overlay opens on its first row, and Return takes the row the cursor is
+ * on. The destructive answer throws away everything Alice has not saved, so it
+ * is never the one a reflex reaches: she has to move onto "Quit without
+ * saving" before Return means it. Every other confirmation in the application
+ * makes the same promise.
+ */
+/** How long a message that says itself once stays in the modeline. */
+const TRANSIENT_MESSAGE_MS = 1500;
+
+const QUIT_CHOICES: readonly ListEntry[] = [
+  { id: "keep", label: "Keep editing" },
+  { id: "quit", label: "Quit without saving" },
+];
+
+/** `C-x C-k`'s confirmation, on the same terms `QUIT_CHOICES` sets. */
+const CLOSE_CHOICES: readonly ListEntry[] = [
+  { id: "keep", label: "Keep editing" },
+  { id: "close", label: "Close without saving" },
+];
+
+/**
+ * `C-x C-o`'s first question (`itd-2609061509393380`, map #35).
+ *
+ * A native dialog offers files or folders, never both, so this asks which
+ * kind of thing before either dialog opens.
+ */
+const OPEN_SOURCE_CHOICES: readonly ListEntry[] = [
+  { id: "folder", label: "A document folder" },
+  { id: "file", label: "A single file" },
+];
+
+/** Every chapter in a tree, in the order the sidebar draws them. */
+function chaptersOf(part: Part): Chapter[] {
+  const found = [...part.chapters];
+  for (const child of part.parts) found.push(...chaptersOf(child));
+  return found;
+}
+
+/** Mount the application into `root`. */
+export function createApp(root: HTMLElement, services: AppServices): App {
+  // ---------------------------------------------------------- session state
+  let tree: DocumentTree | null = null;
+  let outlines = new Map<string, Outline>();
+  let openChapterPath: string | null = null;
+  let openChapterTitle: string | null = null;
+  let openNodeId: string | null = null;
+  let savedText = WELCOME;
+  let detached = false;
+  let message = "";
+  /**
+   * How many times the application has said something.
+   *
+   * The modeline's message cell is a live region, and a live region has no way
+   * of its own to tell a redraw carrying the standing message from a second
+   * saying of the same words — a refusal the author has just earned for the
+   * second time running. This counter is the difference: `announce` moves it
+   * and `refresh` alone does not, so the cell is written when the author is
+   * told something and left alone on every other redraw
+   * (`iss-2609100647545513`).
+   */
+  let announcements = 0;
+  /**
+   * The bibliography's own read failure, set by the most recent
+   * `readSidebarData` and read by whichever caller announces next.
+   *
+   * A named `.bib` that cannot be read is not the same fact as a document
+   * with no bibliography at all: the first is an error to say, the second
+   * is ordinary (`itd-2609051335502171`, review round one Fable F10). Kept
+   * separate from every citation key's own unresolved state, which stays
+   * unbadged while this is set, rather than badging every key in every
+   * chapter as unresolved for a cause that is the file, not the key.
+   */
+  let bibliographyError: string | null = null;
+  /**
+   * The column `M-q` fills at.
+   *
+   * The open document's own, from `document.yaml`, and 80 while the file is
+   * absent, silent, or unreadable.
+   */
+  let fillColumn = DEFAULT_FILL_COLUMN;
+  /**
+   * Which read the buffer is waiting for.
+   *
+   * Two clicks in a row start two reads, and nothing says the first finishes
+   * first. Every load takes a token; a load whose token has moved on has been
+   * overtaken and drops its result rather than overwriting the buffer, the
+   * save target, and the selection with the chapter the author left behind.
+   */
+  let loadToken = 0;
+  /**
+   * Where the cursor sat in each chapter last left, by path.
+   *
+   * `C-x b` and the sidebar promise a chapter opens "with the cursor where
+   * she last left it" (`docs/how-to-move-through-the-outline.md`, intent
+   * `itd-2609061318091323` AC8); `openChapter` records the offset here on
+   * the way out and restores it on the way back in, clamped to the text
+   * that is there now, since a chapter can have been edited elsewhere
+   * since her last visit.
+   */
+  const chapterCursors = new Map<string, number>();
+  /** The last dirty state handed to the shell, so it hears only changes. */
+  let reportedDirty: boolean | null = null;
+  /** The timer clearing a message that says itself once, if one is running. */
+  let transient: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a type-scale write is in flight, and the step waiting behind it. */
+  let scaleWriting = false;
+  let pendingScale: number | null = null;
+
+  const sidebar = createSidebar({
+    onOpenChapter: (chapter, node) => {
+      // Return in the tree and a click on a row are the same hook. Where the
+      // tree held the keyboard, opening hands it back to the text once the
+      // chapter has loaded, with the cursor already on the heading.
+      const handBack = focus.pane === "sidebar";
+      void (async () => {
+        await app.openChapter(chapter, node);
+        if (handBack) focus.toEditor();
+      })();
+    },
+    onOpenFolder: () => {
+      void app.promptForFolder();
+    },
+  });
+  const modeline = createModeline();
+  const keyLog = installKeyLog();
+
+  const editorPane = document.createElement("main");
+  editorPane.className = "editor-pane";
+
+  const view = createEditor(editorPane, WELCOME, {
+    onChange: () => {
+      refresh();
+    },
+  });
+
+  /** Where overlays are mounted, so they sit over the surface and not the page. */
+  const overlayHost = document.createElement("div");
+  overlayHost.className = "overlay-host";
+
+  /**
+   * The pane cycle.
+   *
+   * Built after the surface it moves between and before anything registers a
+   * panel, so every pane that can hold the keyboard is registered in one
+   * place.
+   */
+  const focus: FocusModel = createFocusModel({
+    sidebar,
+    // The content, because it is the element the keyboard actually lands in
+    // when Alice clicks in a paragraph.
+    editorContent: view.contentDOM,
+    // And the whole surface beside it, because CodeMirror's own panels — the
+    // search field `C-s` opens — are in here and not in the content.
+    editorSurface: view.dom,
+    focusEditor: () => {
+      view.focus();
+    },
+    // The one toggle, reached from a pane the editing surface cannot hear.
+    // The row's other route, from the text, runs the same call below.
+    toggleSidebar: () => {
+      toggleSidebar();
+    },
+    announce: (text) => {
+      announce(text);
+    },
+    // The same overlay the editing surface opens, over the rows this pane
+    // answers and dispatched through this reader's own `run`. The application
+    // adds only what neither reader owns: where it mounts, and how it speaks.
+    prefixHelp: (request) => {
+      openPrefixHelp({ ...request, host: overlayHost, announce });
+    },
+    onChange: () => {
+      refresh();
+    },
+  });
+
+  /**
+   * Show or hide the sidebar.
+   *
+   * One command behind both of the row's chords and both of the readers that
+   * answer them (`itd-2609091722296239`): the drawer's shown-or-hidden state
+   * is written in the one place it already lives.
+   */
+  function toggleSidebar(): void {
+    sidebar.toggle();
+  }
+
+  const layout = document.createElement("div");
+  layout.className = "layout";
+  layout.append(sidebar.element, editorPane);
+  root.replaceChildren(layout, overlayHost, keyLog.element, modeline.element);
+
+  // --------------------------------------------------------- editing session
+
+  /**
+   * Whether the buffer differs from the file.
+   *
+   * The comparison runs on the text as it would be written — the document's
+   * own line separator included — so a chapter with CRLF endings is not dirty
+   * the moment it is opened.
+   */
+  function isDirty(): boolean {
+    return documentText(view) !== savedText;
+  }
+
+  function refresh(): void {
+    const dirty = isDirty();
+    modeline.update(view, {
+      pane: focus.label,
+      prefix: focus.prefix,
+      chapter: openChapterTitle,
+      dirty,
+      detached,
+      message,
+      announcement: announcements,
+    });
+    if (dirty !== reportedDirty) {
+      reportedDirty = dirty;
+      services.reportDirty?.(dirty);
+    }
+  }
+
+  function announce(text: string): void {
+    message = text;
+    announcements += 1;
+    refresh();
+  }
+
+  /**
+   * Say something and then stop saying it.
+   *
+   * The scale is worth reading once; the cell it is read in is the one the
+   * position and the mark sit beside, and they must come back. Anything else
+   * said in the meantime wins, because it is newer.
+   */
+  function announceBriefly(text: string): void {
+    announce(text);
+    if (transient !== null) clearTimeout(transient);
+    transient = setTimeout(() => {
+      transient = null;
+      if (message === text) announce("");
+    }, TRANSIENT_MESSAGE_MS);
+  }
+
+  /**
+   * Take a step of type scale, or say why the surface did not move.
+   *
+   * The new step is remembered for this machine only once it has been taken,
+   * so a chord pressed at a bound writes nothing.
+   */
+  function scaleText(to: (step: number) => number): void {
+    const step = to(textScaleStep(view));
+    const moved = setTextScale(view, step);
+    const now = textScaleStep(view);
+    announceBriefly(textScaleMessage(now, moved));
+    if (!moved) return;
+    rememberScale(now);
+  }
+
+  /**
+   * Remember the step this machine was left at, one write at a time.
+   *
+   * A chord is pressed faster than a file is written, and the write is a
+   * read-modify-write of the whole settings file at the other end: two of them
+   * in flight together can persist a step the surface has already left, and
+   * can drop a change made beside them. So one write is in flight at a time
+   * and the steps that arrive while it is are collapsed to the last of them —
+   * which is the one the surface is actually showing. Nothing intermediate is
+   * worth a file: the scale is a single number about a single surface.
+   */
+  function rememberScale(step: number): void {
+    const write = services.writeTextScale;
+    if (!write) return;
+    pendingScale = step;
+    if (scaleWriting) return;
+    scaleWriting = true;
+    void (async () => {
+      try {
+        while (pendingScale !== null) {
+          const next = pendingScale;
+          pendingScale = null;
+          try {
+            await write(next);
+          } catch (error: unknown) {
+            announce(String(error));
+          }
+        }
+      } finally {
+        scaleWriting = false;
+      }
+    })();
+  }
+
+  /**
+   * A suffix for the announcement a document open or reload ends with, when
+   * the bibliography `readSidebarData` just read could not be read at all —
+   * empty otherwise, in the same shape `openFolder`'s own "entries
+   * unreadable" suffix already takes.
+   */
+  function bibliographySuffix(): string {
+    return bibliographyError === null ? "" : ` — bibliography unreadable: ${bibliographyError}`;
+  }
+
+  /** Ask before edits are thrown away. True means carry on. */
+  async function mayDiscard(): Promise<boolean> {
+    if (!isDirty()) return true;
+    const what = openChapterTitle ?? "The document";
+    return services.confirmDiscard(`${what} has unsaved edits. Discard them?`);
+  }
+
+  /** Put the buffer back to the welcome text and forget the open chapter. */
+  function forgetChapter(): void {
+    loadToken += 1;
+    openChapterPath = null;
+    openChapterTitle = null;
+    openNodeId = null;
+    detached = false;
+    savedText = WELCOME;
+    setDocument(view, WELCOME);
+    sidebar.select(null);
+  }
+
+  // -------------------------------------------------------- document session
+
+  /** Every chapter's own outline, and the facts the sidebar reports beside it. */
+  async function readSidebarData(next: DocumentTree): Promise<{
+    outlines: Map<string, Outline>;
+    facts: Map<string, ChapterFacts>;
+    bibliography: Bibliography;
+  }> {
+    const chapters = chaptersOf(next.root);
+    const outlines = new Map<string, Outline>();
+    const facts = new Map<string, ChapterFacts>();
+    bibliographyError = null;
+    if (chapters.length === 0) return { outlines, facts, bibliography: EMPTY_BIBLIOGRAPHY };
+
+    const paths = chapters.map((chapter) => chapter.path);
+    let batch: ChapterBatch;
+    if (services.readChapters) {
+      batch = await services.readChapters(paths);
+    } else {
+      // One round trip per chapter is the fallback for a host with no batch
+      // read; the shell has one, so this is the test harness's path.
+      const reads = [];
+      const failures: string[] = [];
+      for (const path of paths) {
+        try {
+          reads.push({ path, text: await services.readChapter(path) });
+        } catch (error) {
+          failures.push(String(error));
+        }
+      }
+      batch = { reads, failures };
+    }
+    // A document with no bibliography at all is ordinary: every citation key
+    // still resolves to nothing, which is exactly what an empty bibliography
+    // reads back as, so a chapter that cites one is reported the same way a
+    // chapter with a typo'd key against a real bibliography would be. A named
+    // bibliography that exists but cannot be read is a different fact, and
+    // stays a different one: it is the file's own error, not a fact about any
+    // citation key, so `bibliographyError` carries it for a caller to
+    // announce, and no key is badged unresolved on its account below.
+    const bibliographyText = services.readBibliography
+      ? await services.readBibliography().catch((error: unknown) => {
+          bibliographyError = String(error);
+          console.warn(`bibliography: ${bibliographyError}`);
+          return null;
+        })
+      : null;
+    const bibliography = parseBibliography(bibliographyText ?? "");
+    // The once-only opening belongs to the document's own first chapter alone
+    // (itd-2609051335518134, map #12); `chapters` is the same reading order
+    // `publish/build.ts`'s own `tree.chapters` walks, so "first" agrees here.
+    const firstChapterPath = chapters[0]?.path;
+    for (const read of batch.reads) {
+      const chapter = parseChapter(read.text);
+      outlines.set(read.path, outlineOf(chapter));
+      const unresolvedCitations =
+        bibliographyError === null ? unresolvedCitationKeysIn(chapter, bibliography) : [];
+      const unresolvedEggs = unresolvedEggsIn(chapter, read.path === firstChapterPath);
+      if (unresolvedCitations.length > 0 || unresolvedEggs.length > 0) {
+        facts.set(read.path, { unresolvedCitations, unresolvedEggs });
+      }
+    }
+    for (const failure of batch.failures) {
+      console.warn(`outline: ${failure}`);
+    }
+    return { outlines, facts, bibliography };
+  }
+
+  /** Draw a tree, with the outlines and the citation facts the sidebar needs. */
+  async function showTree(next: DocumentTree): Promise<void> {
+    tree = next;
+    const data = await readSidebarData(next);
+    outlines = data.outlines;
+    // The same bibliography the sidebar's facts were read against, so the
+    // editor completes and hovers a citation against what the sidebar
+    // reports about it (itd-2609051335502171).
+    setBibliography(view, data.bibliography);
+    sidebar.show(tree, outlines, data.facts);
+    sidebar.select(openChapterPath, openNodeId);
+    // The tree is the second pane, and a tree with no rows is not a pane at
+    // all. Redrawing it can empty it — a folder opened that holds no chapters
+    // — and the keyboard must not be left in a pane that has gone away.
+    focus.reconcile();
+  }
+
+  /** The chapter with a given path in the tree that is drawn, if any. */
+  function chapterAt(path: string): Chapter | undefined {
+    if (!tree) return undefined;
+    return chaptersOf(tree.root).find((chapter) => chapter.path === path);
+  }
+
+  /**
+   * The document's title, from `document.yaml` where there is one.
+   *
+   * The fill column is read in the same round trip, because it comes from the
+   * same file and a second read would be a second answer to one question. A
+   * file that is absent, silent, or unreadable leaves the default standing.
+   */
+  async function documentTitle(fallback: string): Promise<string> {
+    fillColumn = DEFAULT_FILL_COLUMN;
+    if (!services.readDocumentMetadata) return fallback;
+    try {
+      const metadata = await services.readDocumentMetadata();
+      const stated = metadata.fill_column;
+      if (typeof stated === "number" && stated > 0) fillColumn = stated;
+      const title = metadata.title;
+      return title !== null && title !== "" ? title : fallback;
+    } catch (error) {
+      console.warn(`document.yaml: ${String(error)}`);
+      return fallback;
+    }
+  }
+
+  /** What every prose command is told about the open document. */
+  function proseOptions(): ProseOptions {
+    return { fillColumn };
+  }
+
+  /** Run a prose command and announce its refusal, if it refused. */
+  function prose(run: () => string | null): void {
+    announce(run() ?? "");
+  }
+
+  // ------------------------------------------------------------- extensions
+
+  /** Leave, or say why leaving is not possible here. */
+  function leave(): void {
+    if (!services.quit) {
+      announce("Quitting needs the desktop application");
+      return;
+    }
+    void services.quit().catch((error: unknown) => {
+      announce(String(error));
+    });
+  }
+
+  /**
+   * `C-x C-c`.
+   *
+   * With nothing unsaved it quits. With unsaved edits it asks in the overlay
+   * host rather than through a native dialog, so `C-g` and Escape put Alice
+   * back in the text with her edits intact — which the platform's own dialog,
+   * answering Return and Escape alone, cannot do.
+   */
+  function quit(): void {
+    if (!isDirty()) {
+      leave();
+      return;
+    }
+    const keep = (): void => {
+      view.focus();
+      announce("Kept your edits");
+    };
+    openListOverlay<ListEntry>({
+      host: overlayHost,
+      className: "confirm",
+      label: "Quit Editor",
+      paneLabel: "Quit",
+      rowKey: "choice",
+      question: `${openChapterTitle ?? "The chapter"} has unsaved edits.`,
+      entries: () => QUIT_CHOICES,
+      onChoose: (choice) => {
+        if (choice.id === "quit") leave();
+        else keep();
+      },
+      onClose: (chosen) => {
+        if (!chosen) keep();
+      },
+    });
+  }
+
+  /**
+   * `C-x C-k`: close the chapter, Emacs's `kill-buffer` for this book model.
+   *
+   * The same shape `quit` above takes: with nothing unsaved it returns
+   * straight to the welcome text; with unsaved edits it asks in the overlay
+   * host, and `C-g` or Escape put Alice back in the text with her edits
+   * intact. Unlike `quit`, closing never leaves the application — the
+   * sidebar and the folder are exactly where they were.
+   */
+  function closeChapter(): void {
+    if (openChapterPath === null) {
+      announce("No chapter is open");
+      return;
+    }
+    const title = openChapterTitle ?? "The chapter";
+    const doClose = (): void => {
+      forgetChapter();
+      announce(`Closed ${title}`);
+    };
+    if (!isDirty()) {
+      doClose();
+      return;
+    }
+    const keep = (): void => {
+      view.focus();
+      announce("Kept your edits");
+    };
+    openListOverlay<ListEntry>({
+      host: overlayHost,
+      className: "confirm",
+      label: "Close the chapter",
+      paneLabel: "Close",
+      rowKey: "choice",
+      question: `${title} has unsaved edits.`,
+      entries: () => CLOSE_CHOICES,
+      onChoose: (choice) => {
+        if (choice.id === "close") doClose();
+        else keep();
+      },
+      onClose: (chosen) => {
+        if (!chosen) keep();
+      },
+    });
+  }
+
+  /**
+   * `C-x b`: switch chapter by name, with completion.
+   *
+   * Reaches the same `app.chapters`/`app.openChapter` the sidebar already
+   * uses (`itd-2609051335399446`), through the one filterable-list overlay
+   * `outline-commands.ts` shares with the command palette.
+   */
+  function switchChapter(): void {
+    if (tree === null) {
+      announce("No document is open");
+      return;
+    }
+    openSwitchChapter(
+      app.chapters,
+      (path) => {
+        const chapter = app.chapters.find((candidate) => candidate.path === path);
+        if (chapter) void app.openChapter(chapter);
+      },
+      { host: overlayHost },
+    );
+  }
+
+  /**
+   * `C-x C-o`: open a file or a folder Alice picks through the shell's own
+   * dialog (itd-2609061509393380, map #35). A native panel offers files or
+   * folders, never both, so this asks which kind of thing first, on the
+   * same list-overlay the quit and close prompts already use.
+   */
+  function openSource(): void {
+    if (
+      !services.pickDocumentFolder ||
+      !services.pickDocumentFile ||
+      !services.openDocumentSource
+    ) {
+      announce("Opening a file or a folder needs the desktop shell");
+      return;
+    }
+    openListOverlay<ListEntry>({
+      host: overlayHost,
+      className: "confirm",
+      label: "Open",
+      paneLabel: "Open",
+      rowKey: "choice",
+      question: "Open a folder or a single file?",
+      entries: () => OPEN_SOURCE_CHOICES,
+      onChoose: (choice) => {
+        void pickAndOpenSource(choice.id === "file");
+      },
+    });
+  }
+
+  /**
+   * The dialog `openSource` chose, then the result `services.openDocumentSource`
+   * hands back — shown the same way `openFolder` already shows a walked
+   * tree, with the discard guard run after the dialog closes and before the
+   * tree replaces what is on screen, the order `promptForFolder` already
+   * keeps.
+   */
+  async function pickAndOpenSource(asFile: boolean): Promise<void> {
+    try {
+      const picked = asFile
+        ? await services.pickDocumentFile?.()
+        : await services.pickDocumentFolder?.();
+      if (!picked) return; // the author cancelled the dialog
+      // The discard guard runs before the nonce is claimed: declining leaves
+      // the shell's document root and watcher untouched, rather than
+      // swapping them out from under the chapter still on screen
+      // (`iss-2609070642208293`). The nonce stays valid for its own
+      // lifetime regardless of how long the confirm dialog takes.
+      if (!(await mayDiscard())) {
+        announce("Kept the open chapter");
+        return;
+      }
+      const outcome = await services.openDocumentSource?.(picked.nonce);
+      if (!outcome) return;
+      forgetChapter();
+      chapterCursors.clear();
+      await showTree(outcome.tree);
+      for (const failure of outcome.tree.failures) {
+        console.warn(`open ${picked.name}: ${failure}`);
+      }
+      const title = await documentTitle(outcome.tree.root.title);
+      const chapters = chaptersOf(outcome.tree.root);
+      if (chapters.length === 0) {
+        announce(`${title} holds no Markdown chapters`);
+        return;
+      }
+      const selected =
+        outcome.selectedChapter === null
+          ? undefined
+          : chapters.find((chapter) => chapter.path === outcome.selectedChapter);
+      if (selected) {
+        await app.openChapter(selected);
+        announce(`Opened ${selected.title}${bibliographySuffix()}`);
+      } else {
+        announce(`Opened ${title}${bibliographySuffix()}`);
+      }
+    } catch (error) {
+      announce(String(error));
+    }
+  }
+
+  const commands: EditorCommands = {
+    "save-chapter": () => {
+      void app.save();
+    },
+    "open-folder": () => {
+      void app.promptForFolder();
+    },
+    "open-file-or-folder": () => {
+      openSource();
+    },
+    "toggle-key-log": () => {
+      keyLog.toggle();
+    },
+    "keys-panel": () => {
+      openKeysPanel(overlayHost);
+    },
+    "insert-palette": () => {
+      openPalette(view, { host: overlayHost, announce });
+    },
+    // From the text. A pane the editing surface cannot hear reads the same
+    // row for itself, in `src/focus.ts`, and both reach this one command.
+    "toggle-sidebar": () => {
+      toggleSidebar();
+    },
+    "reload-document": () => {
+      void app.reload();
+    },
+
+    // The type scale. Only the surface moves; the sidebar, the modeline and
+    // every panel keep the size they had.
+    "text-scale-increase": () => {
+      scaleText((step) => step + 1);
+    },
+    "text-scale-decrease": () => {
+      scaleText((step) => step - 1);
+    },
+    "text-scale-reset": () => {
+      scaleText(() => 0);
+    },
+    // From the text. A pane the editing surface cannot hear reads the same
+    // row for itself, in `src/focus.ts`, and both reach this one cycle.
+    "other-window": () => {
+      focus.cycle();
+    },
+
+    // The prose vocabulary. Each is a function of the view in `src/prose.ts`;
+    // what the application adds is the document's fill column, the modeline
+    // the refusals are announced in, and the host the two prompts mount in.
+    "fill-paragraph": () => {
+      prose(() => fillParagraph(view, proseOptions()));
+    },
+    "transpose-words": () => {
+      prose(() => transposeWords(view));
+    },
+    "transpose-lines": () => {
+      prose(() => transposeLines(view));
+    },
+    "capitalize-word": () => {
+      prose(() => capitalizeWord(view));
+    },
+    "backward-sentence": () => {
+      prose(() => backwardSentence(view, proseOptions()));
+    },
+    "forward-sentence": () => {
+      prose(() => forwardSentence(view, proseOptions()));
+    },
+    "backward-paragraph": () => {
+      prose(() => backwardParagraph(view));
+    },
+    "forward-paragraph": () => {
+      prose(() => forwardParagraph(view));
+    },
+    "delete-indentation": () => {
+      prose(() => deleteIndentation(view));
+    },
+    "just-one-space": () => {
+      prose(() => justOneSpace(view));
+    },
+    "delete-horizontal-space": () => {
+      prose(() => deleteHorizontalSpace(view));
+    },
+    "move-to-window-line": () => {
+      prose(() => moveToWindowLine(view));
+    },
+    "dabbrev-expand": () => {
+      prose(() => dabbrevExpand(view));
+    },
+
+    // The region case changes. The mechanism is the Emacs layer's, in
+    // `src/emacs.ts`; what the application adds is the one thing the keymap
+    // cannot say for itself — that there was no region to change
+    // (`iss-2609091920011632`) — announced through the same `prose` wrapper
+    // every other refusal over the text goes out on. One helper, both
+    // directions, so the refusal is written once.
+    "upcase-region": () => {
+      prose(() => changeCaseRegion(view, 1));
+    },
+    "downcase-region": () => {
+      prose(() => changeCaseRegion(view, -1));
+    },
+
+    // The table-alignment mode switch (`itd-2609061653559060`). It writes a
+    // boolean and says which mode Alice is now in; it dispatches nothing
+    // against the document, so turning alignment back on leaves every table
+    // exactly as it is until the next edit inside one. Nothing persists it:
+    // the app starts with alignment on, every time (cond-2609091900422614).
+    "toggle-table-alignment": () => {
+      announce(
+        setTableAlignment(!tableAlignmentOn())
+          ? "Table alignment on"
+          : "Table alignment off",
+      );
+    },
+
+    "zap-to-char": () => {
+      zapToChar(view, { host: overlayHost, announce });
+    },
+    "describe-key": () => {
+      describeKey({ host: overlayHost, announce });
+    },
+    // The prefix overlay (`itd-2609091722353594`). The prefix is handed over
+    // by whichever reader caught the `C-h`: the editing surface's guard in
+    // `src/emacs.ts` gives the chain it was holding, and the pane reader in
+    // `src/focus.ts` reaches this same module through its own hook, with its
+    // own rows and its own dispatch. Two readers, one answer.
+    //
+    // With no prefix — the palette is the one route that reaches the row that
+    // way, over a text with nothing half-typed — the row says so rather than
+    // opening an overlay over nothing.
+    "prefix-help": (prefix) => {
+      if (prefix === undefined || prefix === "") {
+        announce(prefixHelpNeedsAPrefix());
+        return;
+      }
+      openPrefixHelp({
+        prefix,
+        // The rows the text can actually run. Listing one it cannot would
+        // promise a chord that does nothing.
+        ids: BINDINGS.filter((binding) => scopeOf(binding) === "editor").map(
+          (binding) => binding.id,
+        ),
+        host: overlayHost,
+        announce,
+        run: (id) => {
+          // An application row announces its own refusal and then returns
+          // null, so announcing the empty string here would wipe what the row
+          // just said (`iss-2609100543005984`). `src/command-palette.ts`
+          // guards the same call the same way, and for the same reason.
+          const said = runBinding(view, id);
+          if (said !== null && said !== "") announce(said);
+        },
+      });
+    },
+    "command-palette": () => {
+      openCommandPalette(view, { host: overlayHost, announce });
+    },
+    quit: () => {
+      quit();
+    },
+
+    // The outline vocabulary. Each is a function of the view in
+    // `src/outline-commands.ts`; switch-chapter, close-chapter and occur are
+    // wired here directly, the same reason `quit` is: they need the
+    // application's chapter list, its dirty state, or the overlay host.
+    "outline-next-heading": () => {
+      prose(() => nextHeading(view));
+    },
+    "outline-previous-heading": () => {
+      prose(() => previousHeading(view));
+    },
+    "outline-forward-same-level": () => {
+      prose(() => forwardSameLevelHeading(view));
+    },
+    "outline-backward-same-level": () => {
+      prose(() => backwardSameLevelHeading(view));
+    },
+    "outline-up-heading": () => {
+      prose(() => upHeading(view));
+    },
+    "outline-toggle-fold": () => {
+      prose(() => toggleHeadingFold(view));
+    },
+    "outline-cycle": () => {
+      prose(() => cycleOutline(view));
+    },
+    "outline-promote": () => {
+      prose(() => promoteHeading(view));
+    },
+    "outline-demote": () => {
+      prose(() => demoteHeading(view));
+    },
+    "outline-move-up": () => {
+      prose(() => moveHeadingUp(view));
+    },
+    "outline-move-down": () => {
+      prose(() => moveHeadingDown(view));
+    },
+    "outline-bold-region": () => {
+      prose(() => boldRegion(view));
+    },
+    "outline-italic-region": () => {
+      prose(() => italicRegion(view));
+    },
+    "outline-insert-link": () => {
+      prose(() => insertLink(view));
+    },
+    "outline-insert-image": () => {
+      prose(() => insertImage(view));
+    },
+    "outline-switch-chapter": () => {
+      switchChapter();
+    },
+    "outline-close-chapter": () => {
+      closeChapter();
+    },
+    "outline-narrow": () => {
+      prose(() => narrowToSection(view));
+    },
+    "outline-widen": () => {
+      prose(() => widenSection(view));
+    },
+    "outline-occur": () => {
+      openOccur(view, { host: overlayHost });
+    },
+    "query-replace-regex": () => {
+      queryReplaceRegex(view);
+    },
+  };
+
+  const dropTargets: DropTargets = {
+    onPart: (partPath, payload) => {
+      void addToPart(partPath, payload);
+    },
+    onRefused: (refusal) => {
+      announce(refusal);
+    },
+  };
+  const drop = createDropRouter(
+    dropTargets,
+    services.subscribe
+      ? (event, handler) =>
+          services.subscribe!<DropPayload>(event, handler)
+      : undefined,
+  );
+
+  /** Copy a drop's Markdown files into a Part, then redraw. */
+  async function addToPart(
+    partPath: string,
+    payload: DropPayload,
+  ): Promise<void> {
+    if (!services.addChapter) {
+      announce("Adding a chapter needs the desktop shell");
+      return;
+    }
+    try {
+      const added = await services.addChapter(partPath, payload.nonce);
+      await app.reload();
+      const names = added.map((chapter) => chapter.title).join(", ");
+      announce(added.length === 1 ? `Added ${names}` : `Added ${names || "nothing"}`);
+    } catch (error) {
+      announce(String(error));
+    }
+  }
+
+  // ------------------------------------------------------------ the surface
+
+  const app: App = {
+    view,
+    sidebar,
+    modeline,
+    keyLog,
+    drop,
+    focus,
+
+    get dirty(): boolean {
+      return isDirty();
+    },
+
+    get detached(): boolean {
+      return detached;
+    },
+
+    get chapterPath(): string | null {
+      return openChapterPath;
+    },
+
+    get documentRoot(): string | null {
+      return tree === null ? null : tree.root.path;
+    },
+
+    get chapters(): readonly Chapter[] {
+      return tree === null ? [] : chaptersOf(tree.root);
+    },
+
+    announce,
+
+    async openFolder(path: string): Promise<void> {
+      if (!(await mayDiscard())) {
+        announce("Kept the open chapter");
+        return;
+      }
+      try {
+        const next = await services.openFolder(path);
+        // The chapter that was open belongs to the document being replaced.
+        // Holding on to its path would aim the next save at a file nothing on
+        // screen shows any more, and a remembered cursor at a path that
+        // happens to recur in the new document.
+        forgetChapter();
+        chapterCursors.clear();
+        await showTree(next);
+        for (const failure of next.failures) {
+          console.warn(`open ${path}: ${failure}`);
+        }
+        const unreadable =
+          next.failures.length > 0
+            ? ` — ${String(next.failures.length)} entries unreadable`
+            : "";
+        const title = await documentTitle(next.root.title);
+        if (chaptersOf(next.root).length === 0) {
+          announce(`${title} holds no Markdown chapters${unreadable}${bibliographySuffix()}`);
+          return;
+        }
+        announce(`Opened ${title}${unreadable}${bibliographySuffix()}`);
+      } catch (error) {
+        announce(String(error));
+      }
+    },
+
+    async promptForFolder(): Promise<void> {
+      try {
+        const path = await services.chooseFolder();
+        if (path === null) return;
+        await app.openFolder(path);
+      } catch (error) {
+        announce(String(error));
+      }
+    },
+
+    /**
+     * Re-walk, re-read, redraw.
+     *
+     * The expansion set and the selected path survive, because the tree is the
+     * same document however its files were renamed. What happens to the open
+     * chapter depends on three cases and nothing else: unchanged on disk, left
+     * alone; changed with a clean buffer, taken and said so; changed with a
+     * dirty buffer, the author asked which text to keep and neither written
+     * until she answers. A chapter whose path no longer resolves leaves the
+     * buffer alone and is marked detached, and its next save is refused.
+     */
+    async reload(): Promise<void> {
+      if (!tree) return;
+      const rootPath = tree.root.path;
+      const expansion = sidebar.expansion();
+      let next: DocumentTree;
+      try {
+        next = await services.openFolder(rootPath);
+      } catch (error) {
+        announce(String(error));
+        return;
+      }
+      await showTree(next);
+      sidebar.setExpansion(expansion);
+      sidebar.select(openChapterPath, openNodeId);
+      // The document's own settings are read again, because a reload is what
+      // an edit to `document.yaml` arrives as.
+      await documentTitle(next.root.title);
+      // Said now, because the reload's own chapter-comparison branches below
+      // may have nothing else to say — a clean, unchanged chapter reloads
+      // silently otherwise — and a bibliography that stopped reading is worth
+      // more than silence.
+      if (bibliographyError !== null) {
+        announce(`Bibliography unreadable: ${bibliographyError}`);
+      }
+
+      if (openChapterPath === null) return;
+      const still = chapterAt(openChapterPath);
+      if (!still) {
+        detached = true;
+        announce(`${openChapterTitle ?? "The chapter"} is no longer on disk`);
+        return;
+      }
+      detached = false;
+
+      let onDisk: string;
+      try {
+        onDisk = await services.readChapter(openChapterPath);
+      } catch (error) {
+        announce(String(error));
+        return;
+      }
+      if (onDisk === savedText) {
+        refresh();
+        return;
+      }
+      if (!isDirty()) {
+        savedText = onDisk;
+        setDocument(view, onDisk);
+        announce(`${openChapterTitle ?? "The chapter"} changed on disk`);
+        return;
+      }
+      const takeDisk = await services.confirmDiscard(
+        `${openChapterTitle ?? "The chapter"} changed on disk and has unsaved edits. Take the version on disk?`,
+      );
+      if (takeDisk) {
+        savedText = onDisk;
+        setDocument(view, onDisk);
+        announce("Took the version on disk");
+      } else {
+        // Neither text is written: the buffer keeps the author's edits and
+        // `savedText` keeps what she last read, so the buffer stays dirty and
+        // the next save is hers to make deliberately.
+        announce("Kept your edits; nothing was written");
+      }
+    },
+
+    async openChapter(chapter: Chapter, node?: OutlineNode): Promise<void> {
+      const sameChapter = chapter.path === openChapterPath;
+      if (!sameChapter) {
+        if (!(await mayDiscard())) {
+          announce("Kept the open chapter");
+          return;
+        }
+        // Remember where she leaves this chapter, so it opens here again the
+        // next time she comes back to it (`itd-2609061318091323` AC8).
+        if (openChapterPath !== null) {
+          chapterCursors.set(openChapterPath, view.state.selection.main.head);
+        }
+      }
+      if (sameChapter && node) {
+        // Already open: moving to one of its headings is not a load, and
+        // reloading would throw the author's edits away.
+        openNodeId = node.id;
+        sidebar.select(chapter.path, node.id);
+        revealLine(view, node.line);
+        view.focus();
+        refresh();
+        return;
+      }
+      loadToken += 1;
+      const token = loadToken;
+      try {
+        const text = await services.readChapter(chapter.path);
+        if (token !== loadToken) return;
+        savedText = text;
+        openChapterPath = chapter.path;
+        openChapterTitle = chapter.title;
+        openNodeId = node?.id ?? null;
+        detached = false;
+        setDocument(view, text);
+        sidebar.select(chapter.path, openNodeId);
+        if (node) {
+          revealLine(view, node.line);
+        } else {
+          const rememberedCursor = chapterCursors.get(chapter.path);
+          if (rememberedCursor !== undefined) placeCursor(view, rememberedCursor);
+        }
+        announce("");
+      } catch (error) {
+        if (token !== loadToken) return;
+        announce(String(error));
+      }
+    },
+
+    async save(): Promise<void> {
+      if (openChapterPath === null) {
+        announce("No chapter to save");
+        return;
+      }
+      if (detached) {
+        announce(`${openChapterPath} is no longer on disk; nothing was written`);
+        return;
+      }
+      const path = openChapterPath;
+      const text = documentText(view);
+      try {
+        await services.writeChapter(path, text);
+        // A chapter switch during the write would have moved the target, so
+        // only record the text as saved if it is still this chapter's.
+        if (openChapterPath === path) {
+          savedText = text;
+        }
+        announce(`Wrote ${openChapterTitle ?? path}`);
+      } catch (error) {
+        announce(String(error));
+      }
+    },
+
+    async confirmClose(): Promise<boolean> {
+      if (!isDirty()) return true;
+      return services.confirmDiscard(
+        `${openChapterTitle ?? "The document"} has unsaved edits. Close anyway?`,
+      );
+    },
+
+    registerCommand(bindingId: string, run: () => void): void {
+      commands[bindingId] = run;
+    },
+
+    registerPanel(name: string, element: HTMLElement, panelFocus?: PanelFocus): void {
+      element.dataset["panel"] = name;
+      overlayHost.append(element);
+      if (panelFocus) focus.registerPanel(panelFocus);
+    },
+
+    onDropTarget(target, handler): void {
+      if (target === "text") dropTargets.onText = handler;
+    },
+
+    destroy(): void {
+      if (transient !== null) clearTimeout(transient);
+      transient = null;
+      closeOverlay();
+      focus.destroy();
+      drop.dispose();
+      releaseEditorCommands(commands);
+      keyLog.dispose();
+      view.destroy();
+      root.replaceChildren();
+    },
+  };
+
+  setEditorCommands(commands);
+
+  // Every control that has a chord takes its tooltip from the table.
+  const openButton = sidebar.element.querySelector<HTMLElement>(".sidebar-open");
+  if (openButton) {
+    openButton.title = describeChord("open-folder", "Open a document folder");
+  }
+
+  // The scale this machine was left at. Read once and applied without a word
+  // in the modeline: Alice did not press anything, and a surface that opens at
+  // the size she chose is not news. A machine that has never said is silent,
+  // and the surface opens at its default.
+  if (services.readTextScale) {
+    void services
+      .readTextScale()
+      .then((step) => {
+        if (Math.abs(step) > TEXT_SCALE_LIMIT) {
+          console.warn(`text scale ${String(step)} is outside the range`);
+        }
+        setTextScale(view, step);
+      })
+      .catch((error: unknown) => {
+        console.warn(`text scale: ${String(error)}`);
+      });
+  }
+
+  sidebar.show(null);
+  refresh();
+  view.focus();
+  return app;
+}

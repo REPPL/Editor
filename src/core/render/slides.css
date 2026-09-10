@@ -1,0 +1,418 @@
+/*
+ * The deck's own layout, over reveal.js's engine and instead of its theme.
+ *
+ * reveal.js runs with `disableLayout: true`, so it moves between slides and
+ * does not scale them: a slide is laid out at the reader's own size, in the
+ * window it is given. That is what "legible on three device classes" costs and
+ * buys — the body text is never shrunk to fit a fixed 960 by 700 stage, so
+ * nothing needs pinching at 390 CSS px, and the price is that exact visual
+ * placement is not available.
+ *
+ * The slides are laid over one another on one stage the size of the window,
+ * and the one in view is the one that is visible. That much this file must own
+ * rather than leave to normal flow, because the engine writes `display`
+ * inline: see the section rule below, and `iss-2609061209123970`.
+ *
+ * Every measure here is relative. There is no pixel width anywhere, no
+ * transform that scales, and nothing that can be wider than its slide.
+ */
+
+.reveal {
+  /*
+   * Positioned, so that the engine's own on-screen controls and its progress
+   * bar sit over the deck rather than over the window. With the speaker's
+   * notes open the deck is a column of the window, and a control placed
+   * against the viewport would land on the notes instead.
+   */
+  position: relative;
+  width: 100%;
+  /*
+   * The stage is one window tall and it clips: the slides lie over one
+   * another inside it, so a deck is one slide at a time rather than a column
+   * of all of them. In the app `present.css` gives the stage the height of
+   * the split view; `100svh` is what a published deck opens at, where there
+   * is no stage around it.
+   */
+  height: 100svh;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /*
+   * The deck's type scale: one length, in the window's own units, that every
+   * other size on a slide is a multiple of.
+   *
+   * The engine runs with `disableLayout: true` and so scales nothing, which
+   * means this is the only thing that answers "make the window bigger". Both
+   * axes are in it, because a window can be made taller as well as wider and
+   * a projector is a different shape from a laptop; the floor keeps a 390 px
+   * phone readable and the ceiling is far enough away that no window anyone
+   * presents from ever reaches it. There is no fixed canvas anywhere: a slide
+   * reflows at the size it is given rather than being scaled to fit one.
+   */
+  --deck-type: clamp(1.05rem, 0.3rem + 1.5vw + 0.7vh, 5rem);
+  font-size: var(--deck-type);
+  line-height: 1.45;
+  color: #1a1a1a;
+  background: #fdfdfc;
+}
+
+/* The stage itself: the box every slide is laid over, and exactly that size. */
+.reveal .slides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: start;
+  transform: none;
+}
+
+/*
+ * One slide, laid over the others rather than under them.
+ *
+ * `iss-2609061209123970`: these used to be blocks of normal flow, hidden with
+ * `display: none` and shown with `display: flex`. But `display` is the one
+ * property the engine writes as an inline style — `updateSlidesVisibility`
+ * shows every slide within its view distance with `element.style.display =
+ * "block"` — and an inline style beats a stylesheet. So every slide came back
+ * a block in normal flow, the deck became a column as tall as the deck is
+ * long, and the window's own `overflow: hidden` cropped it after the title
+ * slide: navigation moved the engine's index and the reader saw nothing move.
+ *
+ * Position is the answer. Each slide is placed over the same stage, so
+ * nothing stacks whatever `display` it is handed, and the slides that are not
+ * in view are taken off the screen with `visibility` and `pointer-events` —
+ * the two properties the engine never writes inline.
+ */
+.reveal .slides > section,
+.reveal .slides > section > section {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: clamp(1rem, 4vmin, 3rem);
+  opacity: 1;
+  transition: none !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /*
+   * Centred while the face fits the stage, and scrolled from its own top when
+   * it does not: a slide too long for the window is read by scrolling that
+   * slide, never by losing the head of it above the edge.
+   *
+   * Two declarations, the second refining the first: a browser that does not
+   * know the `safe` keyword drops that line unread and keeps plain centring.
+   * The app's bundler collapses the pair to the second, which is right there
+   * — the app is one known engine; the site is served this file as it stands,
+   * where the older browser is the one that needs the first line.
+   */
+  justify-content: safe center;
+  overflow-y: auto;
+  gap: 0.6em;
+  overflow-wrap: anywhere;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/*
+ * Sections are laid out by this stylesheet, not moved about by the engine —
+ * except while reveal.js's own overview is up. `Overview.layout` sets each
+ * slide's own `element.style.transform` to its place in the grid, and
+ * `Overview.update` scales and pans `.slides` to centre the current one; both
+ * are how Escape's grid is laid out at all. Forcing `transform` to `none`
+ * regardless used to win over that inline style the same way it wins over the
+ * engine's transition, which left every slide sitting exactly on top of the
+ * stage's one resting position — the present slide's, since visibility below
+ * still showed only that one — rather than spread into a grid
+ * (`iss-2609061514457567`).
+ */
+.reveal:not(.overview) .slides > section,
+.reveal:not(.overview) .slides > section > section {
+  transform: none !important;
+}
+
+/* The slide in view, and only it, is on the screen and takes the pointer. */
+.reveal .slides > section.present,
+.reveal .slides > section > section.present {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/*
+ * Overview shows the whole deck at once, so every slide is back on the
+ * screen for it, not only the one that was `present` a moment ago — the same
+ * `visibility`/`pointer-events` pair the rule above answers for one slide,
+ * generalised to all of them for as long as `.overview` is on the element the
+ * engine puts it on.
+ */
+.reveal.overview .slides > section,
+.reveal.overview .slides > section > section {
+  visibility: visible !important;
+  pointer-events: auto;
+}
+
+/*
+ * Every face, not only the present one, needs its content laid out to be
+ * legible in its grid cell — the same reason the present-only rule below
+ * exists, generalised the way the visibility rule above is. A stack is
+ * excluded because a stack is not a face; its children get this rule through
+ * the `section > section` half above.
+ */
+.reveal.overview .slides > section:not(.stack) {
+  display: flex !important;
+}
+
+/*
+ * The face of the slide in view is laid out by this stylesheet.
+ *
+ * `!important` for the one reason the rest of this file needs none: the
+ * engine writes `display: block` inline on the slide it is showing, which
+ * would otherwise take the centring and the foot's `margin-block-start: auto`
+ * off the slide the reader is looking at. A stack is excluded because a stack
+ * is not a face.
+ */
+.reveal .slides > section.present:not(.stack),
+.reveal .slides > section > section.present {
+  display: flex !important;
+}
+
+/*
+ * A stack is the parent of the vertical slides, not a slide of its own: it is
+ * laid over the stage like any other section, and the one child carrying
+ * `present` is the slide that shows.
+ */
+.reveal .slides > section.stack {
+  padding: 0;
+  display: block;
+  overflow: hidden;
+}
+
+/* Speaker notes belong to the speaker's window, never to the slide. */
+.reveal aside.notes {
+  display: none;
+}
+
+/*
+ * Every headline is a multiple of the deck's type scale, never a scale of its
+ * own: one `clamp` grows and the whole slide grows with it, in proportion, at
+ * every window size.
+ */
+.reveal .headline {
+  margin: 0 0 0.4em;
+  font-size: 1.9em;
+  line-height: 1.15;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.reveal .slide-subsection .headline {
+  font-size: 1.5em;
+}
+
+.reveal .slide-divider {
+  justify-content: center;
+  text-align: center;
+}
+
+.reveal .slide-divider .headline {
+  margin: 0;
+  font-size: 2.4em;
+}
+
+.reveal .face > * {
+  margin-block: 0 0.6em;
+}
+
+.reveal .face > :last-child {
+  margin-block-end: 0;
+}
+
+/* Nothing may be wider than the slide it sits on. */
+.reveal img,
+.reveal svg,
+.reveal video {
+  max-width: 100%;
+  height: auto;
+}
+
+.reveal pre,
+.reveal table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.reveal table {
+  display: block;
+  border-collapse: collapse;
+}
+
+.reveal figure {
+  margin: 0;
+}
+
+.reveal .slide-image .face,
+.reveal .slide-image figure {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.reveal .full-bleed img {
+  width: 100%;
+  max-height: 72svh;
+  object-fit: contain;
+}
+
+.reveal figcaption {
+  display: block;
+  margin-block-start: 0.5em;
+  font-size: 0.62em;
+  line-height: 1.3;
+}
+
+.reveal figcaption .caption {
+  display: block;
+}
+
+.reveal figcaption .credit,
+.reveal .slide-foot {
+  display: block;
+  font-size: 0.62em;
+  line-height: 1.3;
+  color: #55534e;
+}
+
+/* A credit is a line at the foot of the slide, not a paragraph of body text. */
+.reveal .slide-foot {
+  margin-block-start: auto;
+  padding-block-start: 0.6em;
+  border-block-start: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.reveal .slide-foot p {
+  margin: 0;
+}
+
+.reveal .slide-foot .footnote .label {
+  font-weight: 600;
+  margin-inline-end: 0.35em;
+}
+
+/*
+ * Columns, and the declared widths they take.
+ *
+ * Nothing rendered carries a `style` attribute: the site serves under
+ * `style-src 'self'`, which drops one unread, so a declared width reaches the
+ * page as `data-width` — a whole percentage on a scale of fives — and the rules
+ * live here. A column with no declared width takes an equal share of what is
+ * left, which is what `flex: 1 1 0` says.
+ */
+.reveal .columns {
+  --column-gap: clamp(0.8rem, 3vmin, 2.4rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--column-gap);
+  align-items: start;
+}
+
+.reveal .column {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.reveal .column > :first-child {
+  margin-block-start: 0;
+}
+
+.reveal .column[data-width="5"] { flex: 0 0 calc(5% - var(--column-gap)); }
+.reveal .column[data-width="10"] { flex: 0 0 calc(10% - var(--column-gap)); }
+.reveal .column[data-width="15"] { flex: 0 0 calc(15% - var(--column-gap)); }
+.reveal .column[data-width="20"] { flex: 0 0 calc(20% - var(--column-gap)); }
+.reveal .column[data-width="25"] { flex: 0 0 calc(25% - var(--column-gap)); }
+.reveal .column[data-width="30"] { flex: 0 0 calc(30% - var(--column-gap)); }
+.reveal .column[data-width="35"] { flex: 0 0 calc(35% - var(--column-gap)); }
+.reveal .column[data-width="40"] { flex: 0 0 calc(40% - var(--column-gap)); }
+.reveal .column[data-width="45"] { flex: 0 0 calc(45% - var(--column-gap)); }
+.reveal .column[data-width="50"] { flex: 0 0 calc(50% - var(--column-gap)); }
+.reveal .column[data-width="55"] { flex: 0 0 calc(55% - var(--column-gap)); }
+.reveal .column[data-width="60"] { flex: 0 0 calc(60% - var(--column-gap)); }
+.reveal .column[data-width="65"] { flex: 0 0 calc(65% - var(--column-gap)); }
+.reveal .column[data-width="70"] { flex: 0 0 calc(70% - var(--column-gap)); }
+.reveal .column[data-width="75"] { flex: 0 0 calc(75% - var(--column-gap)); }
+.reveal .column[data-width="80"] { flex: 0 0 calc(80% - var(--column-gap)); }
+.reveal .column[data-width="85"] { flex: 0 0 calc(85% - var(--column-gap)); }
+.reveal .column[data-width="90"] { flex: 0 0 calc(90% - var(--column-gap)); }
+.reveal .column[data-width="95"] { flex: 0 0 calc(95% - var(--column-gap)); }
+.reveal .column[data-width="100"] { flex: 0 0 100%; }
+
+/* A picture sized by the author, on the same scale and by the same rule. */
+.reveal img[data-width="5"] { width: 5%; height: auto; }
+.reveal img[data-width="10"] { width: 10%; height: auto; }
+.reveal img[data-width="15"] { width: 15%; height: auto; }
+.reveal img[data-width="20"] { width: 20%; height: auto; }
+.reveal img[data-width="25"] { width: 25%; height: auto; }
+.reveal img[data-width="30"] { width: 30%; height: auto; }
+.reveal img[data-width="35"] { width: 35%; height: auto; }
+.reveal img[data-width="40"] { width: 40%; height: auto; }
+.reveal img[data-width="45"] { width: 45%; height: auto; }
+.reveal img[data-width="50"] { width: 50%; height: auto; }
+.reveal img[data-width="55"] { width: 55%; height: auto; }
+.reveal img[data-width="60"] { width: 60%; height: auto; }
+.reveal img[data-width="65"] { width: 65%; height: auto; }
+.reveal img[data-width="70"] { width: 70%; height: auto; }
+.reveal img[data-width="75"] { width: 75%; height: auto; }
+.reveal img[data-width="80"] { width: 80%; height: auto; }
+.reveal img[data-width="85"] { width: 85%; height: auto; }
+.reveal img[data-width="90"] { width: 90%; height: auto; }
+.reveal img[data-width="95"] { width: 95%; height: auto; }
+.reveal img[data-width="100"] { width: 100%; height: auto; }
+
+/* A table cell aligned as the author's pipe table declared it. */
+.reveal th[data-align="left"],
+.reveal td[data-align="left"] { text-align: left; }
+.reveal th[data-align="center"],
+.reveal td[data-align="center"] { text-align: center; }
+.reveal th[data-align="right"],
+.reveal td[data-align="right"] { text-align: right; }
+
+/*
+ * Below iPad width the columns stack in source order.
+ *
+ * The declared shares are `flex` declarations rather than a `style` attribute,
+ * so laying the row out as a block replaces them without an `!important` and
+ * the source order is what the reader gets.
+ */
+@media (max-width: 819px) {
+  .reveal .columns {
+    display: block;
+  }
+
+  .reveal .column + .column {
+    margin-block-start: var(--column-gap);
+  }
+}
+
+.reveal blockquote {
+  margin: 0;
+  padding-inline-start: 0.8em;
+  border-inline-start: 0.15em solid rgba(0, 0, 0, 0.2);
+  font-style: italic;
+}
+
+.reveal .missing-image {
+  display: inline-block;
+  padding: 0.3em 0.5em;
+  border: 1px dashed rgba(0, 0, 0, 0.3);
+  font-size: 0.7em;
+}
+
+.reveal .citation {
+  white-space: nowrap;
+}
+
+/* The on-screen controls, which the engine draws, want room on a phone. */
+.reveal .controls {
+  inset-block-end: env(safe-area-inset-bottom, 0.5rem);
+}

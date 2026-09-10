@@ -1,0 +1,1247 @@
+//! The on-disk document model.
+//!
+//! A document is a folder. A Part is a folder, a Chapter is a `*.md` file, and
+//! a numeric filename prefix gives the order. Everything below a Chapter lives
+//! inside the Markdown as headings and is not modeled here.
+//!
+//! The web view is a trust boundary: any script running inside it can invoke a
+//! command with any argument it likes. So every path that arrives from the
+//! frontend is resolved against the canonicalised root of the open document by
+//! [`confine_path`] — or by [`confine_chapter`], [`confine_part`] or
+//! [`confine_asset`], the three wrappers that say what kind of thing they
+//! expect — and refused if it lands anywhere else.
+
+use std::cmp::Ordering;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+
+use serde::Serialize;
+
+/// How deep the walk descends before it stops.
+///
+/// The walk resolves each entry with [`fs::metadata`], which follows symlinks,
+/// so a folder linking back into its own ancestry would otherwise recurse for
+/// ever. A document folder is a handful of levels deep, so this bound costs
+/// nothing real and is what makes the walk terminate. A Part that hits it
+/// reports `truncated`, rather than passing off a partial listing as complete.
+const MAX_DEPTH: usize = 8;
+
+/// The file extensions a Chapter may carry, lower-cased.
+const CHAPTER_EXTENSIONS: [&str; 2] = ["md", "markdown"];
+
+/// Folder names the document model reserves, which are therefore not Parts.
+///
+/// `assets/` holds the files a chapter references and sits beside it; showing
+/// it in the sidebar as an empty Part would be a phantom.
+const RESERVED_FOLDERS: [&str; 1] = ["assets"];
+
+/// Distinguishes concurrent temporary files within one process.
+static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+
+/// A Markdown file inside a Part.
+#[derive(Debug, Clone, Serialize)]
+pub struct Chapter {
+    /// The file name, extension included.
+    pub name: String,
+    /// The name with its numeric prefix and extension removed, for display.
+    pub title: String,
+    /// The absolute path of the file.
+    pub path: String,
+    /// The numeric filename prefix, when the name carries one.
+    pub order: Option<u32>,
+    /// The file's size in bytes, from the walk's own metadata call.
+    pub bytes: u64,
+    /// Last modification, in milliseconds since the epoch, when the platform
+    /// reports one. `None` rather than a guess: a filesystem that keeps no
+    /// modification time must not be made to look as though it does.
+    pub modified: Option<u64>,
+}
+
+/// A folder: the document root, or a Part inside it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Part {
+    /// The folder name.
+    pub name: String,
+    /// The name with its numeric prefix removed, for display.
+    pub title: String,
+    /// The absolute path of the folder.
+    pub path: String,
+    /// The numeric filename prefix, when the name carries one.
+    pub order: Option<u32>,
+    /// Child Parts, in order.
+    pub parts: Vec<Part>,
+    /// Chapters directly inside this Part, in order.
+    pub chapters: Vec<Chapter>,
+    /// Whether the walk stopped here at [`MAX_DEPTH`], leaving this Part's
+    /// contents unread.
+    pub truncated: bool,
+}
+
+/// One opened document: the root folder and everything ordered beneath it.
+#[derive(Debug, Clone, Serialize)]
+pub struct DocumentTree {
+    pub root: Part,
+    /// Entries the walk could not read, one message each. A tree with
+    /// failures is a partial tree, not a failed one: the rest is still usable
+    /// and the frontend can say what is missing.
+    pub failures: Vec<String>,
+}
+
+/// Split a leading run of digits off a file name.
+///
+/// `"03-getting-started.md"` yields `(Some(3), "getting-started.md")`. A name
+/// with no digit prefix, or one whose digits do not overflow into a separator,
+/// keeps its whole name.
+fn split_order(name: &str) -> (Option<u32>, &str) {
+    let digits: String = name.chars().take_while(char::is_ascii_digit).collect();
+    if digits.is_empty() {
+        return (None, name);
+    }
+    let rest = &name[digits.len()..];
+    let trimmed = rest.trim_start_matches([' ', '-', '_', '.']);
+    // A name that is nothing but digits keeps its digits as the title.
+    let title = if trimmed.is_empty() { name } else { trimmed };
+    (digits.parse::<u32>().ok(), title)
+}
+
+/// The name with a Chapter extension removed, whatever its case.
+fn strip_chapter_extension(name: &str) -> &str {
+    let lower = name.to_ascii_lowercase();
+    for extension in CHAPTER_EXTENSIONS {
+        let suffix = format!(".{extension}");
+        if lower.ends_with(&suffix) {
+            return &name[..name.len() - suffix.len()];
+        }
+    }
+    name
+}
+
+/// The display title for a file or folder name.
+fn title_of(name: &str, strip_extension: bool) -> String {
+    let stem = if strip_extension {
+        strip_chapter_extension(name)
+    } else {
+        name
+    };
+    let (_, rest) = split_order(stem);
+    rest.replace(['-', '_'], " ")
+}
+
+/// Whether a directory entry name takes part in the document model.
+fn is_visible(name: &str) -> bool {
+    !name.starts_with('.')
+}
+
+/// Whether a folder name is a Part rather than one of the model's own folders.
+fn is_part_folder(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    !RESERVED_FOLDERS.contains(&lower.as_str())
+}
+
+/// Whether a file name is a Chapter.
+fn is_chapter(name: &str) -> bool {
+    strip_chapter_extension(name).len() < name.len()
+}
+
+/// A directory entry's name as a string the IPC boundary can carry.
+///
+/// `to_string_lossy` would replace the offending bytes, and the path the
+/// frontend then sent back would name nothing on disk: the entry would be
+/// visible in the sidebar and unopenable. Leaving it out and saying so is the
+/// honest reading. macOS's own filesystems refuse to store such a name in the
+/// first place; a mounted volume that does not is why this exists.
+fn utf8_name(raw: &std::ffi::OsStr) -> Result<&str, String> {
+    raw.to_str().ok_or_else(|| {
+        format!(
+            "{} is not a UTF-8 name and is left out",
+            raw.to_string_lossy()
+        )
+    })
+}
+
+/// A file's modification time in milliseconds since the epoch.
+///
+/// `None` when the platform does not record one, or when it predates the
+/// epoch: the frontend compares the number against one it saw before, and a
+/// number it cannot compare is worse than no number at all.
+fn modified_millis(metadata: &fs::Metadata) -> Option<u64> {
+    metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|since| since.as_millis() as u64)
+}
+
+/// Order two siblings: numbered ones first by number, then everything by name.
+fn compare_by_order(a: (Option<u32>, &str), b: (Option<u32>, &str)) -> Ordering {
+    match (a.0, b.0) {
+        (Some(x), Some(y)) if x != y => x.cmp(&y),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        _ => a.1.cmp(b.1),
+    }
+}
+
+/// Read `folder` and everything under it into a `Part`.
+///
+/// A single unreadable entry is recorded in `failures` and skipped: one bad
+/// symlink must not cost the author the rest of their document.
+fn read_part(folder: &Path, depth: usize, failures: &mut Vec<String>) -> Result<Part, String> {
+    let name = folder
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| folder.to_string_lossy().into_owned());
+    let (order, _) = split_order(&name);
+
+    let mut parts: Vec<Part> = Vec::new();
+    let mut chapters: Vec<Chapter> = Vec::new();
+    let truncated = depth >= MAX_DEPTH;
+
+    if !truncated {
+        let entries =
+            fs::read_dir(folder).map_err(|e| format!("cannot read {}: {e}", folder.display()))?;
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    failures.push(format!("cannot read an entry in {}: {e}", folder.display()));
+                    continue;
+                }
+            };
+            let raw_name = entry.file_name();
+            let entry_name = match utf8_name(&raw_name) {
+                Ok(name) => name.to_owned(),
+                Err(message) => {
+                    failures.push(format!("{}: {message}", folder.display()));
+                    continue;
+                }
+            };
+            if !is_visible(&entry_name) {
+                continue;
+            }
+            let entry_path = entry.path();
+            let Some(entry_path_text) = entry_path.to_str().map(str::to_owned) else {
+                failures.push(format!("{} is not a UTF-8 path", entry_path.display()));
+                continue;
+            };
+            // `DirEntry::file_type` reports the link itself, so a symlinked
+            // Part or Chapter would read as neither a folder nor a file and
+            // vanish from the tree. `fs::metadata` follows the link and reports
+            // what it points at, which is what the author sees in Finder.
+            let metadata = match fs::metadata(&entry_path) {
+                Ok(metadata) => metadata,
+                Err(e) => {
+                    failures.push(format!("cannot inspect {}: {e}", entry_path.display()));
+                    continue;
+                }
+            };
+            if metadata.is_dir() {
+                if !is_part_folder(&entry_name) {
+                    continue;
+                }
+                match read_part(&entry_path, depth + 1, failures) {
+                    Ok(part) => parts.push(part),
+                    Err(message) => failures.push(message),
+                }
+            } else if metadata.is_file() && is_chapter(&entry_name) {
+                let (chapter_order, _) = split_order(&entry_name);
+                chapters.push(Chapter {
+                    title: title_of(&entry_name, true),
+                    path: entry_path_text,
+                    order: chapter_order,
+                    bytes: metadata.len(),
+                    modified: modified_millis(&metadata),
+                    name: entry_name,
+                });
+            }
+        }
+    }
+
+    parts.sort_by(|a, b| compare_by_order((a.order, &a.name), (b.order, &b.name)));
+    chapters.sort_by(|a, b| compare_by_order((a.order, &a.name), (b.order, &b.name)));
+
+    Ok(Part {
+        title: title_of(&name, false),
+        path: folder.to_string_lossy().into_owned(),
+        order,
+        parts,
+        chapters,
+        truncated,
+        name,
+    })
+}
+
+/// Resolve a folder the user chose into the canonical root of a document.
+///
+/// Canonical means symlinks and `..` are already gone, so it is a prefix that
+/// [`confine_path`] can compare against without being fooled.
+pub fn canonical_root(folder: &str) -> Result<PathBuf, String> {
+    let path = Path::new(folder);
+    let resolved =
+        fs::canonicalize(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+    if !resolved.is_dir() {
+        return Err(format!("{} is not a folder", resolved.display()));
+    }
+    Ok(resolved)
+}
+
+/// The file extensions [`confine_asset`] will resolve, lower-cased.
+///
+/// Phase 1 carries images and nothing else: a script in the web view can ask
+/// the shell to read a file inside the open document, so what it may name is
+/// an allow-list rather than a deny-list. Later phases widen it; they do not
+/// remove it.
+pub const ASSET_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "svg", "webp", "avif"];
+
+/// The name to put in a refusal, which is the file name where there is one.
+///
+/// The whole path is not used: it would put the author's machine into a
+/// message the frontend may show, and the name is what identifies the file to
+/// the person reading it.
+fn display_name(path: &Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+/// The lower-cased extension of a file name, if it has one.
+fn extension_of(name: &str) -> Option<String> {
+    Path::new(name)
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+}
+
+/// Resolve a path from the frontend against the open document's root.
+///
+/// This is the one primitive: [`confine_chapter`], [`confine_part`] and
+/// [`confine_asset`] are thin wrappers that add what kind of thing they expect
+/// to find, and every command that takes a path goes through one of them.
+///
+/// The path must resolve, symlinks and `..` resolved, to somewhere inside
+/// `root`. Everything else is refused, so a script in the web view cannot
+/// reach `~/.ssh/id_rsa` or write outside the document the author opened. A
+/// path that does not exist yet is resolved through its folder, which must
+/// exist and is canonicalised the same way, so a file about to be created is
+/// confined before it is written rather than after.
+pub fn confine_path(root: &Path, requested: &str) -> Result<PathBuf, String> {
+    let requested = Path::new(requested);
+    let candidate = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        root.join(requested)
+    };
+    let name = display_name(&candidate);
+    let resolved = match fs::canonicalize(&candidate) {
+        Ok(path) => path,
+        Err(_) => {
+            let parent = candidate
+                .parent()
+                .ok_or_else(|| format!("{name} has no folder"))?;
+            let file_name = candidate
+                .file_name()
+                .ok_or_else(|| format!("{name} does not name a file"))?;
+            fs::canonicalize(parent)
+                .map_err(|e| format!("cannot resolve {}: {e}", parent.display()))?
+                .join(file_name)
+        }
+    };
+    if !resolved.starts_with(root) {
+        return Err(format!("{name} is outside the open document"));
+    }
+    Ok(resolved)
+}
+
+/// Resolve a chapter path: [`confine_path`], and it must name a Markdown file.
+///
+/// The extension is checked twice, on the requested name and again on the path
+/// it resolves to, because the two need not agree: a symlink called
+/// `01-alice.md` can point at `notes.txt`, and it is the resolved path that
+/// gets opened. Checking only what was asked for would let the extension the
+/// caller was refused on differ from the extension of the file actually read.
+pub fn confine_chapter(root: &Path, requested: &str) -> Result<PathBuf, String> {
+    let name = display_name(Path::new(requested));
+    if !is_chapter(&name) {
+        return Err(format!("{name} is not a Markdown chapter"));
+    }
+    let resolved = confine_path(root, requested)?;
+    if !is_chapter(&display_name(&resolved)) {
+        return Err(format!("{name} is not a Markdown chapter"));
+    }
+    Ok(resolved)
+}
+
+/// Resolve a Part path: [`confine_path`], and it must be a folder that exists.
+///
+/// A Part is a folder the author already has; nothing here creates one. So
+/// unlike a chapter about to be written, a Part that does not resolve to a
+/// directory is a refusal rather than a path to be prepared.
+pub fn confine_part(root: &Path, requested: &str) -> Result<PathBuf, String> {
+    let resolved = confine_path(root, requested)?;
+    if !resolved.is_dir() {
+        return Err(format!(
+            "{} is not a folder in the open document",
+            display_name(&resolved)
+        ));
+    }
+    Ok(resolved)
+}
+
+/// Resolve an asset path: [`confine_path`], and it must carry an extension in
+/// [`ASSET_EXTENSIONS`].
+///
+/// Size is the reader's business, not the path's: this says which file may be
+/// named, and the command that opens it says how much of it may be read.
+///
+/// As with [`confine_chapter`], the extension is checked on the resolved path
+/// as well as on the requested name: a link called `lantern.jpg` that resolves
+/// to `id_rsa` is refused on what it resolves to.
+pub fn confine_asset(root: &Path, requested: &str) -> Result<PathBuf, String> {
+    let name = display_name(Path::new(requested));
+    if !is_asset(&name) {
+        return Err(format!("{name} is not an image this phase carries"));
+    }
+    let resolved = confine_path(root, requested)?;
+    if !is_asset(&display_name(&resolved)) {
+        return Err(format!("{name} is not an image this phase carries"));
+    }
+    Ok(resolved)
+}
+
+/// Whether a file name carries an extension in [`ASSET_EXTENSIONS`].
+fn is_asset(name: &str) -> bool {
+    extension_of(name)
+        .map(|extension| ASSET_EXTENSIONS.contains(&extension.as_str()))
+        .unwrap_or(false)
+}
+
+/// Walk a document folder into a `DocumentTree`.
+pub fn read_tree(folder: &Path) -> Result<DocumentTree, String> {
+    if !folder.is_dir() {
+        return Err(format!("{} is not a folder", folder.display()));
+    }
+    let mut failures = Vec::new();
+    let root = read_part(folder, 0, &mut failures)?;
+    Ok(DocumentTree { root, failures })
+}
+
+/// Build a one-chapter `DocumentTree` for a single Markdown file opened on
+/// its own, rooted at the folder it sits in (`itd-2609061509393380`, map
+/// #35).
+///
+/// Nothing is written for this shape — no `document.yaml`, no Part folder —
+/// so the tree is built by hand rather than by [`read_tree`]'s own
+/// whole-folder walk: a folder walk would also draw whatever else happens to
+/// live beside the file, and "a one-chapter document" means exactly the one
+/// chapter Alice picked, not every sibling its folder happens to hold. The
+/// pieces it reuses — [`is_chapter`], [`title_of`], [`modified_millis`],
+/// [`display_name`] — are the same ones [`read_part`] calls for every other
+/// chapter, so a bare file is labelled and refused on the same terms one
+/// found by a walk would be.
+pub fn read_single_chapter(file: &Path) -> Result<DocumentTree, String> {
+    let file_name = display_name(file);
+    if !is_chapter(&file_name) {
+        return Err(format!("{file_name} is not a Markdown file"));
+    }
+    let metadata = fs::metadata(file).map_err(|e| format!("cannot inspect {file_name}: {e}"))?;
+    if !metadata.is_file() {
+        return Err(format!("{file_name} is not a file"));
+    }
+    let chapter = Chapter {
+        title: title_of(&file_name, true),
+        path: file.to_string_lossy().into_owned(),
+        order: None,
+        bytes: metadata.len(),
+        modified: modified_millis(&metadata),
+        name: file_name,
+    };
+    let folder = file
+        .parent()
+        .ok_or_else(|| format!("{} has no folder", file.display()))?;
+    let folder_name = folder
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| folder.to_string_lossy().into_owned());
+    let root = Part {
+        title: title_of(&folder_name, false),
+        path: folder.to_string_lossy().into_owned(),
+        order: None,
+        parts: Vec::new(),
+        chapters: vec![chapter],
+        truncated: false,
+        name: folder_name,
+    };
+    Ok(DocumentTree {
+        root,
+        failures: Vec::new(),
+    })
+}
+
+/// Read one Chapter's Markdown.
+pub fn read_chapter_text(path: &Path) -> Result<String, String> {
+    fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))
+}
+
+/// Write one Chapter's Markdown, replacing what is there.
+///
+/// The text goes to a temporary file beside the chapter — the same directory,
+/// so the same filesystem, so the rename that follows is atomic — is flushed to
+/// disk, and only then takes the chapter's place. A crash or a full disk part
+/// way through leaves the original file whole rather than truncated. The
+/// temporary name starts with a dot, so a walk running concurrently skips it.
+pub fn write_chapter_text(path: &Path, text: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("{} has no folder", path.display()))?;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .ok_or_else(|| format!("{} does not name a file", path.display()))?;
+    let temp = parent.join(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, AtomicOrdering::Relaxed)
+    ));
+
+    let written = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&temp)?;
+        file.write_all(text.as_bytes())?;
+        file.sync_all()
+    })();
+    if let Err(error) = written {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("cannot write {}: {error}", path.display()));
+    }
+
+    fs::rename(&temp, path).map_err(|error| {
+        let _ = fs::remove_file(&temp);
+        format!("cannot replace {}: {error}", path.display())
+    })
+}
+
+/// One chapter's text, as a batch read reports it.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChapterRead {
+    pub path: String,
+    pub text: String,
+}
+
+/// What a batch read found, and what it could not.
+///
+/// A reload redraws the whole tree, so it needs every chapter's text at once.
+/// One unreadable chapter is a line in `failures`, not a failed batch: the
+/// rest of the document still draws.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ChapterBatch {
+    pub reads: Vec<ChapterRead>,
+    pub failures: Vec<String>,
+}
+
+/// Read many chapters in one pass, each confined to `root`.
+pub fn read_many(root: &Path, paths: &[String]) -> ChapterBatch {
+    let mut batch = ChapterBatch::default();
+    for path in paths {
+        match confine_chapter(root, path).and_then(|resolved| read_chapter_text(&resolved)) {
+            Ok(text) => batch.reads.push(ChapterRead {
+                path: path.clone(),
+                text,
+            }),
+            Err(message) => batch.failures.push(message),
+        }
+    }
+    batch
+}
+
+/// The next unused two-digit prefix for a new chapter in `part`.
+///
+/// One past the highest prefix already there, so a chapter added to a Part
+/// lands after the ones the author has. Numbers above 99 keep their width;
+/// nothing is renamed to make room.
+pub fn next_prefix(part: &Path) -> Result<String, String> {
+    let mut highest: u32 = 0;
+    let entries =
+        fs::read_dir(part).map_err(|e| format!("cannot read {}: {e}", display_name(part)))?;
+    for entry in entries.flatten() {
+        let raw = entry.file_name();
+        let Some(name) = raw.to_str() else { continue };
+        if !is_visible(name) {
+            continue;
+        }
+        if let (Some(order), _) = split_order(name) {
+            highest = highest.max(order);
+        }
+    }
+    Ok(format!("{:02}", highest.saturating_add(1)))
+}
+
+/// Copy a Markdown file into a Part as its next chapter.
+///
+/// The bytes are copied as bytes: no line ending, escape, or trailing newline
+/// is touched, because nothing here turns the file into a string and back.
+/// The copy goes to a dot-prefixed temporary file beside the destination and
+/// is renamed into place, so a half-written chapter never appears in the tree
+/// and the walk — which skips dotted names — never sees the temporary.
+pub fn add_chapter_from(part: &Path, source: &Path) -> Result<Chapter, String> {
+    let source_name = display_name(source);
+    if !is_chapter(&source_name) {
+        return Err(format!("{source_name} is not a Markdown chapter"));
+    }
+    let (_, stem) = split_order(&source_name);
+    let name = format!("{}-{}", next_prefix(part)?, stem);
+    let destination = part.join(&name);
+    if destination.exists() {
+        return Err(format!("{name} is already in this Part"));
+    }
+
+    let bytes = fs::read(source).map_err(|e| format!("cannot read {source_name}: {e}"))?;
+    let temp = part.join(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, AtomicOrdering::Relaxed)
+    ));
+    let written = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&temp)?;
+        file.write_all(&bytes)?;
+        file.sync_all()
+    })();
+    if let Err(error) = written {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("cannot write {name}: {error}"));
+    }
+    if let Err(error) = fs::rename(&temp, &destination) {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("cannot write {name}: {error}"));
+    }
+
+    let metadata = fs::metadata(&destination).ok();
+    let (order, _) = split_order(&name);
+    Ok(Chapter {
+        title: title_of(&name, true),
+        path: destination.to_string_lossy().into_owned(),
+        order,
+        bytes: metadata.as_ref().map(fs::Metadata::len).unwrap_or(0),
+        modified: metadata.as_ref().and_then(modified_millis),
+        name,
+    })
+}
+
+/// Add every file of a drop to a Part, or none of them.
+///
+/// The whole drop is checked before anything is written: a drop carrying one
+/// file that is not Markdown creates nothing and says what a Part accepts,
+/// which is what the author is told rather than half a drop landing.
+pub fn add_chapters_from(part: &Path, sources: &[PathBuf]) -> Result<Vec<Chapter>, String> {
+    if sources.is_empty() {
+        return Err("that drop carried no file".to_string());
+    }
+    for source in sources {
+        let name = display_name(source);
+        if !is_chapter(&name) {
+            return Err(format!(
+                "{name} is not a Markdown chapter; a Part takes .md and .markdown files"
+            ));
+        }
+    }
+    let mut added = Vec::with_capacity(sources.len());
+    for source in sources {
+        added.push(add_chapter_from(part, source)?);
+    }
+    Ok(added)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The tests read a real filesystem, so they need real permission bits.
+    #[cfg(unix)]
+    fn set_mode(path: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("permissions");
+    }
+
+    #[test]
+    fn splits_a_numeric_prefix_off_a_name() {
+        assert_eq!(split_order("03-second.md"), (Some(3), "second.md"));
+        assert_eq!(split_order("10 first.md"), (Some(10), "first.md"));
+        assert_eq!(split_order("intro.md"), (None, "intro.md"));
+    }
+
+    #[test]
+    fn builds_a_display_title() {
+        assert_eq!(title_of("03-getting-started.md", true), "getting started");
+        assert_eq!(title_of("01_first_part", false), "first part");
+    }
+
+    #[test]
+    fn recognises_a_chapter_whatever_the_case_of_its_extension() {
+        assert!(is_chapter("01-alice.MD"));
+        assert!(is_chapter("01-alice.Markdown"));
+        assert!(!is_chapter("notes.txt"));
+        assert!(!is_chapter("md"));
+        assert_eq!(title_of("01-alice.MD", true), "alice");
+    }
+
+    #[test]
+    fn orders_numbered_siblings_before_unnumbered_ones() {
+        assert_eq!(
+            compare_by_order((Some(2), "b"), (Some(10), "a")),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_by_order((Some(2), "b"), (None, "a")),
+            Ordering::Less
+        );
+        assert_eq!(compare_by_order((None, "a"), (None, "b")), Ordering::Less);
+    }
+
+    #[test]
+    fn walks_a_folder_of_chapters() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::create_dir(base.join("02-second-part")).expect("part");
+        fs::write(base.join("01-intro.md"), "# Intro\n").expect("chapter");
+        fs::write(base.join("02-second-part/01-alice.md"), "# Alice\n").expect("chapter");
+        fs::write(base.join("02-second-part/02-bob.md"), "# Bob\n").expect("chapter");
+        fs::write(base.join("notes.txt"), "ignored").expect("other file");
+        fs::write(base.join(".hidden.md"), "ignored").expect("hidden file");
+
+        let tree = read_tree(base).expect("tree");
+        assert_eq!(tree.failures, Vec::<String>::new());
+        assert!(!tree.root.truncated);
+        assert_eq!(tree.root.chapters.len(), 1);
+        assert_eq!(tree.root.chapters[0].title, "intro");
+        assert_eq!(tree.root.parts.len(), 1);
+        let part = &tree.root.parts[0];
+        assert_eq!(part.order, Some(2));
+        assert_eq!(
+            part.chapters.iter().map(|c| &c.title).collect::<Vec<_>>(),
+            vec!["alice", "bob"]
+        );
+    }
+
+    #[test]
+    fn leaves_the_assets_folder_out_of_the_parts() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::create_dir(base.join("assets")).expect("assets");
+        fs::create_dir(base.join("Assets")).ok();
+        fs::create_dir(base.join("01-part")).expect("part");
+        fs::create_dir(base.join("01-part/assets")).expect("nested assets");
+        fs::write(base.join("assets/lantern.jpg"), "not markdown").expect("asset");
+        fs::write(base.join("01-part/01-alice.md"), "# Alice\n").expect("chapter");
+
+        let tree = read_tree(base).expect("tree");
+        assert_eq!(
+            tree.root
+                .parts
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["01-part"]
+        );
+        assert!(tree.root.parts[0].parts.is_empty());
+    }
+
+    #[test]
+    fn builds_a_one_chapter_tree_without_writing_anything() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        // A sibling that must not appear beside the one chapter this builds:
+        // a whole-folder walk would show it, and this is not one.
+        fs::write(base.join("other.md"), "# Not this one\n").expect("sibling");
+        let file = base.join("01-notes.md");
+        fs::write(&file, "# Notes\n\nSomething written on a train.\n").expect("chapter");
+
+        let before: Vec<_> = fs::read_dir(base).expect("read before").collect();
+        let tree = read_single_chapter(&file).expect("tree");
+        let after: Vec<_> = fs::read_dir(base).expect("read after").collect();
+        assert_eq!(before.len(), after.len(), "nothing was written or removed");
+
+        assert_eq!(tree.root.path, base.to_string_lossy());
+        assert!(tree.root.parts.is_empty());
+        assert_eq!(tree.root.chapters.len(), 1);
+        let chapter = &tree.root.chapters[0];
+        assert_eq!(chapter.title, "notes");
+        assert_eq!(chapter.path, file.to_string_lossy());
+        assert_eq!(chapter.order, None);
+        assert!(chapter.bytes > 0);
+    }
+
+    #[test]
+    fn refuses_a_non_markdown_file_as_a_bare_chapter() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let file = root.path().join("notes.txt");
+        fs::write(&file, "Not Markdown.").expect("file");
+
+        let error = read_single_chapter(&file).expect_err("refused");
+        assert!(error.contains("is not a Markdown file"), "{error}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn refuses_a_name_that_is_not_utf8_instead_of_mangling_it() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        // 0xFF is not valid UTF-8 anywhere, so this name has no lossless
+        // string form to hand the frontend. macOS's own filesystems will not
+        // store such a name, so the walk cannot be driven over one here; the
+        // decision the walk makes about it is what this checks.
+        let broken = OsStr::from_bytes(b"02-b\xffob.md");
+        let message = utf8_name(broken).expect_err("a lossy name is refused");
+        assert!(message.contains("not a UTF-8 name"));
+        assert_eq!(utf8_name(OsStr::new("01-alice.md")), Ok("01-alice.md"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn lists_a_chapter_reached_through_a_symlink() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::create_dir(base.join("store")).expect("store");
+        fs::write(base.join("store/real.md"), "# Real\n").expect("chapter");
+        std::os::unix::fs::symlink(base.join("store/real.md"), base.join("01-alice.md"))
+            .expect("symlink");
+
+        let tree = read_tree(base).expect("tree");
+        assert_eq!(
+            tree.root
+                .chapters
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["01-alice.md"]
+        );
+    }
+
+    #[test]
+    fn marks_a_part_truncated_when_the_walk_runs_out_of_depth() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let mut deep = root.path().to_path_buf();
+        for level in 0..=MAX_DEPTH {
+            deep = deep.join(format!("{level:02}-level"));
+            fs::create_dir(&deep).expect("folder");
+        }
+        fs::write(deep.join("01-hidden.md"), "# Hidden\n").expect("chapter");
+
+        let tree = read_tree(root.path()).expect("tree");
+        let mut part = &tree.root;
+        let mut depth = 0;
+        while !part.parts.is_empty() {
+            part = &part.parts[0];
+            depth += 1;
+        }
+        assert_eq!(depth, MAX_DEPTH);
+        assert!(part.truncated, "the deepest Part reports the cut");
+        assert!(part.chapters.is_empty());
+        assert!(!tree.root.truncated);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn records_a_bad_entry_and_keeps_the_rest_of_the_tree() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::write(base.join("01-intro.md"), "# Intro\n").expect("chapter");
+        let closed = base.join("02-closed");
+        fs::create_dir(&closed).expect("part");
+        set_mode(&closed, 0o000);
+
+        let tree = read_tree(base);
+        set_mode(&closed, 0o755);
+        let tree = tree.expect("a partial tree, not a failure");
+
+        assert_eq!(tree.root.chapters.len(), 1, "the readable chapter survives");
+        assert_eq!(tree.failures.len(), 1, "the unreadable Part is recorded");
+        assert!(tree.failures[0].contains("02-closed"));
+    }
+
+    #[test]
+    fn round_trips_a_chapter() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let path = root.path().join("01-carol.md");
+        write_chapter_text(&path, "# Carol\n").expect("write");
+        assert_eq!(read_chapter_text(&path).expect("read"), "# Carol\n");
+    }
+
+    #[test]
+    fn round_trips_crlf_bytes_untouched() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let path = root.path().join("01-carol.md");
+        let text = "# Carol\r\n\r\nA line.\r\n";
+        write_chapter_text(&path, text).expect("write");
+        assert_eq!(fs::read(&path).expect("bytes"), text.as_bytes());
+        assert_eq!(read_chapter_text(&path).expect("read"), text);
+    }
+
+    #[test]
+    fn leaves_no_temporary_file_behind() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let path = root.path().join("01-carol.md");
+        write_chapter_text(&path, "# Carol\n").expect("write");
+        let names: Vec<String> = fs::read_dir(root.path())
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["01-carol.md".to_string()]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn leaves_the_original_intact_when_the_write_fails() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let folder = root.path().join("part");
+        fs::create_dir(&folder).expect("folder");
+        let path = folder.join("01-carol.md");
+        fs::write(&path, "# Carol\n").expect("seed");
+
+        // A read-only folder is the reachable stand-in for a full disk: the
+        // temporary file cannot be created, so the rename never happens.
+        set_mode(&folder, 0o555);
+        let result = write_chapter_text(&path, "# Ruined\n");
+        set_mode(&folder, 0o755);
+
+        assert!(result.is_err(), "the failure is reported, not swallowed");
+        assert_eq!(fs::read_to_string(&path).expect("read"), "# Carol\n");
+    }
+
+    #[test]
+    fn confines_a_chapter_to_the_open_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::create_dir(base.join("01-part")).expect("part");
+        fs::write(base.join("01-part/01-alice.md"), "# Alice\n").expect("chapter");
+
+        let inside = base.join("01-part/01-alice.md");
+        assert_eq!(
+            confine_chapter(&base, &inside.to_string_lossy()).expect("inside"),
+            inside
+        );
+        // A chapter that does not exist yet still resolves, through its folder.
+        assert!(confine_chapter(&base, "01-part/02-bob.md").is_ok());
+    }
+
+    #[test]
+    fn refuses_a_path_that_climbs_out_of_the_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        let outside = root.path().parent().expect("parent").join("secrets.md");
+        fs::write(&outside, "# Secrets\n").expect("outside file");
+
+        let climb = base.join("..").join("secrets.md");
+        assert!(confine_chapter(&base, &climb.to_string_lossy()).is_err());
+        assert!(confine_chapter(&base, "../secrets.md").is_err());
+        assert!(confine_chapter(&base, &outside.to_string_lossy()).is_err());
+        fs::remove_file(&outside).expect("clean up");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn refuses_a_chapter_symlinked_out_of_the_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        let outside = root.path().parent().expect("parent").join("elsewhere.md");
+        fs::write(&outside, "# Elsewhere\n").expect("outside file");
+        std::os::unix::fs::symlink(&outside, base.join("01-escape.md")).expect("symlink");
+
+        let result = confine_chapter(&base, "01-escape.md");
+        fs::remove_file(&outside).expect("clean up");
+        assert!(
+            result.is_err(),
+            "a link out of the document is not a chapter"
+        );
+    }
+
+    /// The requested name and the file it resolves to need not carry the same
+    /// extension. Confinement alone does not close that: a link inside the
+    /// document, called `.md`, can point at a file inside the document that is
+    /// not a chapter at all. The extension is what says which reader opens it,
+    /// so it is checked on the path that is actually opened.
+    #[test]
+    #[cfg(unix)]
+    fn refuses_a_chapter_whose_resolved_path_is_not_markdown() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join("secrets.txt"), "shh").expect("the real file");
+        std::os::unix::fs::symlink(base.join("secrets.txt"), base.join("01-alice.md"))
+            .expect("symlink");
+
+        let message = confine_chapter(&base, "01-alice.md")
+            .expect_err("a link that resolves to a .txt is not a chapter");
+        assert!(message.contains("is not a Markdown chapter"), "{message}");
+
+        // The same gap on the asset side: a link named for an image that
+        // resolves to something else is refused on what it resolves to.
+        fs::create_dir(base.join("assets")).expect("assets");
+        std::os::unix::fs::symlink(base.join("secrets.txt"), base.join("assets/lantern.jpg"))
+            .expect("symlink");
+        let message = confine_asset(&base, "assets/lantern.jpg")
+            .expect_err("a link that resolves to a .txt is not an image");
+        assert!(
+            message.contains("is not an image this phase carries"),
+            "{message}"
+        );
+
+        // A link that resolves to a chapter inside the document still opens,
+        // so the second check has not closed the door on symlinked chapters.
+        fs::write(base.join("real.md"), "# Real\n").expect("chapter");
+        std::os::unix::fs::symlink(base.join("real.md"), base.join("02-bob.md")).expect("symlink");
+        assert_eq!(
+            confine_chapter(&base, "02-bob.md").expect("a link to a chapter is a chapter"),
+            base.join("real.md")
+        );
+    }
+
+    #[test]
+    fn confines_any_path_to_the_open_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::create_dir(base.join("01-part")).expect("part");
+        fs::write(base.join("document.yaml"), "title: Alice\n").expect("metadata");
+
+        assert_eq!(
+            confine_path(&base, "document.yaml").expect("inside"),
+            base.join("document.yaml")
+        );
+        assert_eq!(
+            confine_path(&base, "01-part").expect("folder"),
+            base.join("01-part")
+        );
+        // A file that does not exist yet resolves through its folder.
+        assert_eq!(
+            confine_path(&base, "01-part/assets.json").expect("not yet written"),
+            base.join("01-part/assets.json")
+        );
+        assert!(confine_path(&base, "../secrets").is_err());
+        assert!(confine_path(&base, "/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn confines_a_part_to_a_folder_inside_the_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::create_dir(base.join("01-part")).expect("part");
+        fs::write(base.join("01-part/01-alice.md"), "# Alice\n").expect("chapter");
+
+        assert_eq!(
+            confine_part(&base, "01-part").expect("a Part"),
+            base.join("01-part")
+        );
+        let message = confine_part(&base, "01-part/01-alice.md").expect_err("not a folder");
+        assert!(message.contains("is not a folder in the open document"));
+        assert!(confine_part(&base, "02-missing").is_err());
+        assert!(confine_part(&base, "..").is_err());
+    }
+
+    #[test]
+    fn confines_an_asset_to_an_image_inside_the_document() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::create_dir(base.join("assets")).expect("assets");
+        fs::write(base.join("assets/lantern.JPG"), b"\xff\xd8").expect("image");
+        fs::write(base.join("assets/notes.txt"), "shh").expect("other file");
+
+        assert_eq!(
+            confine_asset(&base, "assets/lantern.JPG").expect("an image"),
+            base.join("assets/lantern.JPG")
+        );
+        let message = confine_asset(&base, "assets/notes.txt").expect_err("not an image");
+        assert!(message.contains("is not an image this phase carries"));
+        assert!(
+            confine_asset(&base, "assets").is_err(),
+            "a folder is not an asset"
+        );
+        assert!(confine_asset(&base, "../lantern.jpg").is_err());
+    }
+
+    #[test]
+    fn reports_a_chapter_size_and_modification_time() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::write(base.join("01-alice.md"), "# Alice\n").expect("chapter");
+
+        let tree = read_tree(base).expect("tree");
+        let chapter = &tree.root.chapters[0];
+        assert_eq!(chapter.bytes, 8);
+        assert!(chapter.modified.is_some(), "a real filesystem records one");
+    }
+
+    #[test]
+    fn reads_many_chapters_in_one_pass_and_names_the_ones_it_cannot() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join("01-alice.md"), "# Alice\n").expect("chapter");
+        fs::write(base.join("02-bob.md"), "# Bob\r\n").expect("chapter");
+
+        let batch = read_many(
+            &base,
+            &[
+                base.join("01-alice.md").to_string_lossy().into_owned(),
+                base.join("02-bob.md").to_string_lossy().into_owned(),
+                base.join("03-missing.md").to_string_lossy().into_owned(),
+                "../secrets.md".to_string(),
+            ],
+        );
+        assert_eq!(batch.reads.len(), 2);
+        assert_eq!(batch.reads[0].text, "# Alice\n");
+        assert_eq!(batch.reads[1].text, "# Bob\r\n", "bytes are not normalised");
+        assert_eq!(batch.failures.len(), 2, "one missing, one outside");
+    }
+
+    #[test]
+    fn writes_nothing_when_a_folder_holds_no_chapters() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        fs::write(base.join("notes.txt"), "not a chapter").expect("file");
+
+        let before: Vec<String> = names_in(base);
+        let tree = read_tree(base).expect("tree");
+        assert!(tree.root.chapters.is_empty());
+        assert!(tree.root.parts.is_empty());
+        assert_eq!(names_in(base), before, "the walk writes nothing at all");
+    }
+
+    /// Every visible name in a folder, sorted, for a "nothing changed" check.
+    fn names_in(folder: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(folder)
+            .expect("read dir")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn counts_the_next_prefix_from_what_is_already_there() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = root.path();
+        assert_eq!(next_prefix(base).expect("empty"), "01");
+        fs::write(base.join("01-alice.md"), "").expect("chapter");
+        fs::write(base.join("07-bob.md"), "").expect("chapter");
+        fs::write(base.join("loose.md"), "").expect("chapter");
+        assert_eq!(next_prefix(base).expect("counted"), "08");
+    }
+
+    #[test]
+    fn adds_a_dropped_chapter_with_the_next_prefix() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        let part = base.join("01-part");
+        fs::create_dir(&part).expect("part");
+        fs::write(part.join("01-alice.md"), "# Alice\n").expect("chapter");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("03-carol notes.md");
+        fs::write(&source, "# Carol\n").expect("source");
+
+        let added = add_chapter_from(&part, &source).expect("added");
+        assert_eq!(added.name, "02-carol notes.md");
+        assert_eq!(added.order, Some(2));
+        assert_eq!(added.title, "carol notes");
+        assert_eq!(
+            fs::read_to_string(part.join("02-carol notes.md")).expect("read"),
+            "# Carol\n"
+        );
+    }
+
+    #[test]
+    fn copies_dropped_bytes_verbatim() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("draft.md");
+        // CRLF endings, a tab, no trailing newline: everything a round trip
+        // through a string would be tempted to tidy.
+        let bytes = b"# Draft\r\n\r\n\tIndented\r\nlast line without a newline";
+        fs::write(&source, bytes).expect("source");
+
+        let added = add_chapter_from(&part, &source).expect("added");
+        assert_eq!(fs::read(&added.path).expect("bytes"), bytes);
+        assert_eq!(added.bytes as usize, bytes.len());
+    }
+
+    #[test]
+    fn refuses_a_dropped_file_that_is_not_markdown() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("lantern.jpg");
+        fs::write(&source, b"\xff\xd8").expect("source");
+
+        let message = add_chapters_from(&part, &[source]).expect_err("refused");
+        assert!(message.contains("not a Markdown chapter"), "{message}");
+        assert!(message.contains(".markdown"), "it says what a Part accepts");
+        assert_eq!(names_in(&part), Vec::<String>::new(), "nothing was written");
+    }
+
+    #[test]
+    fn writes_none_of_a_drop_that_carries_one_bad_file() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let good = outside.path().join("alice.md");
+        let bad = outside.path().join("notes.txt");
+        fs::write(&good, "# Alice\n").expect("source");
+        fs::write(&bad, "shh").expect("source");
+
+        assert!(add_chapters_from(&part, &[good, bad]).is_err());
+        assert_eq!(names_in(&part), Vec::<String>::new());
+    }
+
+    #[test]
+    fn adds_every_markdown_file_of_a_drop_in_order() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+
+        let outside = tempfile::tempdir().expect("temp dir");
+        let first = outside.path().join("alice.md");
+        let second = outside.path().join("bob.markdown");
+        fs::write(&first, "# Alice\n").expect("source");
+        fs::write(&second, "# Bob\n").expect("source");
+
+        let added = add_chapters_from(&part, &[first, second]).expect("added");
+        assert_eq!(
+            added.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            vec!["01-alice.md", "02-bob.markdown"]
+        );
+    }
+
+    #[test]
+    fn leaves_no_temporary_behind_when_a_chapter_is_added() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let part = root.path().join("01-part");
+        fs::create_dir(&part).expect("part");
+        let outside = tempfile::tempdir().expect("temp dir");
+        let source = outside.path().join("alice.md");
+        fs::write(&source, "# Alice\n").expect("source");
+
+        add_chapter_from(&part, &source).expect("added");
+        assert_eq!(names_in(&part), vec!["01-alice.md".to_string()]);
+    }
+
+    #[test]
+    fn refuses_a_path_that_is_not_a_chapter() {
+        let root = tempfile::tempdir().expect("temp dir");
+        let base = canonical_root(&root.path().to_string_lossy()).expect("root");
+        fs::write(base.join("secrets.txt"), "shh").expect("file");
+        assert!(confine_chapter(&base, "secrets.txt").is_err());
+        assert!(confine_chapter(&base, "id_rsa").is_err());
+        assert!(confine_chapter(&base, "01-alice.MD").is_ok());
+    }
+}

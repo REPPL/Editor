@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "present",
+  "description": "The present window shows a deck and nothing else. This file grants it the core defaults, so that it can hear when a new deck is waiting, and no plugin permission the editing window has: no dialog, and no window destruction. It does not narrow the application's own commands, which Tauri's capabilities do not gate: every command in `generate_handler!` is reachable from either window, and what keeps this one to `pending_deck` and `read_asset` is the page it loads rather than this file. Each of those commands confines what it is given to the open document, which is what holds when the window is not the boundary.",
+  "windows": [
+    "present"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

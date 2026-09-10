@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The narrowest set the editor needs: a folder chooser, a confirm dialog for unsaved edits, and the ability to close the window once the author has answered it.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-destroy",
+    "dialog:allow-open",
+    "dialog:allow-confirm"
+  ]
+}

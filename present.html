@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>Present</title>
+    <!--
+      The engine is vendored, never fetched: the deck opens from the bundle,
+      from the published folder, and from a disk copy of it alike. The theme
+      that ships with reveal.js is deliberately not loaded — it fixes a font
+      size, and this deck lays itself out at the reader's own size.
+
+      The engine has no script tag of its own here. `src/present.ts` imports
+      it, which is the one arrangement that means the same thing in every
+      toolchain; a tag pointing at the UMD build meant one thing to the dev
+      server and another to the bundler, and `iss-2609061132369973` is what
+      that cost.
+    -->
+    <link rel="stylesheet" href="/src/vendor/reveal/reset.css" />
+    <link rel="stylesheet" href="/src/vendor/reveal/reveal.css" />
+    <link rel="stylesheet" href="/src/core/render/slides.css" />
+    <link rel="stylesheet" href="/src/present.css" />
+  </head>
+  <body>
+    <div class="present-stage">
+      <div class="reveal"><div class="slides"></div></div>
+    </div>
+    <script type="module" src="/src/present.ts"></script>
+  </body>
+</html>

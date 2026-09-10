@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Preview</title>
+    <link rel="stylesheet" href="/src/preview.css" />
+    <!--
+      The article's own stylesheet, linked directly rather than copied: this
+      is the one source `src/core/render/article.css` names, and every host
+      that renders the article reads or copies it (spc-2609061318090042).
+    -->
+    <link rel="stylesheet" href="/src/core/render/article.css" />
+    <script type="module" src="/src/preview.ts"></script>
+  </head>
+  <body class="article">
+    <main></main>
+    <!--
+      Four scripts, each the same one-source file the site build and the
+      folder export copy, never an inline one — the shell's CSP is
+      `script-src 'self'`: the video rule (`article-video.js`, upgrades a
+      source to a player if one loads, nothing here depends on it running
+      at all), the reader-controls toolbar (map #10, spc-2609061318154502,
+      `article-controls.js`), the once-only opening and the easter eggs
+      (map #12, spc-2609061318159422, `article-eggs.js`), and keyboard
+      movement, the contents list, search, cancel and the keys panel
+      (map #26, spc-2609061318158216, `article-keys.js`, whose own data —
+      the honoured rows of `src/keys.ts`'s table — `src/preview.ts` writes
+      into the page, the one other host besides `articleDocument` that has
+      to). `type="module"` is this page's own arrangement, not any of the
+      four files' own: each is a plain global-attaching script everywhere
+      else, and the bundler only copies a page's own script reference when
+      it is a module (present.html's engine import is why `src/present.ts`
+      reads that lesson too). GLM F16: `vite build` merges all four, and
+      `src/preview.ts` itself, into one chunk the built page loads from its
+      own `<head>` — so these four `<script>` tags, each still separately
+      named here for a reader of this file, do not survive into `dist/`.
+    -->
+    <script type="module" src="/src/core/render/article-video.js" defer></script>
+    <script type="module" src="/src/core/render/article-controls.js" defer></script>
+    <script type="module" src="/src/core/render/article-eggs.js" defer></script>
+    <script type="module" src="/src/core/render/article-keys.js" defer></script>
+  </body>
+</html>

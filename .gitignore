@@ -19,3 +19,28 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# BEGIN TAURI AND VITE
+# Added with the first buildable skeleton: the Node and Tauri build output.
+node_modules/
+dist/
+dist-ssr/
+*.local
+src-tauri/target/
+src-tauri/gen/schemas/
+.vite/
+coverage/
+# END TAURI AND VITE
+
+# BEGIN ABCD
+# abcd-managed block — do not hand-edit. Run /abcd:ahoy to refresh.
+.abcd/.work.local/
+/memory/
+# END ABCD
+
+# macOS Finder metadata
+.DS_Store
+
+# Local documents used only for testing (see EDITOR_LOCAL_DOCUMENTS in
+# AGENTS.md). This is the maintainer's own material and is never committed.
+examples/
