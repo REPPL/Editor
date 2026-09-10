@@ -118,34 +118,106 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::time::Instant;
 
-    /// Perform `trigger` again and again, polling `predicate` with a
-    /// deadline rather than a fixed sleep, until one holds or both give up.
+    /// The whole of the time one of these tests is allowed to spend waiting
+    /// on the operating system's watcher, arming and assertion together.
     ///
-    /// A single filesystem operation right after `watch` returns can still
-    /// race the OS's own event delivery under heavy scheduling load — the
-    /// call returns once the watch is *requested*, not necessarily once
-    /// delivery for it is fully armed — so waiting longer for the *one*
-    /// operation already performed is not enough on its own: under load this
-    /// crate's own test suite produces (and, on a machine shared with other
-    /// concurrent work, `fseventsd` itself queuing behind every other
-    /// watcher on the system), the first operation can be missed entirely
-    /// rather than merely reported late. Repeating a fresh operation every
-    /// quarter-second, spaced well past the debouncer's own `DEBOUNCE`
-    /// window, for up to thirty seconds, is what a watch that is not yet
-    /// truly listening eventually catches, which is what made these two
-    /// tests flake under concurrent load even after they were already
-    /// polling with a deadline rather than a fixed sleep
-    /// (`iss-2609061520160056`).
-    fn trigger_until_seen(mut trigger: impl FnMut(), predicate: impl Fn() -> bool) -> bool {
-        for _ in 0..120 {
+    /// `watch` returns once the watch has been *requested*, which is not the
+    /// moment events start arriving. On macOS the FSEvents stream behind it
+    /// opens when `fseventsd` gets round to it, and afterwards delivers in
+    /// bursts with quiet gaps in between; how long either takes is the
+    /// daemon's to decide, not the caller's. Measured across some thirty
+    /// trials on one machine, opening took anywhere from half a second to
+    /// sixty-five, and gaps after opening reached eight — for a bare `notify`
+    /// watcher exactly as much as for the debounced one, for a folder under
+    /// the home directory exactly as much as for one under the temporary
+    /// directory, and for a second watcher opened alongside the first at the
+    /// very same microsecond as for that first one. So the wait is not this
+    /// crate's debounce, not the two tests sharing state, not where the
+    /// folder lives and not one test's watcher disturbing the other's: it is
+    /// how loaded the daemon is (`iss-2609100708579771`). Nothing is lost
+    /// meanwhile — operations made before the stream opens queue up, and the
+    /// whole queue arrives at once when it does — so waiting is the only
+    /// thing to do, and the question is only how patiently.
+    ///
+    /// Four minutes is therefore chosen against a badly loaded daemon rather
+    /// than a healthy one, because a gate that passes only on a quiet machine
+    /// is not a gate. It costs nothing when the daemon is well: every wait
+    /// below ends the moment its condition holds. It is one budget rather
+    /// than one per phase so that a slow opening spends time the assertion
+    /// after it would not have needed, and the test as a whole still cannot
+    /// run away.
+    const BUDGET: Duration = Duration::from_secs(240);
+
+    /// Perform `trigger` every quarter-second until `predicate` holds, giving
+    /// up at `deadline`.
+    ///
+    /// A quarter-second is comfortably past the debouncer's own `DEBOUNCE`
+    /// window, so each attempt is a batch of its own. What the test waits for
+    /// is the condition; what limits the wait is the clock.
+    fn trigger_until_seen(
+        deadline: Instant,
+        mut trigger: impl FnMut(),
+        predicate: impl Fn() -> bool,
+    ) -> bool {
+        loop {
             if predicate() {
                 return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
             }
             trigger();
             std::thread::sleep(Duration::from_millis(250));
         }
-        predicate()
+    }
+
+    /// Wait until the watch over `base` is really delivering, and leave the
+    /// count back at zero with the backlog drained.
+    ///
+    /// Waiting for this before, and separately from, whatever the test goes
+    /// on to assert is what keeps the assertion about the operation it names.
+    /// The queue an opening stream flushes can carry events from *before* the
+    /// watch — the folder's own creation among them — and a test asking only
+    /// "did anything arrive?" would accept one of those in place of the
+    /// rename or the chapter it is really about.
+    ///
+    /// The trigger is a sentinel file at the root: undotted, because
+    /// `is_temporary` keeps dotted names out of the callback, and at the root
+    /// rather than below it, so that a test about reaching below the root
+    /// still has that left to prove.
+    fn arm(base: &Path, seen: &AtomicUsize, deadline: Instant) {
+        let mut sentinel = 0u32;
+        assert!(
+            trigger_until_seen(
+                deadline,
+                || {
+                    std::fs::write(base.join(format!("arming-{sentinel:03}")), "")
+                        .expect("sentinel");
+                    sentinel += 1;
+                },
+                || seen.load(Ordering::Relaxed) > 0,
+            ),
+            "the watch never began delivering events"
+        );
+
+        // Let the flushed backlog finish arriving before zeroing the count. A
+        // debounced batch landing just after the reset would answer the next
+        // assertion instead of the operation that assertion is about.
+        let mut last = seen.load(Ordering::Relaxed);
+        let mut quiet = 0;
+        while quiet < 5 {
+            std::thread::sleep(DEBOUNCE * 2);
+            let now = seen.load(Ordering::Relaxed);
+            if now == last {
+                quiet += 1;
+            } else {
+                quiet = 0;
+                last = now;
+            }
+        }
+        seen.store(0, Ordering::Relaxed);
     }
 
     #[test]
@@ -160,6 +232,8 @@ mod tests {
             counter.fetch_add(1, Ordering::Relaxed);
         })
         .expect("watcher");
+        let deadline = Instant::now() + BUDGET;
+        arm(base, &seen, deadline);
 
         // Alternates the chapter's name back and forth: every attempt is a
         // genuine rename, and one from each end exists at any given moment
@@ -167,6 +241,7 @@ mod tests {
         let mut swapped = false;
         assert!(
             trigger_until_seen(
+                deadline,
                 || {
                     let (from, to) = if swapped {
                         (base.join("02-alice.md"), base.join("01-alice.md"))
@@ -196,12 +271,15 @@ mod tests {
             counter.fetch_add(1, Ordering::Relaxed);
         })
         .expect("watcher");
+        let deadline = Instant::now() + BUDGET;
+        arm(base, &seen, deadline);
 
         // A fresh, distinctly named chapter each attempt, so a retry is
         // never mistaken for the same write the watcher already missed.
         let mut attempt = 0u32;
         assert!(
             trigger_until_seen(
+                deadline,
                 || {
                     std::fs::write(part.join(format!("{attempt:02}-alice.md")), "# Alice\n")
                         .expect("chapter");
