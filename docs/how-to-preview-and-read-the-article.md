@@ -65,10 +65,14 @@ the deck; on this page:
 - a page-break comment produces nothing.
 
 A callout (`::: {.callout kind="warning"}`) is set apart as a box in the flow,
-carrying the kind you gave it. An image with a caption and a credit —
-`![The lantern at dusk](assets/lantern.jpg "Photograph by Carol")` — sits in
-the flow with both beneath it; add `.full-bleed` and the picture runs the full
-width of the measure.
+carrying the kind you gave it. An image with a caption and a credit sits in
+the flow with both beneath it:
+
+```markdown
+![The lantern at dusk](assets/lantern.jpg "Photograph by Carol")
+```
+
+Add `.full-bleed` and the picture runs the full width of the measure.
 
 ## Video
 

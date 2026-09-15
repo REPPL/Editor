@@ -169,7 +169,7 @@ none of them worked in the window. Two tests stand in for what cannot be
 observed: one asserts the package's commands are registered once the module
 is loaded, and one asserts the annotations are still there in
 `node_modules`, so that a future release which fixes them fails loudly rather
-than leaving a setting behind that no longer has a reason. Neither is a
+than leaving a setting behind that has lost its reason. Neither is a
 substitute for the manual checklist below, which is the only place a chord is
 pressed in the real build.
 

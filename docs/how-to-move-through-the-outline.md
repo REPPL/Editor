@@ -69,8 +69,8 @@ nothing.
 |---|---|
 | `C-c C-s b` | bold the selection, or open `**`, cursor between them |
 | `C-c C-s i` | italicise the selection, or open `*`, cursor between them |
-| `C-c l` | insert `[label](url)`, cursor ready for the url or the label |
-| `C-c C-i` | insert `![alt](src)`, the same way |
+| `C-c l` | insert a link, `[label]` then `(url)`, cursor ready for the url or the label |
+| `C-c C-i` | insert an image, `![alt]` then `(src)`, the same way |
 
 A selection becomes the link's label or the image's alt text; with nothing
 selected, the cursor lands between the square brackets instead, ready for
