@@ -58,6 +58,7 @@ Three kinds:
 | 39 | Keep Markdown tables aligned while I type them | standalone | — | 1 |
 | 40 | Show progress through the chapter as a cat on a rainbow trail | standalone | — | 1 |
 | 41 | See what a prefix can do, without leaving the prefix | standalone | — | 1 |
+| 42 | Split the editing area, the same as Emacs | standalone | — | 1 |
 
 ## The intents
 
