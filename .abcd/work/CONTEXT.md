@@ -50,21 +50,27 @@ splitting. The app builds as a release bundle. The maintainer's example document
 under the gitignored `examples/` folder, and nothing committed names one; a
 harness runs every local document through the article and the deck.
 
-What no phase has had is a human at the keyboard: the manual acceptance rows
-under `../.work.local/logs/acceptance/` are all but one unticked, and every
-audit records the criteria that depend on a real keyboard, a real window width
-or real assistive technology as inconclusive for that reason. That is the
-whole of what the record does not establish, and it grows with each release
-rather than shrinking.
+The manual acceptance rows under `../.work.local/logs/acceptance/` are the
+record of what the automated runs cannot reach. The splitting log is the
+first to be driven in the real shell — 66 of its 81 rows ticked from
+screenshots and `git status`, with the maintainer away from the keyboard —
+and its six geometric criteria were seen; the VoiceOver rows, there and
+everywhere, still want a person. The older logs remain unticked.
 
-Phase three — bringing a single-file manuscript in (intent 13) and writing one
-text for two audiences (intent 14) — is next in
-`../development/brief/07-intent-map.md`.
+Phase three is planned. Bringing a single-file manuscript in
+(`itd-2609051335529787`, spec `spc-2609151652321002`) and writing one text
+for two audiences (`itd-2609051335537470`, spec `spc-2609151823595737`) each
+passed two adversarial reviews and the maintainer's planning interview on
+2026-09-15, and both report READY. The second carries five defects the
+reviews found in the shipped variant handling; the build that lands it
+resolves them.
 
-Nothing waits on the maintainer before phase three is planned: the issue
-ledger has no open entry, and `abcd docs lint` is the seventh gate command,
-armed with the present-tense token family so that its green means the
-documentation rule was checked.
+`abcd docs lint` is the seventh gate command, armed with the present-tense
+token family so that its green means the documentation rule was checked.
+Eight issues are open, all captured on 2026-09-15: two from the splitting
+acceptance run that want a decision (the unfocused window's hollow caret,
+`M-x` unanswered in the sidebar), five variant leaks and a brief-versus-tree
+gap that the two-audiences build resolves, and a commit-trailer lapse.
 
 ## Sharp edges
 

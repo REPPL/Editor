@@ -109,3 +109,76 @@ No reversal flagged.
 Proposed verdict: FILE-AS-IS, one intent, blocked on the artwork question —
 the character is somebody's, and what ships in a public MIT repository is the
 maintainer's call, not the build's. Confirmation: pending the maintainer.
+
+## Bring an old single-file manuscript in
+
+Draft `itd-2609051335529787`, decomposed on 2026-09-15 in the planning
+interview, after two adversarial reviews (design and feasibility;
+record discipline) whose surviving findings were applied to the draft
+first.
+
+| Part | Type | Home |
+|---|---|---|
+| The Import command and everything it writes | intent | `itd-2609051335529787` |
+| Which Part name the record means: `01-chapters` (2026-09-06) or "named for the document" (2026-09-05, the glossary) | a disagreement inside the record | a DECISIONS line and a glossary fix, settled to `01-chapters` |
+| The web view returns cut offsets, the shell slices its own bytes | a trust-boundary choice | the spec `spc-2609151652321002`; an ADR only if a later moment needs it |
+| The how-to page on opening a file or a folder | docs | the build's definition of done |
+| Whether the sidebar edits structure | an open question of the brief | stays in the brief; dropped from the draft |
+| Which variants the minted metadata declares | intent, another moment | `itd-2609051335537470`, deferred |
+
+Typed links: supersedes `itd-2609051221553568` and `itd-2609051317429272`;
+refines map row 13; reuses the new-document defaults of map #29 without
+reversal. No reversal flagged.
+
+Proposed verdict: FILE-AS-IS. Confirmation: the maintainer adopted the
+routing unchanged on 2026-09-15 and settled all three open questions in the
+same sitting. The initial routing survived unchanged.
+
+## Write one text for two audiences
+
+Draft `itd-2609051335537470`, decomposed on 2026-09-15 in the planning
+interview, after the same two reviews, which found the draft's central
+mechanism claim false of the tree and three leaks across variants.
+
+| Part | Type | Home |
+|---|---|---|
+| The variant chooser, the sidebar badge, and the four leaks closed | intent | `itd-2609051335537470` |
+| The four leaks: reference list, contents list, nested span, no-variant disagreement | defects | `iss-2609151509287105`, `iss-2609151509281407`, `iss-2609151509281307`, `iss-2609151509280846`; resolved by the build, cited |
+| The brief's `variant` module that does not exist, and four hand-copied filters | record-versus-tree gap | `iss-2609151509292287`; the build consolidates the filter into one module, per one-canonical-primitive |
+| The undeclared-name rule and the span-collapse rule | already decided, 2026-09-05 | cited, not re-decided |
+| A gesture in the app that declares the variant set | intent, another moment | a later draft; this one assumes hand-edited metadata |
+| An egg marker in one variant matching a block in another | a hazard | the variant-fidelity discipline and map #12 |
+
+Typed links: supersedes the same two drafts; refines map row 14; refines
+`itd-2609051336107315` with the nested-span proof it lacks. No reversal
+flagged.
+
+Proposed verdict: FILE-AS-IS. Confirmation: the maintainer adopted the
+routing unchanged on 2026-09-15, filter consolidation included.
+
+## Edit one document together, across the network
+
+Proposal, in the maintainer's words: make Editor a multi-user editing
+experience across the network; optionally, detect a Tailscale network and
+make multi-user editing possible there. Decomposed on 2026-09-15 before
+filing.
+
+| Part | Type | Home |
+|---|---|---|
+| Two people edit one document at once and each sees the other's changes as they type | intent | `itd-2609151837374137` |
+| Reverse *network only on publish*, which forbids sync and a local-network server | a standing rule this reverses | `adr-2609151837453096`, proposed; the discipline is amended in the accepting change |
+| How edits converge, who holds the file, what a save writes | architecture-shaping | the session intent's spec; its own ADR if the build proves it shaping |
+| Detecting a peer on a Tailscale network and offering it | intent, optional and vendor-specific | `itd-2609151837370351`, `builds_on` the first |
+| Who may offer and accept, and what leaves the machine | trust boundary | the ADR above; no node name or address ever committed |
+| Presence, a second caret, a remote peer in the per-window model | plumbing | the brief, 05-internals section 5 |
+
+Typed links: reverses `itd-2609051336158553` — flagged, and the maintainer
+confirmed it as a reversal rather than a reading; refines
+`adr-2609091832455881` (the window tree's lockstep echo); touches
+`itd-2609051335586905` (the iPad draft, which exists because a network path
+was declined) without superseding it; touches the brief's open question on
+concurrent edits from two devices.
+
+Proposed verdict: SPLIT — two drafts and an ADR. Confirmation: the
+maintainer adopted the split on 2026-09-15 and confirmed the reversal. The
+initial routing survived unchanged.
