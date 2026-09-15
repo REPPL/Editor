@@ -440,6 +440,77 @@ body {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+  display: flex;
+}
+
+/* The window grid.
+
+   Every node carries `min-width: 0; min-height: 0` — the same declaration
+   `.editor-pane` above already carries, and for the same reason: a flex child's
+   default `min-width: auto` refuses to shrink below its content, and a grid of
+   them would push the editing area sideways rather than divide it. */
+
+.window-split {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.window-split[data-direction="columns"] {
+  flex-direction: row;
+}
+
+.window-split[data-direction="rows"] {
+  flex-direction: column;
+}
+
+/* A child's share of the axis: grow by its share, from a basis of nothing, so
+   the shares alone divide the space and no child's content bids for width. */
+.window-split > .editor-window,
+.window-split > .window-split {
+  flex: var(--share, 1) 1 0;
+}
+
+/* One window, and the root of the grid whatever it is: the whole area. */
+.editor-pane > .editor-window,
+.editor-pane > .window-split {
+  flex: 1 1 auto;
+}
+
+.editor-window {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  /* A border and not an outline: it takes its space in the layout, so the
+     focused window does not change size when it takes the keyboard. */
+  border: 1px solid transparent;
+}
+
+.editor-window[data-focused="yes"] {
+  border-color: var(--accent);
+}
+
+/* Nothing draws a caret in a window that is not focused — CodeMirror's own
+   drawSelection hides it — but the active line is decorated whatever the focus,
+   and two highlighted lines read as two windows listening. */
+.editor-window[data-focused="no"] .cm-activeLine {
+  background: transparent;
+}
+
+.window-divider {
+  flex: 0 0 6px;
+  background: var(--rule);
+}
+
+.window-split[data-direction="columns"] > .window-divider {
+  cursor: col-resize;
+}
+
+.window-split[data-direction="rows"] > .window-divider {
+  cursor: row-resize;
 }
 
 .cm-editor {

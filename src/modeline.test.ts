@@ -494,6 +494,54 @@ describe("through the application", () => {
     expect(cell.getAttribute("aria-label")).toBe("End of the chapter");
   });
 
+  it("names the focused window and how many there are once the area is divided", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapters[0]!);
+    const pane = app.modeline.element.querySelector<HTMLElement>(".modeline-pane")!;
+    // One window: exactly what one window has always read.
+    expect(pane.textContent).toBe("[Editor]");
+    expect(pane.dataset["pane"]).toBe("Editor");
+    expect(pane.dataset["window"]).toBeUndefined();
+
+    // Divided, the cell says which of how many. The ordinal is in reading
+    // order, and it is what `C-x o` moves.
+    app.modeline.update(app.view, {
+      ...CONTEXT,
+      window: { at: 2, of: 4 },
+    });
+    expect(pane.textContent).toBe("[Editor 2/4]");
+    expect(pane.dataset["pane"]).toBe("Editor");
+    expect(pane.dataset["window"]).toBe("2/4");
+
+    // Back to one window, and the addition is invisible again.
+    app.modeline.update(app.view, { ...CONTEXT, window: { at: 1, of: 1 } });
+    expect(pane.textContent).toBe("[Editor]");
+    expect(pane.dataset["window"]).toBeUndefined();
+  });
+
+  it("names the focused window", async () => {
+    // The footer's half of "the focused window is discoverable without sight":
+    // the cell is read where Alice is already reading for the unsaved mark and
+    // her position, and it names the window rather than the chapter, because the
+    // chapter is the very next cell along.
+    await app.openFolder("book");
+    await app.openChapter(chapters[0]!);
+    const pane = app.modeline.element.querySelector<HTMLElement>(".modeline-pane")!;
+    const chapterCell = app.modeline.element.querySelector<HTMLElement>(
+      ".modeline-chapter",
+    )!;
+    app.modeline.update(app.view, { ...CONTEXT, window: { at: 3, of: 3 } });
+    expect(pane.textContent).toBe("[Editor 3/3]");
+    // Two cells, two questions: the window's ordinal is not the chapter's name.
+    expect(chapterCell.textContent).toContain("01-alice.md");
+    expect(pane.textContent).not.toContain("alice");
+    // And the cell is not a live region: it changes on every `C-x o`, which is
+    // a move Alice made, and what she needs announced is the region she
+    // arrived in.
+    expect(pane.hasAttribute("aria-live")).toBe(false);
+    expect(pane.getAttribute("role")).toBeNull();
+  });
+
   it("announces a refusal twice when the author earns it twice", async () => {
     await app.openFolder("book");
     await app.openChapter(chapters[0]!);

@@ -1,7 +1,7 @@
 ---
 id: adr-2609091832455881
 slug: editing-windows-are-a-split-tree
-status: proposed
+status: accepted
 date: 2026-09-09
 supersedes: null
 superseded_by: null
@@ -78,20 +78,45 @@ one. What the flat version would buy is a refusal to answer `C-x 3` inside an
 existing split, which is a worse experience than the general case and would
 have to be explained.
 
-**2. Two windows on the same chapter are two views of one `EditorState`.**
+**2. Two windows on the same chapter hold two states kept in lockstep.**
 
-CodeMirror supports several `EditorView`s over one shared state natively.
-Editor wires that: splitting a window showing a chapter gives two views over
-the same live document, so an edit in one appears in the other in the same
-frame. This is what a split *means* in Emacs, and the cheaper alternative —
-two independent copies of the same text — is not a cheaper version of the
-feature, it is a different and wrong feature that would let the maintainer
-lose work by editing the same chapter twice.
+*(Amended 2026-09-12. As accepted this decision read: "Two windows on the same
+chapter are two views of one `EditorState`. CodeMirror supports several
+`EditorView`s over one shared state natively." That is wrong, and it was found
+wrong by `spc-2609111105376860` reading the installed CodeMirror sources rather
+than reasoning from memory — the check `itd-2609081931493520`'s own second
+mechanism claim asked for. `EditorState` declares `selection` as its own field
+alongside `doc`, and the view holds no selection anywhere, so two views over one
+state object share one caret drawn twice. Sharing the object also forces
+identical decorations and update listeners, extensions being state facets too.
+**Shared state and per-window cursor positions are mutually exclusive in
+CodeMirror 6**, and this record cannot have both. Recorded as
+`iss-2609111123501225`.)*
 
-A single chapter therefore has exactly one document state, held by the
-application, and zero or more views onto it. Opening a chapter into a window
-attaches that window's view to the chapter's state, creating the state if
-this is the first window to want it.
+So each window holds its own `EditorState`, and the states of every window on
+one chapter are kept in lockstep: a transaction dispatched in one window has
+its change set echoed synchronously into the others, annotated so the echo does
+not echo back, added to no history, and carrying no selection of its own — each
+receiving window's caret is mapped through the change for free, which is
+precisely what the intent's third criterion asks for.
+
+The purpose of the original decision survives intact and is the reason this
+substitute is acceptable rather than a retreat: an edit in one window appears
+in the other in the same frame, and the cheaper alternative — two independent
+copies that drift — remains a different and wrong feature that would let the
+maintainer lose work by editing one chapter twice. What changes is only the
+mechanism by which one text is kept one text.
+
+**The cost this imposes, named because it is not obvious.** `history()` is a
+`StateField`, a `StateField` lives in one `EditorState`, and one state per
+chapter is what this amendment rules out. So undo is per window, not per
+chapter: an undo in a window that did not make the edit does nothing. The
+maintainer accepted that on 2026-09-12 in preference to routing every undo
+chord through an app-held canonical state, which is larger than the rest of
+this design and cuts across `adr-2609092000099546`'s rule that one undo takes
+an author's keystroke and its table realignment back together. It is confusing
+the first time and never destructive, and it is a real divergence from Emacs
+rather than a detail.
 
 **3. Commands resolve against the focused window, not a global.**
 
@@ -183,6 +208,17 @@ restriction; then the per-window cursor memory. Command scoping is not a
 slice — it belongs to the first one, because a split whose `C-x C-s` saves
 the wrong chapter is worse than no split.
 
-This record is `proposed`. It becomes `accepted` in the change that puts a
-scope decision in force, and `itd-2609081931493520` is not planned into a
-spec before then.
+**Accepted 2026-09-11.** The maintainer asked for window splitting to be built
+end-to-end, for them to test. That settles the scope question this record left
+open, and settles it at the widest reading: the whole decision above, not the
+first slice alone.
+
+The three slices in the paragraph above are therefore a build *order*, not a
+delivery boundary. All three land together — the window tree and its layout,
+shared state so two windows on one chapter are two views of one live document,
+and per-window cursor memory — because a split that cannot be opened twice on
+the same chapter is not the thing the maintainer asked to test. Alternative 3,
+recommended above as a first slice, is declined as a shipping shape and kept
+only as the order the work is done in.
+
+`itd-2609081931493520` is planned on this acceptance.

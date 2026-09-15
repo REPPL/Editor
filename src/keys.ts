@@ -881,6 +881,63 @@ export const BINDINGS: readonly Binding[] = [
     group: "document",
     owner: "editor",
   },
+  // The window vocabulary, immediately after the chord that walks it, so the
+  // whole of splitting reads together (`itd-2609081931493520`,
+  // `adr-2609091832455881`). Four rows divide and undivide the editing area;
+  // three resize the window holding the keyboard. Emacs's own chords, under
+  // Emacs's own command names, which the id rule accepts as written.
+  {
+    id: "split-window-below",
+    label: "Divide this window above and below",
+    chords: ["C-x 2"],
+    group: "panes",
+    owner: "app",
+  },
+  {
+    id: "split-window-right",
+    label: "Divide this window left and right",
+    chords: ["C-x 3"],
+    group: "panes",
+    owner: "app",
+  },
+  {
+    id: "delete-window",
+    label: "Close this window",
+    chords: ["C-x 0"],
+    group: "panes",
+    owner: "app",
+  },
+  {
+    id: "delete-other-windows",
+    label: "Close the other windows",
+    chords: ["C-x 1"],
+    group: "panes",
+    owner: "app",
+  },
+  {
+    // `C-x {` on a US layout.
+    id: "shrink-window-horizontally",
+    label: "Narrow this window",
+    chords: ["C-x S-["],
+    group: "panes",
+    owner: "app",
+  },
+  {
+    // `C-x }` on a US layout.
+    id: "enlarge-window-horizontally",
+    label: "Widen this window",
+    chords: ["C-x S-]"],
+    group: "panes",
+    owner: "app",
+  },
+  {
+    // `C-x ^` on a US layout.
+    id: "enlarge-window",
+    label: "Make this window taller",
+    chords: ["C-x S-6"],
+    group: "panes",
+    owner: "app",
+  },
   {
     id: "open-settings",
     label: "Open settings",

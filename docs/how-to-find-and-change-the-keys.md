@@ -108,6 +108,10 @@ the panes that are on the screen — the text, the tree when it is shown,
 whatever panel is open — and where there is nowhere else to go, the modeline
 says so rather than the chord doing nothing quietly.
 
+Where the editing area has been divided, the walk visits each editing window in
+reading order before it reaches the tree. [How to split the editing
+area](how-to-split-the-editing-area.md) has the chords that divide it.
+
 ## Ask what one chord does
 
 Press `C-h k`, then the chord you want named.

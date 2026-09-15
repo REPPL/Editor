@@ -35,11 +35,45 @@ export interface DropTargetServices {
   pasteReference(chapter: string, text: string): Promise<PasteOutcome>;
 }
 
+/**
+ * One editing window as a drop sees it: where the text goes, and whose it is.
+ *
+ * The two travel together because they have to. A reference is relative to the
+ * chapter the shell copied the file beside, so the chapter that is asked and the
+ * window that is written must be the same one — resolving the window from the
+ * pointer and the chapter from the keyboard would copy a file beside one chapter
+ * and write its reference into another, where it resolves to nothing.
+ */
+export interface DropWindow {
+  readonly view: EditorView;
+  /** The chapter that window shows, or null when it shows none. */
+  readonly chapter: string | null;
+}
+
 /** How the branch is built. */
 export interface DropTargetOptions {
-  readonly view: EditorView;
-  /** The chapter open in the surface, or null when none is. */
-  chapterPath(): string | null;
+  /**
+   * The editing area, whatever it is divided into.
+   *
+   * One drop target for the whole area, which is what it already was
+   * conceptually: the listeners sit on the grid's host rather than on one
+   * window's element, and which window a gesture belongs to is resolved from the
+   * event. No per-window registration, and no new extension point on `App`.
+   */
+  readonly host: HTMLElement;
+  /**
+   * The window holding the keyboard. Where a paste goes.
+   *
+   * A paste has no coordinates worth trusting — it is a keystroke — so it goes
+   * where the keyboard is.
+   */
+  focused(): DropWindow;
+  /**
+   * The window under a point in CSS pixels, or null for none. Where a drop goes.
+   *
+   * A drop has coordinates and Alice aimed them, so it goes where she pointed.
+   */
+  windowAt(x: number, y: number): DropWindow | null;
   readonly services: DropTargetServices;
   /** Say what happened, in the modeline. */
   announce?(message: string): void;
@@ -189,12 +223,6 @@ export function offsetAt(view: EditorView, x: number, y: number): number {
   return view.posAtCoords({ x, y }) ?? view.state.doc.length;
 }
 
-/** Whether a point in CSS pixels is inside the editing surface. */
-function insideSurface(view: EditorView, x: number, y: number): boolean {
-  const rect = view.dom.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) return true;
-  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-}
 
 /** What one drop's report reads as in the modeline. */
 export function describe(report: DropReport): string {
@@ -227,23 +255,16 @@ export function describe(report: DropReport): string {
  * its own `drop` where the platform lets a non-file drag fall through.
  */
 export function createDropTarget(options: DropTargetOptions): DropTarget {
-  const { view, services } = options;
+  const { host, services } = options;
   const announce = options.announce ?? ((): void => undefined);
-
-  function refuseWithoutChapter(): boolean {
-    if (options.chapterPath() === null) {
-      announce("Open a chapter before dropping a file into it");
-      return true;
-    }
-    return false;
-  }
 
   async function handleAddress(
     text: string,
     at: number,
     gesture: "paste" | "drop",
+    target: DropWindow = options.focused(),
   ): Promise<boolean> {
-    const chapter = options.chapterPath();
+    const { view: into, chapter } = target;
     if (chapter === null) return false;
     let outcome: PasteOutcome;
     try {
@@ -256,9 +277,9 @@ export function createDropTarget(options: DropTargetOptions): DropTarget {
       const body = videoBlock(
         outcome.role ?? "remote",
         outcome.reference,
-        view.state.lineBreak,
+        into.state.lineBreak,
       );
-      applyInsertion(view, blockInsertion(view.state, at, body));
+      applyInsertion(into, blockInsertion(into.state, at, body));
       announce("Added a video block");
       return true;
     }
@@ -266,7 +287,7 @@ export function createDropTarget(options: DropTargetOptions): DropTarget {
     // Dropped, it is an ordinary link; pasted, it is left exactly as the
     // author pasted it, because a paste that rewrites itself is unusable.
     if (gesture === "drop" && /^https?:\/\//i.test(outcome.reference)) {
-      applyInsertion(view, linkInsertion(at, outcome.reference));
+      applyInsertion(into, linkInsertion(at, outcome.reference));
       announce("Added a link");
       return true;
     }
@@ -274,16 +295,25 @@ export function createDropTarget(options: DropTargetOptions): DropTarget {
   }
 
   const onPaste = (event: ClipboardEvent): void => {
+    const target = options.focused();
+    // The text, and only the text. The listener is on the whole editing area,
+    // and CodeMirror's own panels live inside a window beside its content: a
+    // paste into the search field `C-s` opens is the field's, and swallowing it
+    // would put the address into the chapter instead of into the search.
+    const landed = event.target;
+    if (!(landed instanceof Node) || !target.view.contentDOM.contains(landed)) {
+      return;
+    }
     const text = event.clipboardData?.getData("text/plain")?.trim() ?? "";
     if (text === "" || !/^https?:\/\//i.test(text)) return;
-    if (options.chapterPath() === null) return;
-    const at = view.state.selection.main.head;
+    if (target.chapter === null) return;
+    const at = target.view.state.selection.main.head;
     // The paste is held back until the shell has said what the address is; a
     // plain address is then pasted as text, unchanged.
     event.preventDefault();
-    void handleAddress(text, at, "paste").then((wrote) => {
+    void handleAddress(text, at, "paste", target).then((wrote) => {
       if (wrote) return;
-      applyInsertion(view, { from: at, text, cursor: at + text.length });
+      applyInsertion(target.view, { from: at, text, cursor: at + text.length });
     });
   };
 
@@ -291,26 +321,37 @@ export function createDropTarget(options: DropTargetOptions): DropTarget {
     const text = event.dataTransfer?.getData("text/uri-list") ?? "";
     const address = (text || event.dataTransfer?.getData("text/plain") || "").trim();
     if (address === "" || !/^https?:\/\//i.test(address)) return;
-    if (options.chapterPath() === null) return;
+    const target =
+      options.windowAt(event.clientX, event.clientY) ?? options.focused();
+    if (target.chapter === null) return;
     event.preventDefault();
-    const at = offsetAt(view, event.clientX, event.clientY);
-    void handleAddress(address, at, "drop");
+    const at = offsetAt(target.view, event.clientX, event.clientY);
+    void handleAddress(address, at, "drop", target);
   };
 
-  view.contentDOM.addEventListener("paste", onPaste);
-  view.dom.addEventListener("drop", onDomDrop);
+  host.addEventListener("paste", onPaste);
+  host.addEventListener("drop", onDomDrop);
 
   return {
     onText(payload: DropPayload): void {
-      if (refuseWithoutChapter()) return;
-      const chapter = options.chapterPath();
-      if (chapter === null) return;
-      if (!insideSurface(view, payload.x, payload.y)) return;
-      const at = offsetAt(view, payload.x, payload.y);
+      // The window Alice aimed at, and nothing at all where she aimed outside
+      // the editing area: a drop on the sidebar is the sidebar's branch.
+      const target = options.windowAt(payload.x, payload.y);
+      if (target === null) return;
+      // That window's chapter, because the shell copies the file beside the
+      // chapter it is told about and returns a reference relative to it. Asking
+      // the focused window instead would copy the file beside one chapter and
+      // write its reference into another, where it resolves to nothing.
+      const chapter = target.chapter;
+      if (chapter === null) {
+        announce("Open a chapter before dropping a file into it");
+        return;
+      }
+      const at = offsetAt(target.view, payload.x, payload.y);
       void (async () => {
         try {
           const report = await services.dropOnChapter(chapter, payload.nonce);
-          insertOutcomes(view, at, report.accepted);
+          insertOutcomes(target.view, at, report.accepted);
           announce(describe(report));
         } catch (error) {
           announce(String(error));
@@ -319,8 +360,8 @@ export function createDropTarget(options: DropTargetOptions): DropTarget {
     },
     handleAddress,
     dispose(): void {
-      view.contentDOM.removeEventListener("paste", onPaste);
-      view.dom.removeEventListener("drop", onDomDrop);
+      host.removeEventListener("paste", onPaste);
+      host.removeEventListener("drop", onDomDrop);
     },
   };
 }

@@ -34,6 +34,9 @@ Task-oriented. Open one when you have something specific to do.
   themselves up as you type, the four tables Editor leaves alone, what happens
   to a wide character and to a long cell, and the chord that turns alignment
   off for the session.
+- [Split the editing area](how-to-split-the-editing-area.md) — divide the
+  editing area into several windows, move between them, show one chapter twice,
+  resize a window from the keyboard, and what undo does in each window.
 - [Move through the outline](how-to-move-through-the-outline.md) — move,
   fold, promote, demote and move a heading, narrow to a section, switch
   chapter by name, and find every line that holds a word.

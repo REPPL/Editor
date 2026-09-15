@@ -38,6 +38,15 @@ and starts you on the chapter you picked.
 Picking a file that is not Markdown opens nothing: Editor says so, and
 writes nothing anywhere.
 
+## Unsaved edits
+
+Opening another document replaces everything on screen, including the chapters
+open in windows that do not hold the keyboard and the chapters whose windows you
+have closed. So Editor asks first whenever any of them has unsaved edits, naming
+the chapter when there is one and counting them when there are more. Decline,
+and nothing is replaced: the document, the sidebar and every window are exactly
+where you left them.
+
 ## Publishing and exporting a one-chapter document
 
 A document opened this way names no variant — there is no `document.yaml` to

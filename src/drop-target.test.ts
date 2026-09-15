@@ -8,6 +8,7 @@
  * checklist covers what only a real engine can answer.
  */
 
+import { openSearchPanel } from "@codemirror/search";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createEditor, documentText } from "./editor";
@@ -230,11 +231,16 @@ describe("the drop branch", () => {
     services: Partial<DropTargetServices> = {},
     chapter: string | null = "01-part/01-opening.md",
   ): Harness {
-    const { view } = mount(text);
+    // One drop target for the whole editing area, so the harness hands over
+    // the host the grid is drawn into and the two questions that resolve a
+    // gesture to a window. With one window both answer the same view, which is
+    // what one window always was.
+    const { view, parent } = mount(text);
     const messages: string[] = [];
     const branch = createDropTarget({
-      view,
-      chapterPath: () => chapter,
+      host: parent,
+      focused: () => ({ view, chapter }),
+      windowAt: () => ({ view, chapter }),
       announce: (message) => messages.push(message),
       services: {
         dropOnChapter:
@@ -358,5 +364,145 @@ describe("what the modeline says", () => {
         refused: [{ name: "a-folder", reason: "a folder is not a file to drop" }],
       }),
     ).toBe("Added 1 file — 1 too large to copy — a-folder: a folder is not a file to drop");
+  });
+});
+
+describe("which window a gesture belongs to", () => {
+  /** A paste event carrying one plain-text payload. */
+  function pasteEvent(text: string): ClipboardEvent {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { getData: (): string => text },
+    });
+    return event as ClipboardEvent;
+  }
+
+  it("leaves a paste into CodeMirror's own search field alone", async () => {
+    // The listener is on the whole editing area now, and the search panel lives
+    // inside a window beside its content. A paste into the search field is the
+    // field's: swallowing it would put the address into the chapter and leave
+    // the search box empty.
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const view = createEditor(parent, "A paragraph.\n");
+    const asked: string[] = [];
+    const branch = createDropTarget({
+      host: parent,
+      focused: () => ({ view, chapter: "01-part/01-opening.md" }),
+      windowAt: () => ({ view, chapter: "01-part/01-opening.md" }),
+      services: {
+        dropOnChapter: (): Promise<DropReport> =>
+          Promise.resolve({ accepted: [], refused: [] }),
+        pasteReference: (_chapter, address): Promise<PasteOutcome> => {
+          asked.push(address);
+          return Promise.resolve({ kind: "other", role: null, reference: address });
+        },
+      },
+    });
+
+    openSearchPanel(view);
+    const field = parent.querySelector<HTMLElement>(".cm-search input");
+    expect(field).not.toBeNull();
+    const inField = pasteEvent("https://example.org/paper");
+    field?.dispatchEvent(inField);
+    await Promise.resolve();
+    // Not claimed, not asked about, and nothing written into the chapter.
+    expect(inField.defaultPrevented).toBe(false);
+    expect(asked).toEqual([]);
+    expect(documentText(view)).toBe("A paragraph.\n");
+
+    // The same paste in the text is the text's, and is claimed.
+    const inText = pasteEvent("https://example.org/paper");
+    view.contentDOM.dispatchEvent(inText);
+    expect(inText.defaultPrevented).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(asked).toEqual(["https://example.org/paper"]);
+
+    branch.dispose();
+    view.destroy();
+    parent.remove();
+  });
+
+  it("asks about the chapter in the window the drop landed in", async () => {
+    // The shell copies the file beside the chapter it is told about and returns
+    // a reference relative to it, so the chapter that is asked and the window
+    // that is written have to be the same one. Resolving the window from the
+    // pointer and the chapter from the keyboard copied the file beside one
+    // chapter and wrote its reference into another, where it resolved to
+    // nothing.
+    const host = document.createElement("div");
+    document.body.append(host);
+    const left = document.createElement("section");
+    const right = document.createElement("section");
+    host.append(left, right);
+    const focused = createEditor(left, "The window with the keyboard.\n");
+    const pointed = createEditor(right, "The window under the pointer.\n");
+    const asked: string[] = [];
+    const branch = createDropTarget({
+      host,
+      focused: () => ({ view: focused, chapter: "part-one/ch1.md" }),
+      windowAt: () => ({ view: pointed, chapter: "part-two/ch5.md" }),
+      services: {
+        dropOnChapter: (chapter): Promise<DropReport> => {
+          asked.push(chapter);
+          return Promise.resolve({ accepted: [outcome()], refused: [] });
+        },
+        pasteReference: (chapter, address): Promise<PasteOutcome> => {
+          asked.push(chapter);
+          return Promise.resolve({ kind: "other", role: null, reference: address });
+        },
+      },
+    });
+
+    branch.onText({ nonce: "abc", count: 1, x: 4, y: 4 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(asked).toEqual(["part-two/ch5.md"]);
+    // And the reference went into that same window, not the focused one.
+    expect(documentText(pointed)).toContain("![](assets/lantern.jpg)");
+    expect(documentText(focused)).toBe("The window with the keyboard.\n");
+
+    branch.dispose();
+    focused.destroy();
+    pointed.destroy();
+    host.remove();
+  });
+
+  it("refuses a drop aimed at a window with no chapter open, and only that window", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const section = document.createElement("section");
+    host.append(section);
+    const view = createEditor(section, "The welcome text.\n");
+    const messages: string[] = [];
+    const asked: string[] = [];
+    const branch = createDropTarget({
+      host,
+      // The keyboard is in a window that *does* have a chapter; the pointer is
+      // over one that does not. The pointer wins, because that is where the
+      // file would land.
+      focused: () => ({ view, chapter: "part-one/ch1.md" }),
+      windowAt: () => ({ view, chapter: null }),
+      announce: (message) => messages.push(message),
+      services: {
+        dropOnChapter: (chapter): Promise<DropReport> => {
+          asked.push(chapter);
+          return Promise.resolve({ accepted: [outcome()], refused: [] });
+        },
+        pasteReference: (_chapter, address): Promise<PasteOutcome> =>
+          Promise.resolve({ kind: "other", role: null, reference: address }),
+      },
+    });
+
+    branch.onText({ nonce: "abc", count: 1, x: 4, y: 4 });
+    await Promise.resolve();
+    expect(asked).toEqual([]);
+    expect(messages).toEqual(["Open a chapter before dropping a file into it"]);
+    expect(documentText(view)).toBe("The welcome text.\n");
+
+    branch.dispose();
+    view.destroy();
+    host.remove();
   });
 });
