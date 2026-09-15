@@ -37,6 +37,7 @@ import {
   type Settings,
   type SettingsServices,
 } from "./settings-panel";
+import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from "./windows";
 
 // ------------------------------------------------------------- the document
 
@@ -2105,6 +2106,60 @@ describe("resizing by keyboard", () => {
     press(app, "C-x 3");
     expect(press(app, "C-x S-6")).toBe(true);
     expect(modeline(app)).toContain("No window above or below this one");
+  });
+
+  it("stops narrowing the neighbour at the floor the measured split gives, and says so", async () => {
+    // The floor end to end, through the chord rather than through `stepShares`
+    // with a floor handed to it: the chord measures the split it chose, turns
+    // `MIN_WINDOW_WIDTH` into a share of that measure, and refuses the step that
+    // would take the yielding window under it. The harness draws every window
+    // at one width (`src/test-setup.ts`), so the split measures too, and the
+    // floor is a share of that width (`iss-2609150822524148`).
+    await mount();
+    press(app, "C-x 3");
+    const root = host.querySelector<HTMLElement>(".editor-pane > .window-split");
+    if (root === null) throw new Error("no split is drawn");
+    const width = root.getBoundingClientRect().width;
+    expect(width).toBeGreaterThan(0);
+    const floor = MIN_WINDOW_WIDTH / width;
+    let steps = 0;
+    while (steps < 40) {
+      const before = spoken();
+      expect(press(app, "C-x S-]")).toBe(true);
+      const share = rootShares()[1]!;
+      expect(share * width).toBeGreaterThanOrEqual(MIN_WINDOW_WIDTH - 1e-6);
+      if (modeline(app).includes("This window cannot get any wider")) {
+        expect(spoken()).not.toBe(before);
+        break;
+      }
+      steps += 1;
+    }
+    expect(steps).toBeLessThan(40);
+    expect(steps).toBeGreaterThan(0);
+    expect(rootShares()[1]).toBeCloseTo(floor, 6);
+    expect(rootShares()[0]).toBeCloseTo(1 - floor, 6);
+  });
+
+  it("stops making a window taller at the floor the measured split gives", async () => {
+    // The same floor on the other axis: `MIN_WINDOW_HEIGHT` as a share of the
+    // split's measured height, and the refusal spoken when it is reached.
+    await mountTall();
+    expect(press(app, "C-x 2")).toBe(true);
+    const root = host.querySelector<HTMLElement>(".editor-pane > .window-split");
+    if (root === null) throw new Error("no split is drawn");
+    const height = root.getBoundingClientRect().height;
+    expect(height).toBeGreaterThan(0);
+    const floor = MIN_WINDOW_HEIGHT / height;
+    let steps = 0;
+    while (steps < 40) {
+      expect(press(app, "C-x S-6")).toBe(true);
+      const share = rootShares()[1]!;
+      expect(share * height).toBeGreaterThanOrEqual(MIN_WINDOW_HEIGHT - 1e-6);
+      if (modeline(app).includes("This window cannot get any taller")) break;
+      steps += 1;
+    }
+    expect(steps).toBeLessThan(40);
+    expect(rootShares()[1]).toBeCloseTo(floor, 6);
   });
 
   it("says what each resize chord did", async () => {
