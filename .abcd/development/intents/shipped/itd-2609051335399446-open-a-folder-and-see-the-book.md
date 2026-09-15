@@ -170,9 +170,16 @@ the file names, and every tool she owns can edit it.
   Parts — or whether structure edits stay in the file system for the
   first release". This intent is written for the second answer; the first
   would add a gesture, not change the tree.
-- How a reload behaves against unsaved work. Closing or switching chapter
-  with unsaved changes asks, and the modeline marks an unsaved buffer, so
-  Alice's own gestures are covered. What is still open is the external
+- How a reload behaves against unsaved work. Closing a chapter with unsaved
+  changes asks, and the modeline marks an unsaved buffer, so Alice's own
+  gestures are covered. (Amended 2026-09-15. As first written this read
+  "Closing or switching chapter with unsaved changes asks". Since
+  `itd-2609081931493520` a chapter is a buffer the application holds, and a
+  window switching to another chapter leaves that buffer, edits and all, with
+  the modeline still marking it unsaved, so a switch discards nothing and no
+  longer asks; the gestures that do discard — quitting, replacing the
+  document, `C-x C-k` — each ask for themselves. Settled by the maintainer
+  against iss-2609111123510084.) What is still open is the external
   case: `03-evidence.md` leaves open "how concurrent edits from two
   devices are detected so that last-write-wins can be reported rather
   than silently applied", which is also what decides what Editor does

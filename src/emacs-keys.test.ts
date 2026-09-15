@@ -1937,20 +1937,26 @@ describe("Editor's own chords", () => {
     expect(written).toEqual({ path: "document/02-bob.md", text: "# Bob\n" });
   });
 
-  it("asks before unsaved edits are lost, and keeps them on a refusal", async () => {
+  it("switches chapter without asking, keeps the edits, and asks before they are lost", async () => {
     await app.openChapter(tree.root.chapters[0]!);
     place(app.view, 0);
     press(app.view, "C-k");
     expect(app.dirty).toBe(true);
 
+    // Switching chapter discards nothing: the edited chapter keeps its buffer
+    // and stays unsaved, so nothing is asked and the other chapter opens.
     discardAnswer = false;
     await app.openChapter(tree.root.chapters[1]!);
-    expect(discardCalls).toBe(1);
-    expect(app.modeline.element.textContent).toContain("Kept the open chapter");
+    expect(discardCalls).toBe(0);
+    expect(app.view.state.doc.toString()).not.toBe("");
+    expect(app.dirty).toBe(true);
+    await app.openChapter(tree.root.chapters[0]!);
     expect(app.view.state.doc.line(1).text).toBe("");
 
+    // Replacing the document would lose them, so that asks, and a refusal
+    // keeps them where they were.
     await app.openFolder("elsewhere");
-    expect(discardCalls).toBe(2);
+    expect(discardCalls).toBe(1);
     expect(app.view.state.doc.line(1).text).toBe("");
   });
 
