@@ -406,6 +406,24 @@ Scope-condition dispositions:
   evidence: src/editor.ts:455 — "Transaction.addToHistory.of(false)"
   evidence: src/document.test.ts:1507 — "it("undoes nothing in the window that did not make the edit""
   evidence: docs/how-to-split-the-editing-area.md:62 — "**Undo is per window.**"
+Manual acceptance, 2026-09-15 (note beside the verdict above, which predates
+it). The 81 rows of `.abcd/.work.local/logs/acceptance/spc-2609111105376860.md`
+were driven in the real shell by an agent sending system keystrokes and
+pointer events with the maintainer away from the keyboard, each state read
+from a screenshot and the disk rows from `git status`: 66 rows are ticked.
+The six INCONCLUSIVE criteria above (ac-1, ac-2, ac-15, ac-16, ac-17, and
+the widths half of ac-20) were each seen: the area divides left and right
+and above and below in equal halves, the resize chords move the divider by
+a twentieth and stop at a floor a drag also stops at, and at 390 the
+left-and-right chord refuses while the above-and-below one divides. Not
+seen: the eleven VoiceOver rows, which no script can drive; two rows whose
+gesture was not sent (trackpad scrolling, reached instead by keyboard
+paging; scrolling to a chapter's end); and two rows that failed and are
+captured — an unfocused window draws a hollow outline at its point
+(iss-2609151435219952) and the sidebar does not answer `M-x`
+(iss-2609151454305437). The assistive-technology half of ac-20 stays
+inconclusive.
+
 ## Grounds
 
 - pursued: the pane cycle's first slot becomes plural while its rule stays intact, and two windows on one chapter are two CodeMirror views over one shared EditorState, which is what makes a split a split rather than two copies; wrong if an edit in one window fails to appear in the other, if a window's caret jumps to the typing window's position, or if C-x C-s ever writes the chapter of a window that does not hold the keyboard

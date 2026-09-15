@@ -22,3 +22,4 @@ predecessor.
 | adr-2609051324177479 | [Reader annotations live in sidecar files beside chapters, private by default, publishable as layers](2609051324177479-annotations-are-sidecar-files.md) | accepted |
 | adr-2609091832455881 | [The editing surface becomes a tree of windows, and the pane cycle's first slot becomes plural](2609091832455881-editing-windows-are-a-split-tree.md) | accepted |
 | adr-2609092000099546 | [Byte fidelity forbids the serialiser reformatting, not the author's own edit reformatting what they are editing](2609092000099546-byte-fidelity-forbids-the-serialiser-not-the-author.md) | accepted |
+| adr-2609151837453096 | [A shared editing session is the second thing that may touch the network](2609151837453096-a-shared-editing-session-is-the-second-thing-that-may-touch.md) | proposed |

@@ -165,9 +165,10 @@ data, shown to the user in a keys panel, produced by the spike, and used as
 the acceptance list.
 
 **import by split** — turning one flat Markdown file into a document
-folder: one Part named for the document, holding one chapter file per
-level-one heading, numbered in order, with any text before the first
-heading as the first chapter and the text otherwise unchanged.
+folder beside it: the document's metadata and one Part, `01-chapters/`,
+the same name a new document is given, holding one chapter file per
+top-level level-one heading, numbered in order, with any text before the
+first heading as the first chapter and the text otherwise unchanged.
 
 ## Annotations
 
