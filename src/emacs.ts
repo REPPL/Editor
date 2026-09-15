@@ -17,8 +17,18 @@
  * build if this module and the table drift apart.
  *
  * The handler's command table is static, so the application it calls into is a
- * module-level singleton. One window, one application; a second one would
- * replace the first.
+ * module-level singleton: one application, and a second one would replace the
+ * first. The editing area is nonetheless several *windows*
+ * (`itd-2609081931493520`), and nothing in this layer had to change for that,
+ * because nothing here was ever about one window. `handlerByView` is a
+ * `WeakMap` keyed on the view, so each window has its own handler and its own
+ * half-typed prefix; `emacsStatus` takes a view, so the modeline reads the
+ * window that holds the keyboard; and the kill ring is static, so every window
+ * shares one, which is Emacs. What one registry does mean is that the
+ * *commands* it holds must resolve against the focused window rather than
+ * against a view they closed over, which they do in `src/app.ts`. The one
+ * hazard several windows add is a `C-x` half-typed in a window Alice then
+ * leaves, and `clearPending` below is what the focus model calls to forget it.
  */
 
 import {
@@ -117,6 +127,19 @@ export const APP_COMMAND_IDS: readonly string[] = [
   // The pane cycle. This is the route from the text; a pane the editing
   // surface cannot hear reads the same row through `src/focus.ts`.
   "other-window",
+  // The window vocabulary (`itd-2609081931493520`). Four rows divide and
+  // undivide the editing area and three resize the window holding the
+  // keyboard; all seven are the editing surface's own, exactly as `C-x C-s`
+  // is, so a pane the surface cannot hear does not answer them.
+  "split-window-below",
+  "split-window-right",
+  "delete-window",
+  "delete-other-windows",
+  // `C-x S-[`, `C-x S-]` and `C-x S-6`: the physical-key spelling, the same
+  // one `forward-paragraph` and `delete-indentation` are already shipped on.
+  "shrink-window-horizontally",
+  "enlarge-window-horizontally",
+  "enlarge-window",
   // The prose vocabulary. Each is a function of the view in `src/prose.ts`;
   // the application wires it, because a refusal is announced in the modeline
   // and two of them open a prompt in the overlay host.
@@ -900,6 +923,27 @@ export function emacsKeymap(): Extension {
   trackHandlers();
   registerEditorChords();
   return emacs();
+}
+
+/**
+ * Forget a half-typed chord in a window the keyboard is leaving.
+ *
+ * `EmacsHandler.$data.keyChain` is per instance and `handlerByView` is keyed on
+ * the view, so each editing window holds its own half-typed prefix. That is
+ * Emacs, and pleasant — but a `C-x` typed in one window and abandoned with
+ * `C-x o` would sit there invisible, because the modeline reads the focused
+ * window's handler, and it would still be live the next time Alice typed in
+ * that window. So leaving an editing window clears its pending chord, the same
+ * discipline `panelTarget.release` and `sidebar.releaseFocus` already follow.
+ *
+ * The count goes with it: a numeric argument is half of a chord in progress,
+ * and half a chord left behind is the same defect.
+ */
+export function clearPending(view: EditorView): void {
+  const handler = handlerByView.get(view);
+  if (!handler) return;
+  handler.$data.keyChain = "";
+  handler.$data.count = 0;
 }
 
 /** What the handler for `view` is currently in the middle of. */

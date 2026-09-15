@@ -1,11 +1,24 @@
 /**
  * Which pane holds the keyboard, and how it is handed on.
  *
- * Three panes in one fixed order — the editing surface, the sidebar, whatever
- * panel is open — and one chord, `other-window`, that walks it. Focus is
- * single and exclusive, which is the whole mechanism: `C-n` is next line in
- * the text and next node in the tree because exactly one pane is listening,
- * never both.
+ * Three *kinds* of pane in one fixed order — the editing surface, the sidebar,
+ * whatever panel is open — the first of which is a tree of editing windows, and
+ * one chord, `other-window`, that walks the lot. Focus is single and exclusive,
+ * which is the whole mechanism: `C-n` is next line in the text and next node in
+ * the tree because exactly one pane is listening, never both; and with the
+ * editing area divided, exactly one *window* of it is listening
+ * (`itd-2609081931493520`, `adr-2609091832455881`).
+ *
+ * So `PANE_ORDER` keeps its type and its three literals, and what became plural
+ * is the walk: `steps()` expands the editor slot to the tree's leaves in
+ * reading order and leaves the other two alone. The sidebar and any open panel
+ * stay docked outside the grid and neither becomes a leaf.
+ *
+ * Which window holds the keyboard and which *kind* of pane does are two
+ * questions, and they are kept apart for the reason `canHold` and `available`
+ * are: `focusedWindow` is never null and survives a panel or the sidebar taking
+ * the keys, exactly as Emacs's selected window survives the minibuffer, which
+ * is what makes `M-x save-chapter` write the chapter Alice was last in.
  *
  * The walk visits panes that are shown, and changes none of them: a hidden
  * drawer is not a pane, and where the walk finds nowhere to go it says so
@@ -43,6 +56,7 @@ import {
 import { currentOverlay, focusOverlay, onOverlayChange } from "./overlay";
 import type { PrefixHelpRequest } from "./prefix-help";
 import type { Sidebar } from "./sidebar";
+import type { WindowId } from "./windows";
 
 /** The panes that can hold the keyboard. */
 export type Pane = "editor" | "sidebar" | "panel";
@@ -51,9 +65,17 @@ export type Pane = "editor" | "sidebar" | "panel";
  * The cycle, in the one order it is ever walked.
  *
  * Two panes with nothing open and three with something open, in the same
- * order every time: the panel is the third place, whichever panel it is.
+ * order every time: the panel is the third place, whichever panel it is. The
+ * first place is a tree of editing windows and stands for all of them; `steps`
+ * below is where it becomes plural.
  */
 export const PANE_ORDER: readonly Pane[] = ["editor", "sidebar", "panel"];
+
+/** One stop on the cycle: an editing window, the sidebar, or the panel. */
+export type Step =
+  | { readonly pane: "editor"; readonly window: WindowId }
+  | { readonly pane: "sidebar" }
+  | { readonly pane: "panel" };
 
 /** How the modeline names each pane that is not a panel. */
 const PANE_LABELS: Readonly<Record<"editor" | "sidebar", string>> = {
@@ -128,29 +150,28 @@ export function focusFirstControl(element: HTMLElement): void {
 
 /** What the focus model needs from the application. */
 export interface FocusHooks {
-  /** Give the keyboard back to the editing surface. */
-  focusEditor(): void;
   /**
-   * The editing surface's content root.
+   * Which editing window an element sits in, or null for anything else.
    *
-   * The one element the keyboard can land in and mean "the text": a click in
-   * a paragraph, a `contentDOM.focus()` after a chapter loads, a browser
-   * restoring focus. Without it the model can only hear the panes it drives
-   * itself, and a pointer route leaves it naming a pane that does not have
-   * the keys.
+   * The one question that says "the keyboard has landed in the text": a click
+   * in a paragraph, a `contentDOM.focus()` after a chapter loads, a browser
+   * restoring focus, a cursor in CodeMirror's own search field. Each window's
+   * element holds that window's whole surface — content and furniture alike —
+   * so the rule `iss-2609091858449023` left behind, that the keyboard being in
+   * the search panel is the keyboard being in the editor, holds per window
+   * without being restated. Without this hook the model can only hear the panes
+   * it drives itself, and a pointer route leaves it naming a pane that does not
+   * have the keys.
    */
-  readonly editorContent: HTMLElement;
-  /**
-   * The editing surface's whole element, content and furniture alike.
-   *
-   * CodeMirror's own panels live here and not in the content: the search
-   * panel's input, and whatever else the surface mounts around the text. They
-   * are the editor for the purpose of naming a pane — they are not a fourth
-   * place in the cycle, and the keyboard being in one of them is not the
-   * keyboard being nowhere. Without this the model read a click into the
-   * search field as focus lost, and took it back into the text mid-search.
-   */
-  readonly editorSurface: HTMLElement;
+  editorWindowOf(node: Node): WindowId | null;
+  /** The tree's leaves, in reading order. The editor slot of the walk. */
+  editorWindows(): readonly WindowId[];
+  /** Whether one window is still in the tree. */
+  hasWindow(id: WindowId): boolean;
+  /** Give the keyboard to one editing window. */
+  focusWindow(id: WindowId): void;
+  /** One editing window is losing the keyboard: forget its half-typed chord. */
+  releaseWindow(id: WindowId): void;
   /** The sidebar, which is the second pane. */
   readonly sidebar: Sidebar;
   /**
@@ -189,18 +210,29 @@ export interface FocusHooks {
 export interface FocusModel {
   /** The pane holding the keyboard. */
   readonly pane: Pane;
+  /**
+   * The editing window holding the keyboard, whichever pane does.
+   *
+   * Never null: a tree always has a leaf. It changes only when the keyboard
+   * moves between editing windows or the window it names closes, so it is
+   * still the right answer while an overlay or the sidebar has the keys —
+   * which is what every command that means something chapter-shaped asks.
+   */
+  readonly window: WindowId;
   /** What the modeline calls that pane. */
   readonly label: string;
   /** A prefix chord half-typed outside the editing surface, or null. */
   readonly prefix: string | null;
   /** Add a panel to the third place in the cycle. */
   registerPanel(panel: PanelFocus): void;
-  /** Move to the next available pane, wrapping. */
+  /** Move to the next stop on the cycle, wrapping. */
   cycle(): void;
-  /** Hand the keyboard back to the text. */
+  /** Hand the keyboard back to the text, in the window that last had it. */
   toEditor(): void;
   /** Give the keyboard to one pane. False when it cannot take it. */
   to(pane: Pane): boolean;
+  /** Give the keyboard to one editing window. False when it is not there. */
+  toWindow(id: WindowId): boolean;
   /** Notice a pane that has gone away, such as a panel that closed. */
   reconcile(): void;
   /** Stop reading keys. */
@@ -260,6 +292,14 @@ function chordsOf(id: string): readonly string[] {
 export function createFocusModel(hooks: FocusHooks): FocusModel {
   const { sidebar } = hooks;
   let pane: Pane = "editor";
+  /**
+   * The editing window the keyboard is in, or was in last.
+   *
+   * Resolved through `focusedWindow()` below rather than read directly, so a
+   * window that has closed under it never leaves the model naming a window
+   * that is not there.
+   */
+  let focused: WindowId | null = null;
   /** The prefix step in progress in this reader, such as `C-x`. */
   let pending: string | null = null;
 
@@ -349,21 +389,61 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
     return heldPlace()?.key === overlay ? overlay : null;
   }
 
-  const editorTarget: PaneTarget = {
-    pane: "editor",
-    label: () => PANE_LABELS.editor,
-    // The editing surface is always there and always shown, so both questions
-    // have the one answer — which is what makes the walk terminate.
-    canHold: () => true,
-    available: () => true,
-    take: () => {
-      hooks.focusEditor();
-    },
-    release: () => {
-      // Nothing to give up: the surface loses the keyboard when another pane
-      // takes DOM focus, and nothing about the buffer changes.
-    },
-  };
+  /**
+   * The window the keyboard is in, or was in last. Never null.
+   *
+   * A tree always has a leaf, so there is always an answer; the leaf this
+   * names can nonetheless go away underneath the model — `C-x 1` pressed from
+   * a panel closes windows nobody has the keyboard in — so the answer is
+   * re-resolved rather than remembered, and falls back to the first leaf in
+   * reading order.
+   */
+  function focusedWindow(): WindowId {
+    const leaves = hooks.editorWindows();
+    if (focused !== null && leaves.includes(focused)) return focused;
+    const first = leaves[0];
+    if (first !== undefined) {
+      focused = first;
+      return first;
+    }
+    // Unreachable: a tree always has a leaf. Naming the window the keyboard
+    // last had is better than throwing inside a getter the modeline reads on
+    // every keystroke.
+    return focused ?? ("" as WindowId);
+  }
+
+  /**
+   * One editing window as a place the keyboard can be.
+   *
+   * The `canHold`/`available` split survives untouched in meaning: both
+   * questions have the one answer for a window, for the same reason they do for
+   * the whole surface today — a window that exists is drawn, and a drawn window
+   * has a caret's worth of text to sit in. There is no editing analogue of the
+   * drawer that is drawn and not shown, so nothing about
+   * `iss-2609091858449023`'s settlement changes and the reason the two
+   * questions differ is still the sidebar and the sidebar alone.
+   *
+   * `release` is the one line that is new: leaving a window forgets the chord
+   * it had half-typed. `EmacsHandler`'s key chain is per view, so a `C-x`
+   * typed in one window and abandoned with `C-x o` would otherwise sit there
+   * invisible — the modeline reads the focused window's handler — and live the
+   * next time Alice typed in it. The same discipline `panelTarget.release` and
+   * `sidebar.releaseFocus` already follow.
+   */
+  function editorTargetFor(id: WindowId): PaneTarget {
+    return {
+      pane: "editor",
+      label: () => PANE_LABELS.editor,
+      canHold: () => hooks.hasWindow(id),
+      available: () => hooks.hasWindow(id),
+      take: () => {
+        hooks.focusWindow(id);
+      },
+      release: () => {
+        hooks.releaseWindow(id);
+      },
+    };
+  }
 
   /**
    * Whether the tree is somewhere the keyboard can be.
@@ -437,10 +517,60 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
   function targetFor(which: Pane): PaneTarget {
     if (which === "sidebar") return sidebarTarget;
     if (which === "panel") return panelTarget;
-    return editorTarget;
+    return editorTargetFor(focusedWindow());
+  }
+
+  /**
+   * The cycle's stops, derived from `PANE_ORDER` fresh on every call.
+   *
+   * The editor slot expands to the tree's leaves in reading order and the other
+   * two slots are unchanged, which is the whole of how the first place became
+   * plural without the order changing. The leaves come from the application —
+   * this module does not own the tree and does not import it, exactly as it asks
+   * `sidebar.rows()` whether the tree can hold a cursor rather than reading the
+   * tree itself.
+   */
+  function steps(): readonly Step[] {
+    const found: Step[] = [];
+    for (const which of PANE_ORDER) {
+      if (which !== "editor") {
+        found.push({ pane: which });
+        continue;
+      }
+      for (const window of hooks.editorWindows()) {
+        found.push({ pane: "editor", window });
+      }
+    }
+    return found;
+  }
+
+  /** Where on the cycle the keyboard is now. */
+  function stepNow(all: readonly Step[]): number {
+    if (pane === "editor") {
+      const at = focusedWindow();
+      return all.findIndex(
+        (step) => step.pane === "editor" && step.window === at,
+      );
+    }
+    return all.findIndex((step) => step.pane === pane);
+  }
+
+  /** Give the keyboard to one editing window. */
+  function toWindow(id: WindowId): boolean {
+    const target = editorTargetFor(id);
+    if (!target.available()) return false;
+    if (pane !== "editor") targetFor(pane).release();
+    else if (focusedWindow() !== id) hooks.releaseWindow(focusedWindow());
+    pane = "editor";
+    focused = id;
+    pending = null;
+    target.take();
+    changed();
+    return true;
   }
 
   function to(next: Pane): boolean {
+    if (next === "editor") return toWindow(focusedWindow());
     const target = targetFor(next);
     if (!target.available()) return false;
     if (next !== pane) targetFor(pane).release();
@@ -452,21 +582,28 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
   }
 
   /**
-   * Move to the next available pane, or say that there is not one.
+   * Move to the next stop on the cycle, or say that there is not one.
    *
-   * The walk stops short of the pane it started in: coming back round to
+   * The walk stops short of the stop it started in: coming back round to
    * where the keyboard already is is not a move, and reporting it as one is
    * what left `C-x o` mute with nothing loaded — no rows in the tree, no
    * panel open, and the cycle calling a return to the editor a step
    * (`iss-2609081707572166`). "Nowhere else to go" is one condition however
-   * it arose, so it is said in one place (`itd-2609091722353838`).
+   * it arose, so it is said in one place (`itd-2609091722353838`). A lone
+   * window with a hidden sidebar and no panel still says so.
    */
   function cycle(): void {
-    const from = PANE_ORDER.indexOf(pane);
-    for (let step = 1; step < PANE_ORDER.length; step += 1) {
-      const next = PANE_ORDER[(from + step) % PANE_ORDER.length];
-      if (next !== undefined && targetFor(next).available()) {
-        to(next);
+    const all = steps();
+    const from = Math.max(stepNow(all), 0);
+    for (let step = 1; step < all.length; step += 1) {
+      const next = all[(from + step) % all.length];
+      if (next === undefined) continue;
+      if (next.pane === "editor") {
+        if (toWindow(next.window)) return;
+        continue;
+      }
+      if (targetFor(next.pane).available()) {
+        to(next.pane);
         return;
       }
     }
@@ -496,7 +633,20 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
    * where this is a pane disappearing under her.
    */
   function reconcile(): void {
-    if (pane !== "editor" && !targetFor(pane).canHold()) toEditor();
+    // The editing surface is always there, but *this* window may not be: `C-x 1`
+    // can run from a panel and close the window the keyboard was last in. The
+    // first leaf is the fallback and nothing more. Where a chord closes the
+    // window the keyboard is in, the application hands the keyboard to the
+    // window that receives the closed one's space before asking this — a
+    // neighbour, which the first leaf of the whole tree need not be
+    // (`iss-2609120527458704`).
+    if (pane === "editor") {
+      if (hooks.hasWindow(focusedWindow())) return;
+      const first = hooks.editorWindows()[0];
+      if (first !== undefined) toWindow(first);
+      return;
+    }
+    if (!targetFor(pane).canHold()) toEditor();
   }
 
   /**
@@ -512,7 +662,19 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
    * pane is not hiding it (`itd-2609091722353838`) — so what is on the page
    * is exactly as it was.
    */
-  function adopt(next: Pane): void {
+  function adopt(next: Pane, window: WindowId | null): void {
+    // A click in a paragraph of the third window is a move between editing
+    // windows, which `pane` alone cannot see: it was `editor` before and it is
+    // `editor` after.
+    if (next === "editor" && window !== null && window !== focusedWindow()) {
+      if (pane === "editor") hooks.releaseWindow(focusedWindow());
+      else targetFor(pane).release();
+      pane = "editor";
+      focused = window;
+      pending = null;
+      changed();
+      return;
+    }
     if (next === pane) {
       // The pane is the same; which panel fills the third place may not be,
       // and the modeline names the panel rather than the place.
@@ -537,16 +699,32 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
    * is, not where the cycle may send it, and the two are different questions
    * about the sidebar (`iss-2609091858449023`).
    */
+  /**
+   * Which editing window an element sits in, or null for anything else.
+   *
+   * The sibling of `paneOf`, kept apart from it for the reason `canHold` and
+   * `available` are kept apart: two questions that differ in one case must not
+   * share one answer. The pane *kind* is what every caller of `paneOf` wants —
+   * `onFocusIn` to adopt, `reconcile` to decide whether a pane went away, the
+   * modeline to name where the keyboard is — and which window is a second
+   * question, asked by the one caller that needs it.
+   */
+  function windowOf(landed: Node | null): WindowId | null {
+    if (landed === null) return null;
+    return hooks.editorWindowOf(landed);
+  }
+
   function paneOf(landed: Node | null): Pane | null {
     if (landed === null) return null;
     if (openPanels().some((entry) => entry.focus.element.contains(landed))) {
       return "panel";
     }
-    // The whole surface, not only the content: a caret in a paragraph and a
+    // The whole window, not only its content: a caret in a paragraph and a
     // cursor in CodeMirror's own search field are both "the keyboard is in
-    // the editor", and only one of them is inside `contentDOM`.
-    if (hooks.editorSurface.contains(landed)) return "editor";
-    if (hooks.editorContent.contains(landed)) return "editor";
+    // the editor", and only one of them is inside `contentDOM`. Open panels
+    // are asked first, so a panel drawn inside a window's subtree is still
+    // the panel's.
+    if (windowOf(landed) !== null) return "editor";
     // A tree with no rows cannot hold a cursor, and its one button is the
     // page's own: leaving it out keeps the reader off that button's keys.
     // A tree that is drawn but not shown is a different matter — the keyboard
@@ -563,11 +741,11 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
     if (!(landed instanceof Node)) return;
     const arrived = paneOf(landed);
     if (arrived !== null) {
-      adopt(arrived);
+      adopt(arrived, windowOf(landed));
       return;
     }
     // The keyboard left the panel: it closed, or she clicked past it.
-    if (pane === "panel") adopt(sidebar.focused ? "sidebar" : "editor");
+    if (pane === "panel") adopt(sidebar.focused ? "sidebar" : "editor", null);
   }
 
   /**
@@ -597,11 +775,11 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
       if (active !== null && sidebar.element.contains(active)) return;
       const now = paneOf(active);
       if (now !== null) {
-        adopt(now);
+        adopt(now, windowOf(active));
         return;
       }
       if (active === null || active === document.body) toEditor();
-      else adopt("editor");
+      else adopt("editor", null);
     });
   }
 
@@ -756,6 +934,10 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
       return pane;
     },
 
+    get window(): WindowId {
+      return focusedWindow();
+    },
+
     get label(): string {
       return targetFor(pane).label();
     },
@@ -771,6 +953,7 @@ export function createFocusModel(hooks: FocusHooks): FocusModel {
     cycle,
     toEditor,
     to,
+    toWindow,
     reconcile,
 
     destroy(): void {

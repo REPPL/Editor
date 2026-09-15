@@ -104,7 +104,7 @@ describe("the filter over the table", () => {
     const under = completionsUnder("C-x", EDITOR_IDS);
     // The largest prefix Editor ships. Counted, so that a row added or taken
     // away is a change a reader of this file has to look at.
-    expect(under.length).toBe(25);
+    expect(under.length).toBe(32);
     for (const entry of under) {
       expect(entry.chord.startsWith("C-x ")).toBe(true);
       expect(entry.rest).toBe(entry.chord.slice("C-x ".length));
@@ -145,8 +145,25 @@ describe("the filter over the table", () => {
     );
     expect(rests).toEqual(sorted);
     // Not the keys panel's group order: this list is scanned for the next
-    // keystroke, where a heading does not earn its space.
-    expect(rests[0]).toBe("b");
+    // keystroke, where a heading does not earn its space. `C-x 0` sorts first
+    // because a digit sorts before a letter.
+    expect(rests[0]).toBe("0");
+    expect(rests).toContain("b");
+  });
+
+  it("lists the window chords under `C-x`", () => {
+    // The second surface that reads the binding table, after the keys panel:
+    // a row in the table is a line in the overlay, which is the point of the
+    // table (`itd-2609081931493520`).
+    const under = completionsUnder("C-x", EDITOR_IDS);
+    const byId = new Map(under.map((entry) => [entry.binding.id, entry.rest]));
+    expect(byId.get("split-window-below")).toBe("2");
+    expect(byId.get("split-window-right")).toBe("3");
+    expect(byId.get("delete-window")).toBe("0");
+    expect(byId.get("delete-other-windows")).toBe("1");
+    expect(byId.get("shrink-window-horizontally")).toBe("S-[");
+    expect(byId.get("enlarge-window-horizontally")).toBe("S-]");
+    expect(byId.get("enlarge-window")).toBe("S-6");
   });
 
   it("lists only what is under a two-step prefix", () => {
@@ -228,7 +245,7 @@ describe("the prefix overlay", () => {
 
   it("keeps reading while what is typed is still a prefix, and runs the row when it completes", () => {
     const watched = open("C-x");
-    expect(chordsOn(watched.element).length).toBe(25);
+    expect(chordsOn(watched.element).length).toBe(32);
 
     expect(pressKey("n")).toBe(true);
     // Still open, narrowed to the two rows under `C-x n`, and saying so.

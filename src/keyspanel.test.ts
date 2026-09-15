@@ -222,6 +222,36 @@ describe("the keys panel", () => {
     }
   });
 
+  it("lists the seven window chords with their labels", () => {
+    // The criterion names four; seven rows are added, and the three resize rows
+    // are listed by the same mechanism without the criterion asking — a row in
+    // the table is a row in the panel, which is the point of the table
+    // (`itd-2609081931493520`).
+    const overlay = openKeysPanel();
+    const expected: readonly (readonly [string, string])[] = [
+      ["split-window-below", "C-x 2"],
+      ["split-window-right", "C-x 3"],
+      ["delete-window", "C-x 0"],
+      ["delete-other-windows", "C-x 1"],
+      ["shrink-window-horizontally", "C-x S-["],
+      ["enlarge-window-horizontally", "C-x S-]"],
+      ["enlarge-window", "C-x S-6"],
+    ];
+    expect(expected).toHaveLength(7);
+    for (const [id, chord] of expected) {
+      const row = overlay.element.querySelector<HTMLElement>(
+        `[data-binding="${id}"]`,
+      );
+      expect(row, id).not.toBeNull();
+      expect(row?.textContent, id).toBe(bindingById(id)?.label);
+      expect((row?.textContent ?? "").length, id).toBeGreaterThan(0);
+      expect(row?.nextElementSibling?.textContent, id).toContain(chord);
+      // Under the Panes heading, so the whole window vocabulary reads together
+      // rather than scattering through Document and Movement.
+      expect(bindingById(id)?.group, id).toBe("panes");
+    }
+  });
+
   it("closes on Escape and on C-g", () => {
     for (const chord of bindingById("keyboard-quit")?.chords ?? []) {
       const overlay = openKeysPanel();

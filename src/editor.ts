@@ -10,10 +10,12 @@ import {
 } from "@codemirror/language";
 import { closeSearchPanel, search, searchPanelOpen } from "@codemirror/search";
 import {
+  Annotation,
   EditorSelection,
   EditorState,
   Prec,
   StateField,
+  Transaction,
   type Extension,
 } from "@codemirror/state";
 import {
@@ -360,6 +362,17 @@ export function documentText(view: EditorView): string {
 /** The hooks a view was built with, so a fresh state can carry them too. */
 const hooksByView = new WeakMap<EditorView, EditorHooks>();
 
+/**
+ * The state one window holds a chapter in.
+ *
+ * A state per window and not one shared between them, which is
+ * `adr-2609091832455881`'s decision 2 as amended on 2026-09-12.
+ * `EditorState` declares `selection` as its own field beside `doc`
+ * (`@codemirror/state`'s own `index.d.ts`) and the view holds no selection at
+ * all, so two views over one state object are one caret drawn twice. Shared
+ * state and a caret of one's own are mutually exclusive in CodeMirror 6, and
+ * the caret of one's own is what a split is for.
+ */
 function stateFor(doc: string, hooks: EditorHooks, textScale = 0): EditorState {
   return EditorState.create({
     doc,
@@ -370,13 +383,110 @@ function stateFor(doc: string, hooks: EditorHooks, textScale = 0): EditorState {
   });
 }
 
-/** Mount an editing surface into `parent`. */
+/** Marks a transaction as another window's edit, arriving here. */
+const echoed = Annotation.define<boolean>();
+
+/** Every window showing one buffer, in the order they were attached. */
+export type Peers = () => readonly EditorView[];
+
+/**
+ * Mount a view whose text is kept in lockstep with its peers'.
+ *
+ * Two windows on one chapter hold two states that agree on their text, kept
+ * agreeing by echoing one transaction's `ChangeSet` into every peer,
+ * **synchronously, inside the originating view's own dispatch**. Every line of
+ * the echo is load-bearing:
+ *
+ * - `view.update(transactions)` first, because the configuration option
+ *   *replaces* the default `trs => this.update(trs)`. Omitting it renders
+ *   nothing at all.
+ * - `changes: transaction.changes` and nothing else. `ChangeSpec` includes
+ *   `ChangeSet`, and `ChangeSet.of` refuses a set whose length does not match
+ *   the document it is applied to — which makes the library itself this
+ *   design's divergence detector: two windows whose texts drift apart throw on
+ *   the next keystroke rather than letting one of them be saved over the file.
+ * - **No `selection`.** `Transaction.newSelection` falls back to
+ *   `startState.selection.map(changes)`, so the receiving window's own caret is
+ *   mapped through the incoming change for free: it keeps its place, and an
+ *   insertion before it moves it along by the right amount.
+ * - `Transaction.addToHistory.of(false)`, the one path in `history()`'s field
+ *   that maps existing entries through a foreign change without recording a
+ *   new undoable event. Without it, undo in the receiving window would undo the
+ *   other window's typing locally and the two texts would diverge on the spot.
+ *   It is also why undo is per window (`cond-2609120405528253`).
+ * - `filter: false`, so `alignTables()` — the one extension on this surface
+ *   that writes a change the author did not type (`adr-2609092000099546`) —
+ *   does not fire a *second* time on the echo. Without it the receiving window
+ *   satisfies every condition that extension tests and realigns on its own
+ *   account, which diverges the two texts wherever the originating transaction
+ *   touched a table and carried no realignment itself: an undo, which the
+ *   origin declines on its `userEvent` while the echo carries none; a caret on
+ *   the delimiter row; a multi-cursor edit; a paste ending outside the table.
+ *   The undo is the plainest of them and is the canary in
+ *   `src/document.test.ts` (`iss-2609120518323764`).
+ * - `scrollIntoView: false`, because a window nobody is typing in must not
+ *   move.
+ * - The echo is annotated and the annotated branch does not echo on, so a
+ *   fan-out to three peers is still one round and never a cycle.
+ *
+ * **Synchronous is a rule, not a preference.** `@codemirror/collab` is not
+ * installed, so there is no rebasing anywhere in this application. The echo
+ * goes out before any other code can dispatch into either state; deferring it
+ * by so much as a microtask would let a second edit interleave, and
+ * `ChangeSet.of`'s length guard would then throw.
+ */
+function attach(
+  parent: HTMLElement,
+  state: EditorState,
+  peers: Peers,
+): EditorView {
+  return new EditorView({
+    state,
+    parent,
+    dispatchTransactions: (transactions, view) => {
+      view.update(transactions);
+      for (const transaction of transactions) {
+        if (!transaction.docChanged) continue;
+        if (transaction.annotation(echoed) === true) continue;
+        for (const peer of peers()) {
+          if (peer === view) continue;
+          peer.dispatch({
+            changes: transaction.changes,
+            annotations: [echoed.of(true), Transaction.addToHistory.of(false)],
+            filter: false,
+            scrollIntoView: false,
+          });
+          // Kept in the shipped code, not only in a test: a divergence here
+          // is the one failure in this design whose consequence is a corrupt
+          // file, and this names it at the keystroke that caused it. A warning
+          // rather than `console.assert`, which this repository does not allow
+          // and which no build strips anyway.
+          if (peer.state.doc.length !== view.state.doc.length) {
+            console.warn(
+              "windows on one chapter disagree about its length: " +
+                `${String(view.state.doc.length)} and ${String(peer.state.doc.length)}`,
+            );
+          }
+        }
+      }
+    },
+  });
+}
+
+/**
+ * Mount an editing surface into `parent`.
+ *
+ * `peers` is a getter and not a list, because the set of windows showing a
+ * chapter changes long after a window is built — and because
+ * `dispatchTransactions` can only be passed at construction.
+ */
 export function createEditor(
   parent: HTMLElement,
   doc: string,
   hooks: EditorHooks = {},
+  peers: Peers = () => [],
 ): EditorView {
-  const view = new EditorView({ state: stateFor(doc, hooks), parent });
+  const view = attach(parent, stateFor(doc, hooks), peers);
   hooksByView.set(view, hooks);
   // Setting the mark and opening a prefix change no document state, so no
   // transaction reaches the update listener. This listener is registered after
@@ -437,6 +547,46 @@ export function placeCursor(view: EditorView, offset: number): void {
     selection: EditorSelection.cursor(clamped),
     scrollIntoView: true,
   });
+}
+
+/**
+ * Write a view's own caret back into the DOM after its element was moved.
+ *
+ * A reshape of the window grid moves leaf elements rather than rebuilding them,
+ * which is what lets a window survive a split. Taking an element out of the
+ * document and putting it back nonetheless collapses the *DOM* selection, while
+ * the state's selection is untouched — and CodeMirror trusts the DOM: on the
+ * next flush it reads a caret at the start of the content and writes that into
+ * the state. The window Alice was typing in jumps to the top of the chapter, one
+ * frame or one chord after the split.
+ *
+ * Neither `view.focus()` nor a transaction carrying the state's own selection
+ * repairs it, because the view's cached DOM range still describes where the
+ * caret *was* and so it concludes there is nothing to write. What does repair it
+ * is writing the DOM selection here, from the state, through `domAtPos` — the
+ * view's own answer to where a document offset is drawn. The next flush then
+ * reads the caret the state already holds and agrees with it.
+ *
+ * Only the window holding the keyboard is repaired, because a document has one
+ * selection: writing it for each window in turn would leave it in the last one.
+ * An unfocused view is never read from the DOM, so its state is already the
+ * truth about its caret.
+ *
+ * A caret outside what the view has drawn has no DOM position to write, and
+ * `domAtPos` says so by throwing. Nothing is done then: there is no repair to
+ * make that would not be a guess.
+ */
+export function refreshSelection(view: EditorView): void {
+  const selection = view.dom.ownerDocument.getSelection();
+  if (selection === null) return;
+  const main = view.state.selection.main;
+  try {
+    const anchor = view.domAtPos(main.anchor);
+    const head = view.domAtPos(main.head);
+    selection.setBaseAndExtent(anchor.node, anchor.offset, head.node, head.offset);
+  } catch {
+    // Not drawn there: leave the DOM alone rather than guess at a position.
+  }
 }
 
 /** Where the cursor sat when the open search panel was opened, if anywhere. */

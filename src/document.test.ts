@@ -23,6 +23,9 @@ import type {
 } from "./doctree";
 import { createDropRouter, type DropTargets } from "./drop";
 import { TRAIL_STEPS } from "./modeline";
+import { StateEffect } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
+import { runBinding } from "./emacs";
 
 /** A chapter with a level-one heading and three levels below it. */
 const ALICE = [
@@ -48,6 +51,40 @@ const ALICE = [
 
 /** A chapter with no level-one heading, so its filename is its label. */
 const BOB = ["Just a paragraph, and no heading.", ""].join("\n");
+
+/**
+ * A chapter whose pipe table is ragged enough that alignment is a real change.
+ *
+ * `alignTables()` is the one extension on the surface that writes a document
+ * change the author did not type, and the canary below is about what happens to
+ * that change when two windows show this chapter.
+ */
+const TABLE = [
+  "# The lantern counts",
+  "",
+  "| Winter | Count |",
+  "|---|---|",
+  "| 1996 | 3 |",
+  "| 1997 | 11 |",
+  "",
+].join("\n");
+
+/**
+ * A chapter tall enough to divide above and below under the test harness.
+ *
+ * `src/test-setup.ts` fakes a monospace grid rather than measuring nothing, so
+ * a window measures 800 by sixteen pixels a line — which means `mayDivide` is
+ * genuinely consulted here, and a chapter shorter than
+ * `2 × MIN_WINDOW_HEIGHT + DIVIDER_PX` refuses `C-x 2` exactly as a short frame
+ * would. Thirty lines is 480, which clears it; `ALICE` is eighteen lines and
+ * does not, which is what the refusal test below reads.
+ */
+const TALL = [
+  "# A long chapter",
+  "",
+  ...Array.from({ length: 27 }, (_, line) => `Line ${String(line + 1)}.`),
+  "",
+].join("\n");
 
 function chapter(name: string, path: string, title: string): Chapter {
   const order = /^(\d+)/.exec(name);
@@ -161,11 +198,31 @@ beforeEach(() => {
     ["book", twoParts()],
     ["solo", oneChapter()],
     ["empty", { root: part("empty", "empty", "empty", []), failures: [] }],
+    [
+      "table",
+      {
+        root: part("table", "table", "table", [
+          chapter("01-counts.md", "table/01-counts.md", "counts"),
+        ]),
+        failures: [],
+      },
+    ],
+    [
+      "tall",
+      {
+        root: part("tall", "tall", "tall", [
+          chapter("01-long.md", "tall/01-long.md", "long"),
+        ]),
+        failures: [],
+      },
+    ],
   ]);
   texts = new Map([
     ["book/01-first/01-alice.md", ALICE],
     ["book/02-second/01-bob.md", BOB],
     ["solo/01-alice.md", ALICE],
+    ["table/01-counts.md", TABLE],
+    ["tall/01-long.md", TALL],
   ]);
   written = [];
   discardAnswer = true;
@@ -792,5 +849,711 @@ describe("the sidebar's hidden-construct facts (itd-2609051335518134, map #12)",
       .find((button) => button.dataset["path"] === "book/02-second/01-bob.md")
       ?.closest(".tree-row");
     expect(bobRow?.querySelector(".tree-badge-egg")?.textContent).toBe("1 hidden mark");
+  });
+});
+
+// ------------------------------------------------- the divided editing area
+
+/** The pieces of a keydown event one chord step arrives as. */
+function eventFor(step: string): KeyboardEventInit {
+  const modifiers = new Set<string>();
+  let name = step;
+  for (;;) {
+    const prefix = ["C-", "M-", "s-", "S-"].find(
+      (candidate) => name.startsWith(candidate) && name.length > candidate.length,
+    );
+    if (!prefix) break;
+    modifiers.add(prefix);
+    name = name.slice(2);
+  }
+  const key = name;
+  let code = name;
+  if (/^[a-z]$/.test(name)) code = `Key${name.toUpperCase()}`;
+  else if (/^[0-9]$/.test(name)) code = `Digit${name}`;
+  else if (name === "[") code = "BracketLeft";
+  else if (name === "]") code = "BracketRight";
+  else if (name === "/") code = "Slash";
+  return {
+    key,
+    code,
+    ctrlKey: modifiers.has("C-"),
+    altKey: modifiers.has("M-"),
+    metaKey: modifiers.has("s-"),
+    shiftKey: modifiers.has("S-"),
+    bubbles: true,
+    cancelable: true,
+  };
+}
+
+/** Press every step of a chord at the window holding the keyboard. */
+function press(chord: string): boolean {
+  let claimed = false;
+  for (const step of chord.split(" ")) {
+    const event = new KeyboardEvent("keydown", eventFor(step));
+    app.view.contentDOM.dispatchEvent(event);
+    claimed = event.defaultPrevented;
+  }
+  return claimed;
+}
+
+/**
+ * Every editing window's view, in the order the grid draws them.
+ *
+ * Through `EditorView.findFromDOM`, which is the library's own way of asking
+ * an element which view it belongs to, so the test reaches each window without
+ * the application growing a surface for it.
+ */
+function windowViews(): EditorView[] {
+  return Array.from(
+    host.querySelectorAll<HTMLElement>(".editor-window"),
+    (element) => {
+      const editor = element.querySelector<HTMLElement>(".cm-editor");
+      const found = editor === null ? null : EditorView.findFromDOM(editor);
+      if (found === null) throw new Error("an editing window with no view");
+      return found;
+    },
+  );
+}
+
+const ALICE_PATH = "book/01-first/01-alice.md";
+const BOB_PATH = "book/02-second/01-bob.md";
+const TABLE_PATH = "table/01-counts.md";
+const TALL_PATH = "tall/01-long.md";
+
+/** Let the promises a chord started settle. */
+async function settle(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+/** The chapter of the open document with one path. */
+function chapterOf(path: string): Chapter {
+  const found = app.chapters.find((chapter) => chapter.path === path);
+  if (!found) throw new Error(`no chapter at ${path}`);
+  return found;
+}
+
+/** Alice open in two windows side by side, the keyboard in the first. */
+async function twoOnAlice(): Promise<{ a: EditorView; b: EditorView }> {
+  await app.openFolder("book");
+  await app.openChapter(chapterOf(ALICE_PATH));
+  expect(press("C-x 3")).toBe(true);
+  const views = windowViews();
+  expect(views).toHaveLength(2);
+  const [a, b] = views;
+  if (!a || !b) throw new Error("the area did not divide");
+  expect(app.view).toBe(a);
+  return { a, b };
+}
+
+/**
+ * `C-x o` until the keyboard is in a different editing window.
+ *
+ * The sidebar and any open panel are stops on the same cycle, so reaching the
+ * next *window* can take more than one press. The order itself is the subject
+ * of `src/focus.test.ts`, where it is asserted step by step; here it is
+ * transport.
+ */
+function toOtherWindow(): void {
+  const from = app.focus.window;
+  for (let step = 0; step < 6; step += 1) {
+    press("C-x o");
+    if (app.focus.pane === "editor" && app.focus.window !== from) return;
+  }
+  throw new Error("the keyboard reached no other editing window");
+}
+
+describe("two windows on one chapter", () => {
+  // The two canaries `spc-2609111105376860` § Risks names, written before the
+  // echo was relied on for anything else. The failure mode they guard is the
+  // only one in this design whose consequence is a corrupt file: two windows'
+  // texts drifting apart, and whichever window `C-x C-s` reads becoming the
+  // file. `ChangeSet.of` throws `RangeError("Mismatched change set length")` on
+  // the *next* echo once the lengths disagree, so a divergence fails here on
+  // the second keystroke rather than shipping.
+
+  it("keeps the two windows' text equal through a run of edits", async () => {
+    const { a, b } = await twoOnAlice();
+    // Carets well apart, so every echo maps a real distance and an off-by-one
+    // in either direction shows.
+    a.dispatch({ selection: { anchor: 5 } });
+    b.dispatch({ selection: { anchor: 40 } });
+    for (let edit = 0; edit < 50; edit += 1) {
+      const into = edit % 2 === 0 ? a : b;
+      const at = into.state.selection.main.head;
+      into.dispatch({
+        changes: { from: at, insert: "x" },
+        selection: { anchor: at + 1 },
+      });
+      expect(b.state.doc.toString(), `after edit ${String(edit + 1)}`).toBe(
+        a.state.doc.toString(),
+      );
+      expect(b.state.doc.length).toBe(a.state.doc.length);
+    }
+    // Fifty characters went in, and one text came out of it.
+    expect(a.state.doc.length).toBe(ALICE.length + 50);
+    expect(a.state.doc.toString()).toBe(b.state.doc.toString());
+  });
+
+  it("realigns a table once, not twice, when two windows show one chapter", async () => {
+    // `src/tables.ts` is the only extension on the surface that writes a
+    // document change the author did not type (`adr-2609092000099546`), and it
+    // does it through an `EditorState.transactionFilter`. Without `filter:
+    // false` on the echo it fires a second time in the receiving window, and
+    // the two texts differ by one realignment from that keystroke onward.
+    await app.openFolder("table");
+    await app.openChapter(chapterOf(TABLE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    const [a, b] = windowViews();
+    if (!a || !b) throw new Error("the area did not divide");
+
+    // Both carets inside a body row of the table, which is where a
+    // realignment is due — and it has to be both, because `alignTables`'s own
+    // cost gate is the caret's line holding a pipe, so a receiving window whose
+    // caret is elsewhere would decline the second realignment for a reason that
+    // has nothing to do with the echo.
+    const row = a.state.doc.line(5);
+    expect(row.text).toContain("1996");
+    a.dispatch({ selection: { anchor: row.from + 7 } });
+    const other = b.state.doc.line(6);
+    expect(other.text).toContain("1997");
+    b.dispatch({ selection: { anchor: other.from + 7 } });
+    for (let key = 0; key < 3; key += 1) {
+      const at = a.state.selection.main.head;
+      a.dispatch({
+        changes: { from: at, insert: "9" },
+        selection: { anchor: at + 1 },
+      });
+      expect(b.state.doc.toString(), `after key ${String(key + 1)}`).toBe(
+        a.state.doc.toString(),
+      );
+    }
+    // Non-vacuous: the realignment really did run, so more than the three
+    // typed characters arrived, and the rows came out the same width.
+    expect(a.state.doc.length).toBeGreaterThan(TABLE.length + 3);
+    const widths = new Set(
+      [3, 4, 5, 6].map((line) => a.state.doc.line(line).text.length),
+    );
+    expect(widths.size).toBe(1);
+  });
+
+  it("keeps the two windows' text equal when a realignment is undone", async () => {
+    // The counter-example `iss-2609120518323764`'s correction names, and the
+    // plainest reachable one: an undo carries `userEvent: undo`, so
+    // `alignTables` declines to realign in the window that undid — while the
+    // echo of that undo carries no user event at all, so without `filter: false`
+    // the receiving window realigns the ragged table the undo has just restored.
+    // The two texts then differ, and the next keystroke throws at
+    // `ChangeSet.of`. Removing the option has to fail here rather than be
+    // argued about.
+    await app.openFolder("table");
+    await app.openChapter(chapterOf(TABLE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    const [a, b] = windowViews();
+    if (!a || !b) throw new Error("the area did not divide");
+    expect(app.view).toBe(a);
+
+    // Both carets in a body row of the table, which is the case the corrected
+    // record calls the one where a realignment on the echo *is* a no-op: the
+    // origin's own transaction already carries it. Nothing here diverges until
+    // the undo.
+    const row = a.state.doc.line(5);
+    expect(row.text).toContain("1996");
+    const other = b.state.doc.line(6);
+    expect(other.text).toContain("1997");
+    b.dispatch({ selection: { anchor: other.from + 7 } });
+
+    // One character typed in a body row: both windows realign, and the table is
+    // no longer the ragged one the chapter was read as.
+    a.dispatch({
+      changes: { from: row.from + 7, insert: "9" },
+      selection: { anchor: row.from + 8 },
+    });
+    const aligned = a.state.doc.toString();
+    expect(b.state.doc.toString()).toBe(aligned);
+    expect(aligned).not.toBe(TABLE);
+
+    // `C-/` takes the keystroke and its realignment back together, in both
+    // windows, and the restored text is the ragged one.
+    expect(press("C-/")).toBe(true);
+    expect(a.state.doc.toString()).toBe(TABLE);
+    expect(b.state.doc.toString(), "the peer realigned the restored table").toBe(
+      TABLE,
+    );
+
+    // And the next keystroke goes through, which is what a divergence takes
+    // away: `ChangeSet.of` refuses a change set whose length does not match the
+    // document it lands in.
+    const again = a.state.doc.line(5);
+    a.dispatch({
+      changes: { from: again.from + 7, insert: "9" },
+      selection: { anchor: again.from + 8 },
+    });
+    expect(b.state.doc.toString()).toBe(a.state.doc.toString());
+  });
+
+  it("answers about unsaved work from the window that changed, not from a peer", async () => {
+    // `refresh` runs in the originating view's update listener, and the echo
+    // reaches the peers only after that listener returns. A dirty flag read from
+    // the first window on the buffer is therefore a peer's stale answer for the
+    // length of that listener whenever the window being typed in is not the
+    // first (`iss-2609120527453087`).
+    const { a, b } = await twoOnAlice();
+    const asked: boolean[] = [];
+    // An observer appended to the second window's own configuration, so it runs
+    // inside the same update as the application's listener and after it. There
+    // is no other moment at which the stale answer exists to be seen.
+    b.dispatch({
+      effects: StateEffect.appendConfig.of(
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) asked.push(app.dirty);
+        }),
+      ),
+    });
+    expect(app.dirty).toBe(false);
+
+    b.dispatch({ changes: { from: 0, insert: "Typed here. " } });
+    // One update in the second window, and the application knew the chapter was
+    // dirty inside it rather than a listener later.
+    expect(asked).toEqual([true]);
+    expect(app.dirty).toBe(true);
+    expect(a.state.doc.toString()).toBe(b.state.doc.toString());
+  });
+
+  it("shows the same chapter in both windows when the area divides", async () => {
+    const { a, b } = await twoOnAlice();
+    expect(a.state.doc.toString()).toBe(ALICE);
+    expect(b.state.doc.toString()).toBe(ALICE);
+    expect(app.chapterPath).toBe(ALICE_PATH);
+    // "Divides left and right" is a `data-direction` and an element order
+    // here; that the two halves are actually side by side is M42-1, because
+    // jsdom has no layout engine at all.
+    const split = host.querySelector<HTMLElement>(".window-split");
+    expect(split?.dataset["direction"]).toBe("columns");
+    expect(split?.querySelectorAll(".window-divider").length).toBe(1);
+  });
+
+  it("divides above and below with the same guarantees", async () => {
+    // A chapter tall enough for two windows under the harness's fake grid:
+    // `mayDivide` is genuinely consulted here, and the refusal is its own test
+    // below.
+    await app.openFolder("tall");
+    await app.openChapter(chapterOf(TALL_PATH));
+    const before = app.view;
+    app.view.dispatch({ selection: { anchor: 11 } });
+
+    expect(press("C-x 2")).toBe(true);
+    expect(
+      host.querySelector<HTMLElement>(".window-split")?.dataset["direction"],
+    ).toBe("rows");
+    const stacked = windowViews();
+    expect(stacked).toHaveLength(2);
+    expect(app.view).toBe(before);
+    expect(app.view.state.selection.main.head).toBe(11);
+    expect(stacked[0]?.state.doc.toString()).toBe(TALL);
+    expect(stacked[1]?.state.doc.toString()).toBe(TALL);
+  });
+
+  it("refuses to divide a window too short to hold two", async () => {
+    // The arithmetic of `mayDivide`, reached through the chord. `ALICE` is
+    // eighteen lines, which the harness measures at 288 pixels, and two windows
+    // need 326. The widths themselves are M42-4.
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 2")).toBe(true);
+    expect(windowViews()).toHaveLength(1);
+    expect(app.modeline.element.textContent).toContain("Too short to divide");
+  });
+
+  it("keeps the caret and the keyboard in the window that divided", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    app.view.dispatch({ selection: { anchor: 12 } });
+    const before = app.view;
+    const wasAt = app.view.state.selection.main.head;
+    const wasWindow = app.focus.window;
+
+    expect(press("C-x 3")).toBe(true);
+    expect(app.focus.window).toBe(wasWindow);
+    expect(app.view).toBe(before);
+    expect(app.view.state.selection.main.head).toBe(wasAt);
+    // And a second division inside the half she is in leaves her there too.
+    expect(press("C-x 3")).toBe(true);
+    expect(app.focus.window).toBe(wasWindow);
+    expect(app.view).toBe(before);
+    expect(app.view.state.selection.main.head).toBe(wasAt);
+    expect(windowViews()).toHaveLength(3);
+  });
+
+  it("keeps the caret where it was a frame after the area divided", async () => {
+    // A reshape moves the window's element, which collapses the DOM selection
+    // while the state's is untouched — and CodeMirror trusts the DOM, so
+    // without the caret being written back the window Alice was typing in
+    // jumps to the top of the chapter on the next measure. This is the one
+    // hazard of moving elements rather than rebuilding them that jsdom does
+    // show, and it is why `refreshSelection` exists.
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    app.view.dispatch({ selection: { anchor: 12 } });
+    expect(press("C-x 3")).toBe(true);
+    await settle();
+    expect(app.view.state.selection.main.head).toBe(12);
+    // And on the next chord, which is the other moment CodeMirror reads the DOM.
+    expect(press("C-x 3")).toBe(true);
+    expect(app.view.state.selection.main.head).toBe(12);
+  });
+
+  it("shows an edit made in one window in the other in the same transaction", async () => {
+    const { a, b } = await twoOnAlice();
+    // Read with no timer advanced and no microtask flushed, which is stronger
+    // than "the same frame": the echo goes out inside the originating
+    // `dispatchTransactions`, before anything else can dispatch.
+    a.dispatch({ changes: { from: 0, insert: "Once. " } });
+    expect(b.state.doc.toString()).toBe(`Once. ${ALICE}`);
+    b.dispatch({ changes: { from: 0, insert: "Twice. " } });
+    expect(a.state.doc.toString()).toBe(`Twice. Once. ${ALICE}`);
+  });
+
+  it("keeps the other window's caret where it was when Alice types", async () => {
+    const { a, b } = await twoOnAlice();
+    a.dispatch({ selection: { anchor: 10 } });
+    b.dispatch({ selection: { anchor: 30 } });
+    // An insertion *after* the other caret leaves it exactly where it was.
+    a.dispatch({ changes: { from: 40, insert: "later" } });
+    expect(b.state.selection.main.head).toBe(30);
+    expect(a.state.selection.main.head).toBe(10);
+
+    // And one *before* it moves it along by the length inserted, which is
+    // `Transaction.newSelection`'s own mapping and what an author expects.
+    a.dispatch({ changes: { from: 0, insert: "12345" } });
+    expect(b.state.selection.main.head).toBe(35);
+    // Her own caret is hers, and it moved by the same mapping.
+    expect(a.state.selection.main.head).toBe(15);
+  });
+
+  it("restores each window's own position when the keyboard moves between them", async () => {
+    const { a, b } = await twoOnAlice();
+    a.dispatch({ selection: { anchor: 3 } });
+    b.dispatch({ selection: { anchor: 33 } });
+
+    toOtherWindow();
+    expect(app.view).toBe(b);
+    expect(app.view.state.selection.main.head).toBe(33);
+
+    toOtherWindow();
+    expect(app.view).toBe(a);
+    expect(app.view.state.selection.main.head).toBe(3);
+    // Each window's caret simply *is* where it was: each has its own state and
+    // nothing moved it, which is why this needs no restore call at all.
+    expect(b.state.selection.main.head).toBe(33);
+  });
+
+  it("opens a chapter at this window's own remembered position, not another window's", async () => {
+    const { a, b } = await twoOnAlice();
+    // The second window leaves Alice at 33 for Bob, and comes back to her.
+    toOtherWindow();
+    expect(app.view).toBe(b);
+    b.dispatch({ selection: { anchor: 33 } });
+    await app.openChapter(chapterOf(BOB_PATH));
+    expect(b.state.doc.toString()).toBe(BOB);
+    // The first window has not moved, and keeps its own place in Alice.
+    expect(a.state.doc.toString()).toBe(ALICE);
+    a.dispatch({ selection: { anchor: 7 } });
+
+    await app.openChapter(chapterOf(ALICE_PATH));
+    // This window's own remembered position, and not the other window's.
+    expect(b.state.selection.main.head).toBe(33);
+    expect(a.state.selection.main.head).toBe(7);
+  });
+
+  it("leaves the other window untouched when a chapter is opened in one", async () => {
+    const { a, b } = await twoOnAlice();
+    a.dispatch({ selection: { anchor: 9 } });
+    toOtherWindow();
+    await app.openChapter(chapterOf(BOB_PATH));
+
+    expect(b.state.doc.toString()).toBe(BOB);
+    expect(a.state.doc.toString()).toBe(ALICE);
+    expect(a.state.selection.main.head).toBe(9);
+    // And nothing was written anywhere on the way.
+    expect(written).toEqual([]);
+  });
+});
+
+describe("saving with the area divided", () => {
+  it("saves the chapter in the window holding the keyboard and writes no other file", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    toOtherWindow();
+    await app.openChapter(chapterOf(BOB_PATH));
+    // Two windows, two chapters, the keyboard in the second.
+    expect(app.chapterPath).toBe(BOB_PATH);
+
+    await app.save();
+    expect(written).toHaveLength(1);
+    expect(written[0]?.path).toBe(BOB_PATH);
+
+    // Move the keyboard and save again: the second write is the other path.
+    written = [];
+    toOtherWindow();
+    expect(app.chapterPath).toBe(ALICE_PATH);
+    await app.save();
+    expect(written).toHaveLength(1);
+    expect(written[0]?.path).toBe(ALICE_PATH);
+  });
+
+  it("saves the focused window's chapter however the row was reached", async () => {
+    // The three routes with no originating view at all — the palette, the
+    // prefix overlay, `C-h k`'s prompt — are where a half-done scoping would
+    // show, because in each of them the keyboard is in an overlay.
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    toOtherWindow();
+    await app.openChapter(chapterOf(BOB_PATH));
+
+    written = [];
+    runBinding(app.view, "save-chapter");
+    await settle();
+    expect(written.map((write) => write.path)).toEqual([BOB_PATH]);
+
+    written = [];
+    toOtherWindow();
+    runBinding(app.view, "save-chapter");
+    await settle();
+    expect(written.map((write) => write.path)).toEqual([ALICE_PATH]);
+  });
+});
+
+describe("closing a window", () => {
+  it("changes and saves nothing when the other windows close", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    expect(press("C-x 3")).toBe(true);
+    expect(windowViews()).toHaveLength(3);
+    toOtherWindow();
+    const kept = app.view;
+    kept.dispatch({ selection: { anchor: 15 } });
+    const text = kept.state.doc.toString();
+
+    expect(press("C-x 1")).toBe(true);
+    expect(windowViews()).toHaveLength(1);
+    expect(app.view).toBe(kept);
+    expect(kept.state.doc.toString()).toBe(text);
+    expect(kept.state.selection.main.head).toBe(15);
+    expect(written).toEqual([]);
+    expect(app.dirty).toBe(false);
+  });
+
+  it("keeps a chapter's unsaved edits when the window showing it closes", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    // The second window takes Bob, and is edited and left unsaved.
+    toOtherWindow();
+    await app.openChapter(chapterOf(BOB_PATH));
+    app.view.dispatch({
+      changes: { from: 0, insert: "Kept. " },
+      selection: { anchor: 6 },
+    });
+    expect(app.dirty).toBe(true);
+
+    // `C-x 0` closes it. Nothing is asked and nothing is written.
+    expect(press("C-x 0")).toBe(true);
+    expect(windowViews()).toHaveLength(1);
+    expect(discardQuestions).toEqual([]);
+    expect(written).toEqual([]);
+    // The buffer outlived the window: the edit is still unsaved work.
+    expect(app.dirty).toBe(true);
+
+    // And opening the chapter again brings the text and the caret back.
+    await app.openChapter(chapterOf(BOB_PATH));
+    expect(app.view.state.doc.toString()).toBe(`Kept. ${BOB}`);
+    expect(app.view.state.selection.main.head).toBe(6);
+  });
+
+  it("keeps the buffer's accounting honest when a window closes mid-load", async () => {
+    // A chapter is opened into the window that asked for it, and that window can
+    // be closed while the read is in flight. A window whose record has gone must
+    // not be given a buffer: adding its id would leave a phantom in
+    // `buffer.windows` that `leaveBuffer` never takes out, so the buffer would
+    // believe a window still held its text and would never rest it — and the
+    // edits in it would stop counting as unsaved.
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    toOtherWindow();
+    const doomed = app.view;
+
+    // Start the load and close the window before it lands.
+    const loading = app.openChapter(chapterOf(BOB_PATH));
+    expect(press("C-x 0")).toBe(true);
+    await loading;
+    await settle();
+    expect(windowViews()).toHaveLength(1);
+    expect(app.view).not.toBe(doomed);
+
+    // Bob's buffer believes no window holds it, so a window that takes it and
+    // edits it reports unsaved work — which is the accounting a phantom broke.
+    await app.openChapter(chapterOf(BOB_PATH));
+    expect(app.view.state.doc.toString()).toBe(BOB);
+    app.view.dispatch({ changes: { from: 0, insert: "Edited. " } });
+    expect(app.dirty).toBe(true);
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(app.dirty).toBe(true);
+    expect(await app.confirmClose()).toBe(true);
+    expect(discardQuestions.at(-1)).toContain("has unsaved edits");
+  });
+
+  it("asks nothing before closing a window", async () => {
+    // The property stated as a negative: a close that asked whether edits may
+    // be discarded would be admitting that it loses them.
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    app.view.dispatch({ changes: { from: 0, insert: "x" } });
+    expect(press("C-x 0")).toBe(true);
+    expect(discardQuestions).toEqual([]);
+    expect(press("C-x 1")).toBe(true);
+    expect(discardQuestions).toEqual([]);
+  });
+});
+
+describe("opening another document with the area divided", () => {
+  // `forgetDocument` clears every buffer, so the question asked before it runs
+  // is about every dirty buffer and not only the focused window's
+  // (`iss-2609120527458643`). Before the area could divide, one buffer was all
+  // buffers and the focused window's question was total; it is not any more.
+
+  it("asks about a dirty buffer outside the focused window before another folder opens", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    // The second window takes Bob and is edited; the keyboard goes back to the
+    // first, which is clean and is not the window with the work in it.
+    toOtherWindow();
+    await app.openChapter(chapterOf(BOB_PATH));
+    app.view.dispatch({
+      changes: { from: 0, insert: "Kept. " },
+      selection: { anchor: 6 },
+    });
+    toOtherWindow();
+    expect(app.view.state.doc.toString()).toBe(ALICE);
+    expect(app.dirty).toBe(true);
+
+    // Alice answers "keep": the question named Bob, and nothing was replaced.
+    discardAnswer = false;
+    await app.openFolder("solo");
+    expect(discardQuestions).toEqual(["bob has unsaved edits. Discard them?"]);
+    expect(app.documentRoot).toBe("book");
+    expect(app.dirty).toBe(true);
+    expect(written).toEqual([]);
+    // And the edits are where she left them, in the buffer behind the window.
+    await app.openChapter(chapterOf(BOB_PATH));
+    expect(app.view.state.doc.toString()).toBe(`Kept. ${BOB}`);
+  });
+
+  it("counts the chapters rather than naming one when several are unsaved", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    toOtherWindow();
+    await app.openChapter(chapterOf(BOB_PATH));
+    app.view.dispatch({ changes: { from: 0, insert: "Bob's. " } });
+    toOtherWindow();
+    app.view.dispatch({ changes: { from: 0, insert: "Alice's. " } });
+
+    // Two buffers are about to go, so the question says two. A question that
+    // named one chapter here would be telling the author an untruth about the
+    // other.
+    discardAnswer = false;
+    await app.openFolder("solo");
+    expect(discardQuestions).toEqual([
+      "2 chapters have unsaved edits. Discard them?",
+    ]);
+    expect(app.documentRoot).toBe("book");
+  });
+
+  it("replaces the document when the author says to discard", async () => {
+    await app.openFolder("book");
+    await app.openChapter(chapterOf(ALICE_PATH));
+    expect(press("C-x 3")).toBe(true);
+    toOtherWindow();
+    await app.openChapter(chapterOf(BOB_PATH));
+    app.view.dispatch({ changes: { from: 0, insert: "Gone. " } });
+    toOtherWindow();
+
+    discardAnswer = true;
+    await app.openFolder("solo");
+    expect(discardQuestions).toHaveLength(1);
+    expect(app.documentRoot).toBe("solo");
+    expect(app.dirty).toBe(false);
+    // The layout is the author's: a different document is not a reason to
+    // rearrange her screen.
+    expect(windowViews()).toHaveLength(2);
+  });
+});
+
+describe("undo with two windows on one chapter", () => {
+  // Settled behaviour, not a defect: undo is per window
+  // (`cond-2609120405528253`), because `history()` is a `StateField` and a
+  // `StateField` lives in exactly one `EditorState`, which the amended
+  // mechanism gives each window its own of. These three tests pin what the
+  // maintainer chose; a passing assertion here is not a bug going unnoticed.
+
+  it("undoes nothing in the window that did not make the edit", async () => {
+    const { a, b } = await twoOnAlice();
+    a.dispatch({
+      changes: { from: 0, insert: "First. " },
+      selection: { anchor: 7 },
+    });
+    const after = a.state.doc.toString();
+
+    toOtherWindow();
+    expect(app.view).toBe(b);
+    expect(press("C-/")).toBe(true);
+    // Byte-identical in both: the echo carried
+    // `Transaction.addToHistory.of(false)`, so B's history is empty.
+    expect(b.state.doc.toString()).toBe(after);
+    expect(a.state.doc.toString()).toBe(after);
+  });
+
+  it("undoes in both windows when the window that made the edit undoes", async () => {
+    const { a, b } = await twoOnAlice();
+    a.dispatch({
+      changes: { from: 0, insert: "First. " },
+      selection: { anchor: 7 },
+    });
+    expect(b.state.doc.toString()).toBe(`First. ${ALICE}`);
+
+    expect(app.view).toBe(a);
+    expect(press("C-/")).toBe(true);
+    // The undo is a change like any other, so it is echoed like any other.
+    expect(a.state.doc.toString()).toBe(ALICE);
+    expect(b.state.doc.toString()).toBe(ALICE);
+  });
+
+  it("undoes the second window's own older edit at the right place after the first window has typed", async () => {
+    const { a, b } = await twoOnAlice();
+    // B edits late in the chapter, then A types before it.
+    b.dispatch({ selection: { anchor: 40 } });
+    b.dispatch({
+      changes: { from: 40, insert: "BBB" },
+      selection: { anchor: 43 },
+    });
+    a.dispatch({ changes: { from: 0, insert: "AAAAA" } });
+    expect(b.state.doc.toString()).toBe(a.state.doc.toString());
+
+    toOtherWindow();
+    expect(app.view).toBe(b);
+    expect(press("C-/")).toBe(true);
+    // B's own edit is gone and A's is untouched, which is `addMapping`
+    // working: B's history entry was mapped through A's change.
+    const expected = `AAAAA${ALICE}`;
+    expect(b.state.doc.toString()).toBe(expected);
+    expect(a.state.doc.toString()).toBe(expected);
   });
 });

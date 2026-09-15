@@ -25,16 +25,43 @@ import { outlineOf, type Outline, type OutlineNode } from "./core/outline";
 import { parseChapter } from "./core/parse";
 import { setBibliography } from "./citations";
 import { createDropRouter, type DropRouter, type DropTargets } from "./drop";
-import { createEditor, documentText, placeCursor, revealLine, setDocument } from "./editor";
+import {
+  createEditor,
+  documentText,
+  placeCursor,
+  refreshSelection,
+  revealLine,
+  setDocument,
+} from "./editor";
 import { createFocusModel, type FocusModel, type PanelFocus } from "./focus";
 import {
   changeCaseRegion,
+  clearPending,
   queryReplaceRegex,
   releaseEditorCommands,
   runBinding,
   setEditorCommands,
   type EditorCommands,
 } from "./emacs";
+import {
+  RESIZE_STEP,
+  closeOtherWindows,
+  closeWindow,
+  floorShare,
+  hasLeaf,
+  heirOf,
+  leafIds,
+  mayDivide,
+  resize,
+  resizeTarget,
+  splitAt,
+  splitWindow,
+  stepShares,
+  type ResizeTarget,
+  type WindowId,
+  type WindowTree,
+} from "./windows";
+import { drawWindowGrid, measureSplit } from "./window-grid";
 import { BINDINGS, scopeOf } from "./keys";
 import { openPrefixHelp, prefixHelpNeedsAPrefix } from "./prefix-help";
 import type {
@@ -187,6 +214,25 @@ export interface App {
   readonly detached: boolean;
   /** The open chapter's path, or null when none is open. */
   readonly chapterPath: string | null;
+  /**
+   * The editing area: the host the tree of windows is drawn into.
+   *
+   * One element for the whole area, whatever it is divided into, so a gesture
+   * over the text is caught in one place and the window it belongs to is
+   * resolved from the event rather than by registering a listener per window.
+   */
+  readonly editorHost: HTMLElement;
+  /**
+   * The editing window under a point in CSS pixels, and the chapter it shows.
+   *
+   * The pair, not the view alone: a gesture aimed at a window is about that
+   * window's chapter, and asking the focused window's instead is what would
+   * write one chapter's reference into another.
+   */
+  windowAt(
+    x: number,
+    y: number,
+  ): { readonly view: EditorView; readonly chapter: string | null } | null;
   /** The open document's root folder, or null when none is open. */
   readonly documentRoot: string | null;
   /** Every chapter of the open document, in the order the sidebar draws them. */
@@ -276,16 +322,63 @@ function chaptersOf(part: Part): Chapter[] {
   return found;
 }
 
+/**
+ * One open chapter: its text's home, and every window looking at it.
+ *
+ * A chapter stops being "what the editing surface shows" and becomes a buffer
+ * the application holds, with zero or more windows looking at it
+ * (`adr-2609091832455881`). That is what makes a window closeable without
+ * losing the edits in it, and it is the property most easily lost in a later
+ * refactor: `C-x 0` removes a leaf, destroys a view and drops that window's
+ * remembered positions, and touches no buffer's text or `savedText` at all.
+ */
+interface ChapterBuffer {
+  /** The chapter's path, or null for the welcome text. */
+  readonly path: string | null;
+  title: string | null;
+  /** The text as last read from, or written to, disk. */
+  savedText: string;
+  detached: boolean;
+  /** Which windows show it. */
+  readonly windows: Set<WindowId>;
+  /** The buffer-point: where the last window to leave it left the caret. */
+  lastPoint: number;
+  /** The text, held here only while no window shows it. */
+  restingText: string | null;
+  /**
+   * Which window last carried a change into it, while that window still shows
+   * it.
+   *
+   * The echo in `src/editor.ts` is synchronous but not instantaneous: the
+   * originating view is updated, and only then are its peers. So for the length
+   * of the originating window's own update listener every other window on the
+   * buffer still holds the text as it was, and "any window's text" stops being
+   * well defined for exactly that long. This names the window whose text is the
+   * buffer's (`iss-2609120527453087`).
+   */
+  lastChanged: WindowId | null;
+}
+
+/** One editing window: what it is drawn in, what it shows, where it has been. */
+interface EditorWindow {
+  readonly id: WindowId;
+  /** The region the view is mounted in; the element `windowOf` matches. */
+  readonly element: HTMLElement;
+  readonly view: EditorView;
+  /** The buffer it shows: a chapter path, or null for the welcome text. */
+  buffer: string | null;
+  /** The window-point: where the caret sat in each chapter it has shown. */
+  readonly points: Map<string | null, number>;
+}
+
 /** Mount the application into `root`. */
 export function createApp(root: HTMLElement, services: AppServices): App {
   // ---------------------------------------------------------- session state
   let tree: DocumentTree | null = null;
   let outlines = new Map<string, Outline>();
-  let openChapterPath: string | null = null;
-  let openChapterTitle: string | null = null;
   let openNodeId: string | null = null;
-  let savedText = WELCOME;
-  let detached = false;
+  /** Which buffer the heading `openNodeId` names belongs to. */
+  let openNodeBuffer: string | null = null;
   let message = "";
   /**
    * How many times the application has said something.
@@ -328,16 +421,23 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    */
   let loadToken = 0;
   /**
-   * Where the cursor sat in each chapter last left, by path.
+   * Every open chapter, by path, with the welcome text under the null key.
    *
-   * `C-x b` and the sidebar promise a chapter opens "with the cursor where
-   * she last left it" (`docs/how-to-move-through-the-outline.md`, intent
-   * `itd-2609061318091323` AC8); `openChapter` records the offset here on
-   * the way out and restores it on the way back in, clamped to the text
-   * that is there now, since a chapter can have been edited elsewhere
-   * since her last visit.
+   * The null key is not a special case anywhere: every window is always on
+   * exactly one buffer, and a window with no chapter open is on the welcome
+   * one. That also keeps today's behaviour to the letter for a single window,
+   * including the small existing oddity that editing the welcome text makes
+   * `reportDirty` true while the modeline still says `-- no chapter`.
    */
-  const chapterCursors = new Map<string, number>();
+  const buffers = new Map<string | null, ChapterBuffer>();
+  /** Every editing window, by id. The tree below holds only the ids. */
+  const windows = new Map<WindowId, EditorWindow>();
+  /** The editing area's shape. Always at least one leaf. */
+  let windowTree: WindowTree;
+  /** How many windows have ever been made, so each id is its own. */
+  let minted = 0;
+  /** Whether the application has been torn down, so late work can stop. */
+  let destroyed = false;
   /** The last dirty state handed to the shell, so it hears only changes. */
   let reportedDirty: boolean | null = null;
   /** The timer clearing a message that says itself once, if one is running. */
@@ -364,14 +464,117 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   const modeline = createModeline();
   const keyLog = installKeyLog();
 
+  /** The grid's host: the editing area, whatever it is divided into. */
   const editorPane = document.createElement("main");
   editorPane.className = "editor-pane";
 
-  const view = createEditor(editorPane, WELCOME, {
-    onChange: () => {
-      refresh();
-    },
-  });
+  /** One buffer, making it where the application has not met it before. */
+  function bufferFor(path: string | null): ChapterBuffer {
+    const known = buffers.get(path);
+    if (known) return known;
+    const made: ChapterBuffer = {
+      path,
+      title: null,
+      savedText: path === null ? WELCOME : "",
+      detached: false,
+      windows: new Set<WindowId>(),
+      lastPoint: 0,
+      restingText: null,
+      lastChanged: null,
+    };
+    buffers.set(path, made);
+    return made;
+  }
+
+  /**
+   * Every other window showing one window's buffer.
+   *
+   * A getter, handed to each view at construction, because the set changes
+   * every time a chapter is opened in a window and a view's dispatch hook can
+   * only be given once.
+   */
+  function peersOf(id: WindowId): readonly EditorView[] {
+    const held = windows.get(id);
+    if (!held) return [];
+    const found: EditorView[] = [];
+    for (const other of windows.values()) {
+      if (other.id !== id && other.buffer === held.buffer) found.push(other.view);
+    }
+    return found;
+  }
+
+  /** A fresh window id. */
+  function mintWindow(): WindowId {
+    minted += 1;
+    return `w${String(minted)}` as WindowId;
+  }
+
+  /**
+   * Build one editing window on a buffer, showing `doc`.
+   *
+   * The element is a labelled region, because moving the keyboard into a window
+   * has to announce the window and the chapter it shows. `aria-current` was
+   * declined: focus is the semantics, exactly one window has it, and
+   * `document.activeElement` already says which.
+   */
+  function makeWindow(
+    id: WindowId,
+    buffer: string | null,
+    doc: string,
+  ): EditorWindow {
+    const element = document.createElement("section");
+    element.className = "editor-window";
+    element.dataset["windowId"] = id;
+    element.setAttribute("role", "region");
+    const made: EditorWindow = {
+      id,
+      element,
+      buffer,
+      points: new Map<string | null, number>(),
+      view: createEditor(
+        element,
+        doc,
+        {
+          onChange: () => {
+            // Before the refresh, because the refresh asks what the buffer's
+            // text is and this is the answer to "whose text"
+            // (`iss-2609120527453087`).
+            noteChange(id);
+            refresh();
+          },
+        },
+        () => peersOf(id),
+      ),
+    };
+    windows.set(id, made);
+    bufferFor(buffer).windows.add(id);
+    return made;
+  }
+
+  const firstWindow = makeWindow(mintWindow(), null, WELCOME);
+  windowTree = { kind: "leaf", id: firstWindow.id };
+
+  /** The window holding the keyboard. Never null: a tree always has a leaf. */
+  function here(): EditorWindow {
+    const held = windows.get(focus.window);
+    if (held) return held;
+    // Unreachable: the focus model resolves to a leaf and every leaf has a
+    // record. Falling back keeps the one question every command asks total.
+    const first = leafIds(windowTree)[0];
+    const fallback = first === undefined ? undefined : windows.get(first);
+    if (fallback) return fallback;
+    throw new Error("the editing area has no window");
+  }
+
+  /** The view the keyboard is in. The one question every command asks. */
+  function view(): EditorView {
+    return here().view;
+  }
+
+  /** The buffer the keyboard is in. */
+  function bufferHere(): ChapterBuffer {
+    return bufferFor(here().buffer);
+  }
 
   /** Where overlays are mounted, so they sit over the surface and not the page. */
   const overlayHost = document.createElement("div");
@@ -386,14 +589,32 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    */
   const focus: FocusModel = createFocusModel({
     sidebar,
-    // The content, because it is the element the keyboard actually lands in
-    // when Alice clicks in a paragraph.
-    editorContent: view.contentDOM,
-    // And the whole surface beside it, because CodeMirror's own panels — the
-    // search field `C-s` opens — are in here and not in the content.
-    editorSurface: view.dom,
-    focusEditor: () => {
-      view.focus();
+    // Each window's element holds that window's whole surface: the content the
+    // keyboard lands in when Alice clicks a paragraph, and CodeMirror's own
+    // panels — the search field `C-s` opens — around it. One question, asked of
+    // the windows in turn, answers for both.
+    editorWindowOf: (node) => {
+      for (const held of windows.values()) {
+        if (held.element.contains(node)) return held.id;
+      }
+      return null;
+    },
+    editorWindows: () => leafIds(windowTree),
+    hasWindow: (id) => windows.has(id) && hasLeaf(windowTree, id),
+    focusWindow: (id) => {
+      const held = windows.get(id);
+      if (!held) return;
+      held.view.focus();
+      // The tree highlights the chapter the keyboard is in, which is the only
+      // sensible answer once several windows show several chapters.
+      sidebar.select(
+        held.buffer,
+        held.buffer === openNodeBuffer ? openNodeId : null,
+      );
+    },
+    releaseWindow: (id) => {
+      const held = windows.get(id);
+      if (held) clearPending(held.view);
     },
     // The one toggle, reached from a pane the editing surface cannot hear.
     // The row's other route, from the text, runs the same call below.
@@ -433,24 +654,140 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   // --------------------------------------------------------- editing session
 
   /**
-   * Whether the buffer differs from the file.
+   * Note which window last carried a change into its buffer.
+   *
+   * Run from that window's own update listener, which is the one moment the
+   * question has a sharp answer: the peers are updated after the originating
+   * view, so until they are, the window whose listener is running is the only
+   * one holding the change (`iss-2609120527453087`).
+   */
+  function noteChange(id: WindowId): void {
+    const held = windows.get(id);
+    if (!held) return;
+    bufferFor(held.buffer).lastChanged = id;
+  }
+
+  /**
+   * One buffer's text.
+   *
+   * Every window on a buffer agrees by construction — the lockstep echo in
+   * `src/editor.ts` is what makes that true — except inside the update listener
+   * of the window that has just changed, where the echo has not reached the
+   * peers yet. So the window that carried the change is asked first and any
+   * window on the buffer after that: both are the same text at rest, and only
+   * the first is the text at that moment (`iss-2609120527453087`). With no
+   * window on it the text is resting in the buffer, which is how a chapter's
+   * unsaved edits outlive the window that showed them.
+   */
+  function bufferText(buffer: ChapterBuffer): string {
+    const last = buffer.lastChanged;
+    const changed = last === null || !buffer.windows.has(last)
+      ? undefined
+      : windows.get(last);
+    if (changed) return documentText(changed.view);
+    for (const id of buffer.windows) {
+      const held = windows.get(id);
+      if (held) return documentText(held.view);
+    }
+    return buffer.restingText ?? buffer.savedText;
+  }
+
+  /**
+   * Whether one buffer differs from its file.
    *
    * The comparison runs on the text as it would be written — the document's
    * own line separator included — so a chapter with CRLF endings is not dirty
    * the moment it is opened.
    */
-  function isDirty(): boolean {
-    return documentText(view) !== savedText;
+  function isDirty(buffer: ChapterBuffer): boolean {
+    return bufferText(buffer) !== buffer.savedText;
+  }
+
+  /**
+   * Whether there is unsaved work anywhere.
+   *
+   * A genuine widening, and one the governing record does not mention: with
+   * buffers outliving windows, "is there unsaved work" stops being a question
+   * about one chapter. This is what the shell is told, and what quitting and
+   * closing ask.
+   */
+  function anyDirty(): boolean {
+    for (const buffer of buffers.values()) {
+      if (isDirty(buffer)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Every dirty buffer's title, for a question that has to name them.
+   *
+   * A title of null is the welcome buffer, which has no name; what a question
+   * calls it is the question's own business, because the quit prompt and the
+   * close prompt have always called it different things.
+   */
+  function dirtyTitles(): (string | null)[] {
+    const found: (string | null)[] = [];
+    for (const buffer of buffers.values()) {
+      if (isDirty(buffer)) found.push(buffer.title);
+    }
+    return found;
+  }
+
+  /**
+   * The question a gesture that discards unsaved work asks.
+   *
+   * One dirty buffer is named and several are counted, so the question can
+   * never name one chapter while three are about to go. The tail is the
+   * gesture's own — closing asks whether to close anyway, opening another
+   * document whether to discard — and the count is not, which is why it is
+   * written here rather than at each gesture (`iss-2609120527458643`).
+   */
+  function discardQuestion(tail: string): string {
+    const titles = dirtyTitles();
+    return titles.length === 1
+      ? `${titles[0] ?? "The document"} has unsaved edits. ${tail}`
+      : `${String(titles.length)} chapters have unsaved edits. ${tail}`;
+  }
+
+  /**
+   * What the windows say about themselves, redrawn on every refresh.
+   *
+   * The focused window's border and each window's region label are both facts
+   * that change without the tree changing — `C-x o` moves the keyboard, opening
+   * a chapter renames a region — so they are written here rather than only in a
+   * reshape.
+   */
+  function dressWindows(): void {
+    const at = focus.window;
+    for (const held of windows.values()) {
+      // Written only when it changed. This runs on every transaction, and each
+      // window's element is the parent of a CodeMirror view that watches its
+      // own subtree for mutations; an attribute rewritten to the value it
+      // already holds is still a mutation.
+      const focused = held.id === at ? "yes" : "no";
+      if (held.element.dataset["focused"] !== focused) {
+        held.element.dataset["focused"] = focused;
+      }
+      const label = buffers.get(held.buffer)?.title ?? "Editor";
+      if (held.element.getAttribute("aria-label") !== label) {
+        held.element.setAttribute("aria-label", label);
+      }
+    }
   }
 
   function refresh(): void {
-    const dirty = isDirty();
-    modeline.update(view, {
+    const dirty = anyDirty();
+    const held = here();
+    const buffer = bufferFor(held.buffer);
+    const leaves = leafIds(windowTree);
+    dressWindows();
+    modeline.update(held.view, {
       pane: focus.label,
       prefix: focus.prefix,
-      chapter: openChapterTitle,
-      dirty,
-      detached,
+      window: { at: leaves.indexOf(held.id) + 1, of: leaves.length },
+      chapter: buffer.title,
+      dirty: isDirty(buffer),
+      detached: buffer.detached,
       message,
       announcement: announcements,
     });
@@ -482,6 +819,226 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     }, TRANSIENT_MESSAGE_MS);
   }
 
+  // -------------------------------------------------------- the window layout
+
+  /**
+   * Draw the tree, and put the keyboard back where the chord promised.
+   *
+   * Leaf elements are moved rather than rebuilt, so no reshape destroys a view.
+   * Two things follow from that and are done here rather than discovered: a
+   * re-parented CodeMirror view has to be told to measure again, and
+   * re-parenting the element that holds DOM focus blurs it in WebKit, so the
+   * focused window is focused last. jsdom shows neither, which is why both are
+   * in the manual checklist.
+   */
+  function drawGrid(): void {
+    drawWindowGrid(editorPane, windowTree, {
+      elementFor: (id) => windows.get(id)?.element ?? null,
+      commit: (split, shares) => {
+        windowTree = resize(windowTree, split, shares);
+      },
+      // The tree, read at the moment a drag begins rather than captured when
+      // the divider was drawn: a release writes shares and draws nothing, so a
+      // divider holding the node it was drawn from would start its next drag
+      // from the division as it was two drags ago (`iss-2609120527457904`).
+      sharesAt: (split) => splitAt(windowTree, split)?.shares ?? null,
+    });
+    for (const held of windows.values()) held.view.requestMeasure();
+    // The focused window last, because re-parenting the element that holds DOM
+    // focus blurs it. Its caret is written back into the DOM straight after:
+    // the move collapsed the DOM selection, and CodeMirror reads the DOM on its
+    // next flush, so without this the window Alice was typing in jumps to the
+    // top of the chapter one frame after the split.
+    const focused = windows.get(focus.window);
+    if (focused) {
+      focused.view.focus();
+      refreshSelection(focused.view);
+    }
+  }
+
+  /**
+   * Record where a window leaves the buffer it is showing.
+   *
+   * Both the window-point and the buffer-point, which is Emacs's pair: the
+   * window remembers where *it* was in this chapter, and the chapter remembers
+   * where the last window to leave it left the caret. Where that was the last
+   * window on the buffer, the text moves from the view into the buffer rather
+   * than dying with the view — which is the whole of how `C-x 0` loses no
+   * unsaved edit, and why it never asks whether anything may be discarded.
+   */
+  function leaveBuffer(held: EditorWindow): void {
+    const buffer = bufferFor(held.buffer);
+    const head = held.view.state.selection.main.head;
+    held.points.set(held.buffer, head);
+    buffer.lastPoint = head;
+    buffer.windows.delete(held.id);
+    // It no longer speaks for this buffer: the text it is about to be given is
+    // another buffer's.
+    if (buffer.lastChanged === held.id) buffer.lastChanged = null;
+    if (buffer.windows.size === 0) buffer.restingText = documentText(held.view);
+  }
+
+  /**
+   * Show one buffer in one window, leaving the buffer it was showing.
+   *
+   * `text` is the caller's, because where it comes from is the caller's
+   * question: a chapter never seen is read from disk, a chapter another window
+   * already shows is taken from that window, and a chapter whose last window
+   * closed with unsaved edits in it is taken from where those edits rested. It
+   * is read *before* the window joins, so a window can never read its own
+   * outgoing text as its incoming buffer's.
+   */
+  function showBuffer(
+    held: EditorWindow,
+    path: string | null,
+    text: string,
+  ): void {
+    leaveBuffer(held);
+    held.buffer = path;
+    const buffer = bufferFor(path);
+    buffer.windows.add(held.id);
+    // The text lives in a view again, so the buffer stops holding a copy.
+    buffer.restingText = null;
+    setDocument(held.view, text);
+  }
+
+  /** Close one window for good: its view, its element, its own memory. */
+  function tearDown(id: WindowId): void {
+    const held = windows.get(id);
+    if (!held) return;
+    leaveBuffer(held);
+    windows.delete(id);
+    held.view.destroy();
+    held.element.remove();
+  }
+
+  /** `C-x 2` and `C-x 3`. */
+  function divideHere(direction: "rows" | "columns"): void {
+    const held = here();
+    const rect = held.element.getBoundingClientRect();
+    const extent = direction === "columns" ? rect.width : rect.height;
+    if (!mayDivide(extent, direction)) {
+      announce(
+        direction === "columns" ? "Too narrow to divide" : "Too short to divide",
+      );
+      return;
+    }
+    const change = splitWindow(windowTree, held.id, direction, mintWindow);
+    if (change.refusal !== null || change.opened === null) {
+      if (change.refusal !== null) announce(change.refusal);
+      return;
+    }
+    windowTree = change.tree;
+    // The sibling shows the same chapter, taken from the buffer rather than
+    // from disk, so the two windows agree from the first frame and the echo
+    // has nothing to reconcile. Its caret starts where hers is, and the type
+    // scale is Alice's eyes rather than the chapter's, so it carries across.
+    const buffer = bufferFor(held.buffer);
+    const made = makeWindow(change.opened, held.buffer, bufferText(buffer));
+    setTextScale(made.view, textScaleStep(held.view));
+    const head = held.view.state.selection.main.head;
+    placeCursor(made.view, head);
+    made.points.set(held.buffer, head);
+    drawGrid();
+    refresh();
+  }
+
+  /** `C-x 0`. */
+  function closeHere(): void {
+    const leaving = here().id;
+    // Where the keyboard goes is read before the shape changes, because the
+    // answer is a fact about the division being taken apart: the keyboard
+    // follows the space, into the window that receives it. That is Emacs's own
+    // rule and the neighbour the how-to page promises; the first leaf of the
+    // whole tree is neither (`iss-2609120527458704`).
+    const heir = heirOf(windowTree, leaving);
+    const wasHere = focus.window === leaving;
+    const change = closeWindow(windowTree, leaving);
+    if (change.refusal !== null) {
+      announce(change.refusal);
+      return;
+    }
+    windowTree = change.tree;
+    for (const id of change.closed) tearDown(id);
+    // The keyboard was in the window that has gone, so the focus model has to
+    // notice before the grid is drawn round it. `reconcile` is what answers for
+    // a window closed while another pane holds the keyboard: nothing followed
+    // the space, because the keyboard was not in the window that went.
+    const landed = wasHere && heir !== null && focus.toWindow(heir);
+    if (!landed) focus.reconcile();
+    drawGrid();
+    refresh();
+  }
+
+  /** `C-x 1`. */
+  function closeOthersHere(): void {
+    const change = closeOtherWindows(windowTree, here().id);
+    if (change.refusal !== null) {
+      announce(change.refusal);
+      return;
+    }
+    windowTree = change.tree;
+    for (const id of change.closed) tearDown(id);
+    focus.reconcile();
+    drawGrid();
+    refresh();
+  }
+
+  /** What a resize chord says when there is no room left to take. */
+  function atTheFloor(axis: "rows" | "columns", widen: boolean): string {
+    if (axis === "rows") return "This window cannot get any taller";
+    return widen
+      ? "This window cannot get any wider"
+      : "This window cannot get any narrower";
+  }
+
+  /**
+   * `C-x {`, `C-x }` and `C-x ^`.
+   *
+   * The only rows in the table whose *success* says something. Every other row
+   * is silent when it works and speaks when it refuses; a resize has no textual
+   * consequence, so a reader working without sight would otherwise be unable to
+   * tell a chord that landed from one that did not. `announceBriefly` is the
+   * existing mechanism, and the type-scale rows already use it for exactly this
+   * reason.
+   */
+  function resizeHere(axis: "rows" | "columns", widen: boolean): void {
+    const held = here();
+    const target: ResizeTarget | null = resizeTarget(
+      windowTree,
+      held.id,
+      axis,
+      widen,
+    );
+    if (target === null) {
+      announce(
+        axis === "columns"
+          ? "No window beside this one"
+          : "No window above or below this one",
+      );
+      return;
+    }
+    const split = splitAt(windowTree, target.split);
+    if (split === null) return;
+    // The one split the chord chose is measured, and its floor becomes a share.
+    // An unmeasured extent means no clamp, for the reason `mayDivide` allows an
+    // unmeasured division: nought is jsdom and the first frame, not a sliver.
+    const floor = floorShare(measureSplit(editorPane, target.split, axis), axis);
+    const next = stepShares(split.shares, target, RESIZE_STEP, floor);
+    if (next === null) {
+      announce(atTheFloor(axis, widen));
+      return;
+    }
+    windowTree = resize(windowTree, target.split, next);
+    drawGrid();
+    const branch = widen ? target.grows : target.yields;
+    const leaves = leafIds(windowTree);
+    announceBriefly(
+      `Window ${String(leaves.indexOf(held.id) + 1)} of ${String(leaves.length)}: ` +
+        `${String(Math.round((next[branch] ?? 0) * 100))}%`,
+    );
+  }
+
   /**
    * Take a step of type scale, or say why the surface did not move.
    *
@@ -489,9 +1046,9 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    * so a chord pressed at a bound writes nothing.
    */
   function scaleText(to: (step: number) => number): void {
-    const step = to(textScaleStep(view));
-    const moved = setTextScale(view, step);
-    const now = textScaleStep(view);
+    const step = to(textScaleStep(view()));
+    const moved = setTextScale(view(), step);
+    const now = textScaleStep(view());
     announceBriefly(textScaleMessage(now, moved));
     if (!moved) return;
     rememberScale(now);
@@ -541,22 +1098,62 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     return bibliographyError === null ? "" : ` — bibliography unreadable: ${bibliographyError}`;
   }
 
-  /** Ask before edits are thrown away. True means carry on. */
+  /**
+   * Ask before edits are thrown away. True means carry on.
+   *
+   * Asked of the focused window's buffer, and a shipped promise
+   * (`itd-2609051335399446`) rather than a conclusion of this design. It is
+   * left exactly as it is here: once buffers outlive windows, switching one
+   * window from one chapter to another discards nothing, so the question is
+   * asked about a loss that no longer happens — which is a defect in its own
+   * right, carried by `iss-2609111123510084`, and amending a shipped intent's
+   * acceptance criterion is its own record rather than a line in this diff.
+   *
+   * It is the question `openChapter` asks and only that. A gesture that
+   * replaces the whole document discards every buffer, so it asks
+   * `mayReplaceDocument` below instead (`iss-2609120527458643`).
+   */
   async function mayDiscard(): Promise<boolean> {
-    if (!isDirty()) return true;
-    const what = openChapterTitle ?? "The document";
+    const buffer = bufferHere();
+    if (!isDirty(buffer)) return true;
+    const what = buffer.title ?? "The document";
     return services.confirmDiscard(`${what} has unsaved edits. Discard them?`);
   }
 
-  /** Put the buffer back to the welcome text and forget the open chapter. */
-  function forgetChapter(): void {
+  /**
+   * Ask before another document throws every buffer away. True means carry on.
+   *
+   * `forgetDocument` clears every buffer, so the question is about every dirty
+   * buffer and not only the focused window's: a chapter edited in a window that
+   * does not hold the keyboard, and a chapter whose window closed with `C-x 0`
+   * while its edits rested in its buffer, both go with the same gesture and
+   * both have to be asked about (`iss-2609120527458643`). This is the widening
+   * `quit` and `confirmClose` took when buffers started outliving windows, in
+   * the one shape all three now share.
+   */
+  async function mayReplaceDocument(): Promise<boolean> {
+    if (!anyDirty()) return true;
+    return services.confirmDiscard(discardQuestion("Discard them?"));
+  }
+
+  /**
+   * A different document is opening: every buffer goes, every window with it.
+   *
+   * The tree is deliberately *not* collapsed. The layout is Alice's, and a new
+   * document is not a reason to rearrange her screen.
+   */
+  function forgetDocument(): void {
     loadToken += 1;
-    openChapterPath = null;
-    openChapterTitle = null;
     openNodeId = null;
-    detached = false;
-    savedText = WELCOME;
-    setDocument(view, WELCOME);
+    openNodeBuffer = null;
+    buffers.clear();
+    const welcome = bufferFor(null);
+    for (const held of windows.values()) {
+      held.points.clear();
+      held.buffer = null;
+      welcome.windows.add(held.id);
+      setDocument(held.view, WELCOME);
+    }
     sidebar.select(null);
   }
 
@@ -632,13 +1229,16 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   async function showTree(next: DocumentTree): Promise<void> {
     tree = next;
     const data = await readSidebarData(next);
+    if (destroyed) return;
     outlines = data.outlines;
     // The same bibliography the sidebar's facts were read against, so the
     // editor completes and hovers a citation against what the sidebar
     // reports about it (itd-2609051335502171).
-    setBibliography(view, data.bibliography);
+    // Every window, because each one completes and hovers citations in its own
+    // state and the sidebar's facts were read against this one bibliography.
+    for (const held of windows.values()) setBibliography(held.view, data.bibliography);
     sidebar.show(tree, outlines, data.facts);
-    sidebar.select(openChapterPath, openNodeId);
+    sidebar.select(here().buffer, openNodeId);
     // The tree is the second pane, and a tree with no rows is not a pane at
     // all. Redrawing it can empty it — a folder opened that holds no chapters
     // — and the keyboard must not be left in a pane that has gone away.
@@ -673,6 +1273,78 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     }
   }
 
+  /**
+   * The text a window opening a known buffer takes, or null to read from disk.
+   *
+   * A buffer some window already shows must be taken from that window, or the
+   * two windows would start on different texts and the echo would have nothing
+   * to reconcile them from. A buffer whose last window closed with unsaved
+   * edits in it must be taken from where those edits rest, which is criterion
+   * 14: the chapter's state outlives the window that showed it. Anything else
+   * is read again, so a chapter changed on disk since arrives.
+   */
+  function restingTextOf(buffer: ChapterBuffer | undefined): string | null {
+    if (!buffer) return null;
+    for (const id of buffer.windows) {
+      const held = windows.get(id);
+      if (held) return documentText(held.view);
+    }
+    if (buffer.restingText !== null && buffer.restingText !== buffer.savedText) {
+      return buffer.restingText;
+    }
+    return null;
+  }
+
+  /**
+   * Reconcile one buffer with its file, and say what happened, or nothing.
+   *
+   * The three cases the reload has always had, applied per buffer: unchanged on
+   * disk, left alone and silent; changed with a clean buffer, taken and said;
+   * changed with a dirty buffer, the author asked and neither text written
+   * until she answers.
+   */
+  async function reloadBuffer(buffer: ChapterBuffer): Promise<string> {
+    const path = buffer.path;
+    if (path === null) return "";
+    const what = buffer.title ?? "The chapter";
+    if (!chapterAt(path)) {
+      buffer.detached = true;
+      return `${what} is no longer on disk`;
+    }
+    buffer.detached = false;
+    let onDisk: string;
+    try {
+      onDisk = await services.readChapter(path);
+    } catch (error) {
+      return String(error);
+    }
+    if (onDisk === buffer.savedText) return "";
+    const take = (): void => {
+      buffer.savedText = onDisk;
+      buffer.restingText = null;
+      for (const id of buffer.windows) {
+        const held = windows.get(id);
+        if (held) setDocument(held.view, onDisk);
+      }
+      if (buffer.windows.size === 0) buffer.restingText = onDisk;
+    };
+    if (!isDirty(buffer)) {
+      take();
+      return `${what} changed on disk`;
+    }
+    const takeDisk = await services.confirmDiscard(
+      `${what} changed on disk and has unsaved edits. Take the version on disk?`,
+    );
+    if (takeDisk) {
+      take();
+      return "Took the version on disk";
+    }
+    // Neither text is written: the buffer keeps the author's edits and
+    // `savedText` keeps what she last read, so the buffer stays dirty and the
+    // next save is hers to make deliberately.
+    return "Kept your edits; nothing was written";
+  }
+
   /** What every prose command is told about the open document. */
   function proseOptions(): ProseOptions {
     return { fillColumn };
@@ -684,6 +1356,21 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   }
 
   // ------------------------------------------------------------- extensions
+
+  /**
+   * What the quit and close questions say about unsaved work.
+   *
+   * The chapter by name when one buffer is dirty, and how many when more than
+   * one is — because with buffers outliving windows there can be several, and
+   * naming one of them would be the question telling half the truth.
+   */
+  function unsavedQuestion(): string {
+    const titles = dirtyTitles();
+    if (titles.length === 1) {
+      return `${titles[0] ?? "The chapter"} has unsaved edits.`;
+    }
+    return `${String(titles.length)} chapters have unsaved edits.`;
+  }
 
   /** Leave, or say why leaving is not possible here. */
   function leave(): void {
@@ -705,12 +1392,12 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    * answering Return and Escape alone, cannot do.
    */
   function quit(): void {
-    if (!isDirty()) {
+    if (!anyDirty()) {
       leave();
       return;
     }
     const keep = (): void => {
-      view.focus();
+      view().focus();
       announce("Kept your edits");
     };
     openListOverlay<ListEntry>({
@@ -719,7 +1406,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       label: "Quit Editor",
       paneLabel: "Quit",
       rowKey: "choice",
-      question: `${openChapterTitle ?? "The chapter"} has unsaved edits.`,
+      question: unsavedQuestion(),
       entries: () => QUIT_CHOICES,
       onChoose: (choice) => {
         if (choice.id === "quit") leave();
@@ -739,23 +1426,42 @@ export function createApp(root: HTMLElement, services: AppServices): App {
    * host, and `C-g` or Escape put Alice back in the text with her edits
    * intact. Unlike `quit`, closing never leaves the application — the
    * sidebar and the folder are exactly where they were.
+   *
+   * It is `kill-buffer` and not "close this window", so the buffer itself goes
+   * and every window showing it goes back to the welcome text. That is the one
+   * gesture in the application that genuinely discards a chapter's unsaved
+   * edits, which is why it is the one that asks.
    */
   function closeChapter(): void {
-    if (openChapterPath === null) {
+    const buffer = bufferHere();
+    if (buffer.path === null) {
       announce("No chapter is open");
       return;
     }
-    const title = openChapterTitle ?? "The chapter";
+    const path = buffer.path;
+    const title = buffer.title ?? "The chapter";
     const doClose = (): void => {
-      forgetChapter();
+      loadToken += 1;
+      openNodeId = null;
+      openNodeBuffer = null;
+      // Read before any window joins, so no window reads its own outgoing
+      // text as the welcome buffer's.
+      const welcome = bufferText(bufferFor(null));
+      for (const id of [...buffer.windows]) {
+        const other = windows.get(id);
+        if (other) showBuffer(other, null, welcome);
+      }
+      buffers.delete(path);
+      for (const other of windows.values()) other.points.delete(path);
+      sidebar.select(null);
       announce(`Closed ${title}`);
     };
-    if (!isDirty()) {
+    if (!isDirty(buffer)) {
       doClose();
       return;
     }
     const keep = (): void => {
-      view.focus();
+      view().focus();
       announce("Kept your edits");
     };
     openListOverlay<ListEntry>({
@@ -845,14 +1551,13 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       // swapping them out from under the chapter still on screen
       // (`iss-2609070642208293`). The nonce stays valid for its own
       // lifetime regardless of how long the confirm dialog takes.
-      if (!(await mayDiscard())) {
+      if (!(await mayReplaceDocument())) {
         announce("Kept the open chapter");
         return;
       }
       const outcome = await services.openDocumentSource?.(picked.nonce);
       if (!outcome) return;
-      forgetChapter();
-      chapterCursors.clear();
+      forgetDocument();
       await showTree(outcome.tree);
       for (const failure of outcome.tree.failures) {
         console.warn(`open ${picked.name}: ${failure}`);
@@ -895,7 +1600,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       openKeysPanel(overlayHost);
     },
     "insert-palette": () => {
-      openPalette(view, { host: overlayHost, announce });
+      openPalette(view(), { host: overlayHost, announce });
     },
     // From the text. A pane the editing surface cannot hear reads the same
     // row for itself, in `src/focus.ts`, and both reach this one command.
@@ -923,47 +1628,72 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       focus.cycle();
     },
 
+    // The window vocabulary (`itd-2609081931493520`). Four rows divide and
+    // undivide the editing area; three resize the window holding the keyboard.
+    // Each acts on `here()`, which is the one question the whole registry asks.
+    "split-window-below": () => {
+      divideHere("rows");
+    },
+    "split-window-right": () => {
+      divideHere("columns");
+    },
+    "delete-window": () => {
+      closeHere();
+    },
+    "delete-other-windows": () => {
+      closeOthersHere();
+    },
+    "shrink-window-horizontally": () => {
+      resizeHere("columns", false);
+    },
+    "enlarge-window-horizontally": () => {
+      resizeHere("columns", true);
+    },
+    "enlarge-window": () => {
+      resizeHere("rows", true);
+    },
+
     // The prose vocabulary. Each is a function of the view in `src/prose.ts`;
     // what the application adds is the document's fill column, the modeline
     // the refusals are announced in, and the host the two prompts mount in.
     "fill-paragraph": () => {
-      prose(() => fillParagraph(view, proseOptions()));
+      prose(() => fillParagraph(view(), proseOptions()));
     },
     "transpose-words": () => {
-      prose(() => transposeWords(view));
+      prose(() => transposeWords(view()));
     },
     "transpose-lines": () => {
-      prose(() => transposeLines(view));
+      prose(() => transposeLines(view()));
     },
     "capitalize-word": () => {
-      prose(() => capitalizeWord(view));
+      prose(() => capitalizeWord(view()));
     },
     "backward-sentence": () => {
-      prose(() => backwardSentence(view, proseOptions()));
+      prose(() => backwardSentence(view(), proseOptions()));
     },
     "forward-sentence": () => {
-      prose(() => forwardSentence(view, proseOptions()));
+      prose(() => forwardSentence(view(), proseOptions()));
     },
     "backward-paragraph": () => {
-      prose(() => backwardParagraph(view));
+      prose(() => backwardParagraph(view()));
     },
     "forward-paragraph": () => {
-      prose(() => forwardParagraph(view));
+      prose(() => forwardParagraph(view()));
     },
     "delete-indentation": () => {
-      prose(() => deleteIndentation(view));
+      prose(() => deleteIndentation(view()));
     },
     "just-one-space": () => {
-      prose(() => justOneSpace(view));
+      prose(() => justOneSpace(view()));
     },
     "delete-horizontal-space": () => {
-      prose(() => deleteHorizontalSpace(view));
+      prose(() => deleteHorizontalSpace(view()));
     },
     "move-to-window-line": () => {
-      prose(() => moveToWindowLine(view));
+      prose(() => moveToWindowLine(view()));
     },
     "dabbrev-expand": () => {
-      prose(() => dabbrevExpand(view));
+      prose(() => dabbrevExpand(view()));
     },
 
     // The region case changes. The mechanism is the Emacs layer's, in
@@ -973,10 +1703,10 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     // every other refusal over the text goes out on. One helper, both
     // directions, so the refusal is written once.
     "upcase-region": () => {
-      prose(() => changeCaseRegion(view, 1));
+      prose(() => changeCaseRegion(view(), 1));
     },
     "downcase-region": () => {
-      prose(() => changeCaseRegion(view, -1));
+      prose(() => changeCaseRegion(view(), -1));
     },
 
     // The table-alignment mode switch (`itd-2609061653559060`). It writes a
@@ -993,7 +1723,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     },
 
     "zap-to-char": () => {
-      zapToChar(view, { host: overlayHost, announce });
+      zapToChar(view(), { host: overlayHost, announce });
     },
     "describe-key": () => {
       describeKey({ host: overlayHost, announce });
@@ -1026,13 +1756,13 @@ export function createApp(root: HTMLElement, services: AppServices): App {
           // null, so announcing the empty string here would wipe what the row
           // just said (`iss-2609100543005984`). `src/command-palette.ts`
           // guards the same call the same way, and for the same reason.
-          const said = runBinding(view, id);
+          const said = runBinding(view(), id);
           if (said !== null && said !== "") announce(said);
         },
       });
     },
     "command-palette": () => {
-      openCommandPalette(view, { host: overlayHost, announce });
+      openCommandPalette(view(), { host: overlayHost, announce });
     },
     quit: () => {
       quit();
@@ -1043,49 +1773,49 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     // wired here directly, the same reason `quit` is: they need the
     // application's chapter list, its dirty state, or the overlay host.
     "outline-next-heading": () => {
-      prose(() => nextHeading(view));
+      prose(() => nextHeading(view()));
     },
     "outline-previous-heading": () => {
-      prose(() => previousHeading(view));
+      prose(() => previousHeading(view()));
     },
     "outline-forward-same-level": () => {
-      prose(() => forwardSameLevelHeading(view));
+      prose(() => forwardSameLevelHeading(view()));
     },
     "outline-backward-same-level": () => {
-      prose(() => backwardSameLevelHeading(view));
+      prose(() => backwardSameLevelHeading(view()));
     },
     "outline-up-heading": () => {
-      prose(() => upHeading(view));
+      prose(() => upHeading(view()));
     },
     "outline-toggle-fold": () => {
-      prose(() => toggleHeadingFold(view));
+      prose(() => toggleHeadingFold(view()));
     },
     "outline-cycle": () => {
-      prose(() => cycleOutline(view));
+      prose(() => cycleOutline(view()));
     },
     "outline-promote": () => {
-      prose(() => promoteHeading(view));
+      prose(() => promoteHeading(view()));
     },
     "outline-demote": () => {
-      prose(() => demoteHeading(view));
+      prose(() => demoteHeading(view()));
     },
     "outline-move-up": () => {
-      prose(() => moveHeadingUp(view));
+      prose(() => moveHeadingUp(view()));
     },
     "outline-move-down": () => {
-      prose(() => moveHeadingDown(view));
+      prose(() => moveHeadingDown(view()));
     },
     "outline-bold-region": () => {
-      prose(() => boldRegion(view));
+      prose(() => boldRegion(view()));
     },
     "outline-italic-region": () => {
-      prose(() => italicRegion(view));
+      prose(() => italicRegion(view()));
     },
     "outline-insert-link": () => {
-      prose(() => insertLink(view));
+      prose(() => insertLink(view()));
     },
     "outline-insert-image": () => {
-      prose(() => insertImage(view));
+      prose(() => insertImage(view()));
     },
     "outline-switch-chapter": () => {
       switchChapter();
@@ -1094,16 +1824,16 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       closeChapter();
     },
     "outline-narrow": () => {
-      prose(() => narrowToSection(view));
+      prose(() => narrowToSection(view()));
     },
     "outline-widen": () => {
-      prose(() => widenSection(view));
+      prose(() => widenSection(view()));
     },
     "outline-occur": () => {
-      openOccur(view, { host: overlayHost });
+      openOccur(view(), { host: overlayHost });
     },
     "query-replace-regex": () => {
-      queryReplaceRegex(view);
+      queryReplaceRegex(view());
     },
   };
 
@@ -1145,23 +1875,55 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   // ------------------------------------------------------------ the surface
 
   const app: App = {
-    view,
     sidebar,
     modeline,
     keyLog,
     drop,
     focus,
 
+    // A getter, and read at the moment it is needed rather than held: the
+    // editing surface is several views now, and which one the application
+    // means is always the one holding the keyboard.
+    get view(): EditorView {
+      return view();
+    },
+
     get dirty(): boolean {
-      return isDirty();
+      return anyDirty();
     },
 
     get detached(): boolean {
-      return detached;
+      return bufferHere().detached;
     },
 
     get chapterPath(): string | null {
-      return openChapterPath;
+      return here().buffer;
+    },
+
+    editorHost: editorPane,
+
+    windowAt(x: number, y: number) {
+      const pair = (held: EditorWindow): {
+        readonly view: EditorView;
+        readonly chapter: string | null;
+      } => ({ view: held.view, chapter: held.buffer });
+      let unmeasured: EditorWindow | null = null;
+      for (const id of leafIds(windowTree)) {
+        const held = windows.get(id);
+        if (!held) continue;
+        const rect = held.element.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) {
+          unmeasured ??= held;
+          continue;
+        }
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          return pair(held);
+        }
+      }
+      // Nothing measured at all: jsdom, and the frame before layout runs. The
+      // window holding the keyboard is the honest answer, and with one window
+      // it is the answer one window always gave.
+      return unmeasured === null ? null : pair(here());
     },
 
     get documentRoot(): string | null {
@@ -1175,18 +1937,18 @@ export function createApp(root: HTMLElement, services: AppServices): App {
     announce,
 
     async openFolder(path: string): Promise<void> {
-      if (!(await mayDiscard())) {
+      if (!(await mayReplaceDocument())) {
         announce("Kept the open chapter");
         return;
       }
       try {
         const next = await services.openFolder(path);
-        // The chapter that was open belongs to the document being replaced.
-        // Holding on to its path would aim the next save at a file nothing on
-        // screen shows any more, and a remembered cursor at a path that
-        // happens to recur in the new document.
-        forgetChapter();
-        chapterCursors.clear();
+        // Every chapter that was open belongs to the document being replaced.
+        // Holding on to a path would aim the next save at a file nothing on
+        // screen shows any more, and a remembered position at a path that
+        // happens to recur in the new document. The layout survives: it is
+        // Alice's, and a new document is not a reason to rearrange her screen.
+        forgetDocument();
         await showTree(next);
         for (const failure of next.failures) {
           console.warn(`open ${path}: ${failure}`);
@@ -1226,6 +1988,11 @@ export function createApp(root: HTMLElement, services: AppServices): App {
      * dirty buffer, the author asked which text to keep and neither written
      * until she answers. A chapter whose path no longer resolves leaves the
      * buffer alone and is marked detached, and its next save is refused.
+     *
+     * The three cases apply once per open buffer rather than once for one open
+     * chapter, because several windows can be on several chapters. The
+     * announcement stays the focused window's buffer's, with a count when more
+     * than one changed.
      */
     async reload(): Promise<void> {
       if (!tree) return;
@@ -1239,8 +2006,9 @@ export function createApp(root: HTMLElement, services: AppServices): App {
         return;
       }
       await showTree(next);
+      if (destroyed) return;
       sidebar.setExpansion(expansion);
-      sidebar.select(openChapterPath, openNodeId);
+      sidebar.select(here().buffer, openNodeId);
       // The document's own settings are read again, because a reload is what
       // an edit to `document.yaml` arrives as.
       await documentTitle(next.root.title);
@@ -1252,87 +2020,88 @@ export function createApp(root: HTMLElement, services: AppServices): App {
         announce(`Bibliography unreadable: ${bibliographyError}`);
       }
 
-      if (openChapterPath === null) return;
-      const still = chapterAt(openChapterPath);
-      if (!still) {
-        detached = true;
-        announce(`${openChapterTitle ?? "The chapter"} is no longer on disk`);
-        return;
+      const focusedPath = here().buffer;
+      let changedCount = 0;
+      let focusedSaid = "";
+      for (const buffer of [...buffers.values()]) {
+        if (buffer.path === null) continue;
+        const said = await reloadBuffer(buffer);
+        if (said !== "") changedCount += 1;
+        if (buffer.path === focusedPath) focusedSaid = said;
       }
-      detached = false;
-
-      let onDisk: string;
-      try {
-        onDisk = await services.readChapter(openChapterPath);
-      } catch (error) {
-        announce(String(error));
-        return;
-      }
-      if (onDisk === savedText) {
+      if (changedCount === 0) {
         refresh();
         return;
       }
-      if (!isDirty()) {
-        savedText = onDisk;
-        setDocument(view, onDisk);
-        announce(`${openChapterTitle ?? "The chapter"} changed on disk`);
-        return;
-      }
-      const takeDisk = await services.confirmDiscard(
-        `${openChapterTitle ?? "The chapter"} changed on disk and has unsaved edits. Take the version on disk?`,
+      const others = changedCount - (focusedSaid === "" ? 0 : 1);
+      const count = others > 0 ? ` — and ${String(others)} more` : "";
+      announce(
+        focusedSaid !== ""
+          ? `${focusedSaid}${count}`
+          : `${String(changedCount)} chapters changed on disk`,
       );
-      if (takeDisk) {
-        savedText = onDisk;
-        setDocument(view, onDisk);
-        announce("Took the version on disk");
-      } else {
-        // Neither text is written: the buffer keeps the author's edits and
-        // `savedText` keeps what she last read, so the buffer stays dirty and
-        // the next save is hers to make deliberately.
-        announce("Kept your edits; nothing was written");
-      }
     },
 
     async openChapter(chapter: Chapter, node?: OutlineNode): Promise<void> {
-      const sameChapter = chapter.path === openChapterPath;
-      if (!sameChapter) {
-        if (!(await mayDiscard())) {
-          announce("Kept the open chapter");
-          return;
-        }
-        // Remember where she leaves this chapter, so it opens here again the
-        // next time she comes back to it (`itd-2609061318091323` AC8).
-        if (openChapterPath !== null) {
-          chapterCursors.set(openChapterPath, view.state.selection.main.head);
-        }
+      /**
+       * Whether this window is still the one it was.
+       *
+       * A chapter is opened into the window that asked for it, and two things
+       * can happen while the read is in flight: the application can be torn
+       * down, and the window itself can be closed by `C-x 0` or `C-x 1`. A
+       * window whose record has gone must not be given a buffer — adding its id
+       * to `buffer.windows` would leave a phantom there that `leaveBuffer` never
+       * takes out, so the buffer would believe a window still held its text and
+       * would never rest it: the edits in it would stop counting as unsaved and
+       * quitting would not warn about them.
+       */
+      const alive = (window: EditorWindow): boolean =>
+        !destroyed && windows.get(window.id) === window;
+
+      const held = here();
+      const sameChapter = chapter.path === held.buffer;
+      if (!sameChapter && !(await mayDiscard())) {
+        announce("Kept the open chapter");
+        return;
       }
+      if (!alive(held)) return;
       if (sameChapter && node) {
         // Already open: moving to one of its headings is not a load, and
         // reloading would throw the author's edits away.
         openNodeId = node.id;
+        openNodeBuffer = chapter.path;
         sidebar.select(chapter.path, node.id);
-        revealLine(view, node.line);
-        view.focus();
+        revealLine(held.view, node.line);
+        held.view.focus();
         refresh();
         return;
       }
       loadToken += 1;
       const token = loadToken;
       try {
-        const text = await services.readChapter(chapter.path);
-        if (token !== loadToken) return;
-        savedText = text;
-        openChapterPath = chapter.path;
-        openChapterTitle = chapter.title;
+        // A chapter another window already shows, or one whose last window
+        // closed with unsaved edits in it, is taken from its buffer; anything
+        // else is read from disk, so a chapter changed elsewhere arrives.
+        const resting = restingTextOf(buffers.get(chapter.path));
+        const text = resting ?? (await services.readChapter(chapter.path));
+        if (token !== loadToken || !alive(held)) return;
+        const buffer = bufferFor(chapter.path);
+        if (resting === null) buffer.savedText = text;
+        buffer.title = chapter.title;
+        buffer.detached = false;
         openNodeId = node?.id ?? null;
-        detached = false;
-        setDocument(view, text);
+        openNodeBuffer = node ? chapter.path : null;
+        showBuffer(held, chapter.path, text);
         sidebar.select(chapter.path, openNodeId);
+        // A heading, where one was named, outranks everything. Otherwise this
+        // window's own remembered place in this chapter, then the chapter's own
+        // last-known place, then the start: Emacs's window-point against
+        // buffer-point (`cond-2609111105374579`).
         if (node) {
-          revealLine(view, node.line);
+          revealLine(held.view, node.line);
         } else {
-          const rememberedCursor = chapterCursors.get(chapter.path);
-          if (rememberedCursor !== undefined) placeCursor(view, rememberedCursor);
+          const point = held.points.get(chapter.path) ?? buffer.lastPoint;
+          if (point > 0) placeCursor(held.view, point);
         }
         announce("");
       } catch (error) {
@@ -1341,35 +2110,39 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       }
     },
 
+    /**
+     * Write the focused window's chapter, to that chapter's own path, and
+     * nothing else.
+     *
+     * Three lines, and the criterion the intent calls falsifiable in the worst
+     * way a text editor can be: with three windows on three chapters, `C-x C-s`
+     * writes one file and it is the one the keyboard is in.
+     */
     async save(): Promise<void> {
-      if (openChapterPath === null) {
+      const buffer = bufferHere();
+      if (buffer.path === null) {
         announce("No chapter to save");
         return;
       }
-      if (detached) {
-        announce(`${openChapterPath} is no longer on disk; nothing was written`);
+      if (buffer.detached) {
+        announce(`${buffer.path} is no longer on disk; nothing was written`);
         return;
       }
-      const path = openChapterPath;
-      const text = documentText(view);
+      const path = buffer.path;
+      const text = bufferText(buffer);
       try {
         await services.writeChapter(path, text);
-        // A chapter switch during the write would have moved the target, so
-        // only record the text as saved if it is still this chapter's.
-        if (openChapterPath === path) {
-          savedText = text;
-        }
-        announce(`Wrote ${openChapterTitle ?? path}`);
+        if (destroyed) return;
+        buffer.savedText = text;
+        announce(`Wrote ${buffer.title ?? path}`);
       } catch (error) {
         announce(String(error));
       }
     },
 
     async confirmClose(): Promise<boolean> {
-      if (!isDirty()) return true;
-      return services.confirmDiscard(
-        `${openChapterTitle ?? "The document"} has unsaved edits. Close anyway?`,
-      );
+      if (!anyDirty()) return true;
+      return services.confirmDiscard(discardQuestion("Close anyway?"));
     },
 
     registerCommand(bindingId: string, run: () => void): void {
@@ -1394,7 +2167,11 @@ export function createApp(root: HTMLElement, services: AppServices): App {
       drop.dispose();
       releaseEditorCommands(commands);
       keyLog.dispose();
-      view.destroy();
+      destroyed = true;
+      for (const held of windows.values()) held.view.destroy();
+      // The records are kept rather than cleared: a read or a walk still in
+      // flight resolves after this and asks which window holds the keyboard,
+      // and a torn-down application has to have an answer for it.
       root.replaceChildren();
     },
   };
@@ -1418,7 +2195,7 @@ export function createApp(root: HTMLElement, services: AppServices): App {
         if (Math.abs(step) > TEXT_SCALE_LIMIT) {
           console.warn(`text scale ${String(step)} is outside the range`);
         }
-        setTextScale(view, step);
+        for (const held of windows.values()) setTextScale(held.view, step);
       })
       .catch((error: unknown) => {
         console.warn(`text scale: ${String(error)}`);
@@ -1426,7 +2203,8 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   }
 
   sidebar.show(null);
+  drawGrid();
   refresh();
-  view.focus();
+  view().focus();
   return app;
 }

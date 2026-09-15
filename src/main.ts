@@ -183,10 +183,12 @@ app.registerCommand("preview", () => {
 
 // The drop gesture's own branch of the one drop router. The shell has already
 // classified, converted, stripped and copied the files; this decides only
-// where the reference goes in the text.
+// where the reference goes in the text — and, with the area divided, which
+// window: a paste goes where the keyboard is, a drop where Alice aimed.
 const dropTarget = createDropTarget({
-  view: app.view,
-  chapterPath: () => app.chapterPath,
+  host: app.editorHost,
+  focused: () => ({ view: app.view, chapter: app.chapterPath }),
+  windowAt: (x, y) => app.windowAt(x, y),
   services: { dropOnChapter, pasteReference },
   announce: (message) => {
     app.announce(message);

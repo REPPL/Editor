@@ -34,6 +34,17 @@ export interface ModelineContext {
    */
   pane?: string;
   /**
+   * Which editing window holds the keyboard, of how many.
+   *
+   * The ordinal in reading order, and not the chapter: the chapter is the very
+   * next cell along and two cells answering one question is what this module's
+   * own doc comment forbids; the ordinal is what `C-x o` moves and so the thing
+   * Alice is tracking; and it is four characters where a title is as long as a
+   * file name. Absent, or a count of one, leaves the cell reading exactly
+   * `[Editor]` — the addition is invisible until Alice divides the area.
+   */
+  window?: { readonly at: number; readonly of: number };
+  /**
    * A prefix chord half-typed outside the editing surface.
    *
    * A `C-x` typed in the sidebar is the same half-typed chord as one typed in
@@ -296,8 +307,18 @@ export function createModeline(): Modeline {
     element,
     update(view, context) {
       const pane = context.pane ?? "Editor";
-      paneCell.textContent = `[${pane}]`;
+      const at = context.window;
+      // `MODELINE_BUDGET` is the *message*'s floor and not this cell's, and
+      // `.modeline-chapter` is the cell that yields at every width, so the five
+      // extra characters are paid for by the chapter title's ellipsis.
+      paneCell.textContent =
+        at && at.of > 1 ? `[${pane} ${String(at.at)}/${String(at.of)}]` : `[${pane}]`;
       paneCell.dataset["pane"] = pane;
+      if (at && at.of > 1) {
+        paneCell.dataset["window"] = `${String(at.at)}/${String(at.of)}`;
+      } else {
+        delete paneCell.dataset["window"];
+      }
 
       if (context.chapter) {
         // `!!` is louder than `**` on purpose: the file is gone, and the next

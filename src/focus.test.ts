@@ -14,6 +14,7 @@
  */
 
 import { openSearchPanel } from "@codemirror/search";
+import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createApp, type App, type AppServices } from "./app";
@@ -100,12 +101,30 @@ const HAZARDOUS = [
   "Last line, no trailing newline.",
 ].join("\n");
 
+/**
+ * A chapter tall enough to divide above and below under the test harness.
+ *
+ * `src/test-setup.ts` fakes a monospace grid rather than measuring nothing, so a
+ * window is sixteen pixels a drawn line — which means `mayDivide` is genuinely
+ * consulted here and a short chapter refuses `C-x 2` exactly as a short frame
+ * would. It lives in a folder of its own so that every existing assertion about
+ * the tree's rows is untouched.
+ */
+const TALL = [
+  "# A long chapter",
+  "",
+  ...Array.from({ length: 44 }, (_, line) => `Line ${String(line + 1)}.`),
+  "",
+].join("\n");
+
 const ROOT = "document";
 const PART = "document/part-one";
 const ALICE_PATH = "document/part-one/01-alice.md";
 const BOB_PATH = "document/part-one/02-bob.md";
 const CAROL_PATH = "document/part-one/03-carol.md";
 const HAZARD_PATH = "document/part-one/04-hazard.md";
+const TALL_ROOT = "tall";
+const TALL_PATH = "tall/part-one/01-long.md";
 
 function chapterAt(name: string, title: string, path: string): Chapter {
   return { name, title, path, order: 1, bytes: 0, modified: null };
@@ -115,6 +134,7 @@ const ALICE_CHAPTER = chapterAt("01-alice.md", "alice", ALICE_PATH);
 const BOB_CHAPTER = chapterAt("02-bob.md", "bob", BOB_PATH);
 const CAROL_CHAPTER = chapterAt("03-carol.md", "carol", CAROL_PATH);
 const HAZARD_CHAPTER = chapterAt("04-hazard.md", "hazard", HAZARD_PATH);
+const TALL_CHAPTER = chapterAt("01-long.md", "long", TALL_PATH);
 
 function partOf(chapters: readonly Chapter[]): Part {
   return {
@@ -148,6 +168,7 @@ const TEXT = new Map<string, string>([
   [BOB_PATH, BOB],
   [CAROL_PATH, CAROL],
   [HAZARD_PATH, HAZARDOUS],
+  [TALL_PATH, TALL],
 ]);
 
 let written: { path: string; text: string } | null = null;
@@ -160,7 +181,9 @@ const services: AppServices = {
     Promise.resolve(
       path === "empty"
         ? { root: { ...treeOf([]).root, parts: [] }, failures: [] }
-        : treeOf([ALICE_CHAPTER, BOB_CHAPTER, CAROL_CHAPTER, HAZARD_CHAPTER]),
+        : path === TALL_ROOT
+          ? { ...treeOf([TALL_CHAPTER]), root: { ...treeOf([TALL_CHAPTER]).root, name: TALL_ROOT } }
+          : treeOf([ALICE_CHAPTER, BOB_CHAPTER, CAROL_CHAPTER, HAZARD_CHAPTER]),
     ),
   readChapter: (path) => Promise.resolve(TEXT.get(path) ?? ""),
   writeChapter: (path, text) => {
@@ -199,6 +222,17 @@ function eventFor(step: string): KeyboardEventInit {
   } else if (name === "Space") {
     key = " ";
     code = "Space";
+  } else if (name === "[" || name === "]") {
+    // The physical key, because `event.key` moves under Shift and the code does
+    // not: this is the notation the three resize chords are spelled in.
+    code = name === "[" ? "BracketLeft" : "BracketRight";
+    if (modifiers.has("S-")) key = name === "[" ? "{" : "}";
+  } else if (name === "/") {
+    code = "Slash";
+  }
+  if (/^[0-9]$/.test(name) && modifiers.has("S-")) {
+    // Shift-6 on a US layout is `^`, and the chord is read from `Digit6`.
+    key = ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"][Number(name)] ?? name;
   }
   return {
     key,
@@ -350,6 +384,16 @@ async function mount(open: Chapter = ALICE_CHAPTER): Promise<App> {
   app = createApp(host, services);
   await app.openFolder(ROOT);
   await app.openChapter(open);
+  return app;
+}
+
+/** Mount with a chapter tall enough to divide above and below. */
+async function mountTall(): Promise<App> {
+  host = document.createElement("div");
+  document.body.append(host);
+  app = createApp(host, services);
+  await app.openFolder(TALL_ROOT);
+  await app.openChapter(TALL_CHAPTER);
   return app;
 }
 
@@ -1760,5 +1804,323 @@ describe("the panel in the third place", () => {
 
     closeOverlay();
     await settle();
+  });
+});
+
+// --------------------------------------------------- the divided editing area
+
+/** Every editing window's view, in the order the grid draws them. */
+function windowViews(): EditorView[] {
+  return Array.from(
+    host.querySelectorAll<HTMLElement>(".editor-window"),
+    (element) => {
+      const editor = element.querySelector<HTMLElement>(".cm-editor");
+      const found = editor === null ? null : EditorView.findFromDOM(editor);
+      if (found === null) throw new Error("an editing window with no view");
+      return found;
+    },
+  );
+}
+
+/** Every editing window's element, in the order the grid draws them. */
+function windowElements(): HTMLElement[] {
+  return Array.from(host.querySelectorAll<HTMLElement>(".editor-window"));
+}
+
+/** The shares written on one split's children, as they reach CSS. */
+function sharesOn(split: HTMLElement): number[] {
+  return Array.from(split.children)
+    .filter((child) => !child.classList.contains("window-divider"))
+    .map((child) =>
+      Number((child as HTMLElement).style.getPropertyValue("--share")),
+    );
+}
+
+/**
+ * The text node the footer's live region is holding.
+ *
+ * The message cell is the one cell that speaks, and it is written only when the
+ * application says something rather than on every redraw
+ * (`iss-2609100647545513`). So a *new* node in it is the observable proof that a
+ * reader heard the refusal, where the same words redrawn would be silent.
+ */
+function spoken(): ChildNode | null {
+  const cell = app.modeline.element.querySelector<HTMLElement>(
+    ".modeline-message",
+  );
+  if (cell === null) throw new Error("the footer has no message cell");
+  return cell.firstChild;
+}
+
+describe("the editing area divided", () => {
+  it("divides the half that holds the keyboard and not the whole area", async () => {
+    await mount();
+    expect(press(app, "C-x 3")).toBe(true);
+    expect(windowViews()).toHaveLength(2);
+    const first = app.focus.window;
+
+    // The keyboard is in the left half; dividing again divides that half.
+    expect(press(app, "C-x 3")).toBe(true);
+    expect(windowViews()).toHaveLength(3);
+    expect(app.focus.window).toBe(first);
+    // The root still holds two children, one of which is now a split: the
+    // right half was not touched, which is Emacs's own behaviour and the
+    // reason splits nest rather than flatten.
+    const root = host.querySelector<HTMLElement>(".editor-pane > .window-split");
+    expect(root).not.toBeNull();
+    expect(sharesOn(root!)).toEqual([0.5, 0.5]);
+    expect(root!.querySelectorAll(":scope > .window-split")).toHaveLength(1);
+  });
+
+  it("moves the keyboard to an adjacent window when the focused one closes", async () => {
+    await mount();
+    press(app, "C-x 3");
+    press(app, "C-x 3");
+    const three = windowViews();
+    expect(three).toHaveLength(3);
+    // Into the second window, and close it.
+    const before = app.focus.window;
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("editor");
+    const second = app.focus.window;
+    expect(second).not.toBe(before);
+
+    expect(press(app, "C-x 0")).toBe(true);
+    expect(windowViews()).toHaveLength(2);
+    expect(app.focus.pane).toBe("editor");
+    expect(app.focus.window).not.toBe(second);
+    // And the keyboard really is in a window that exists.
+    expect(
+      windowElements().some((element) => element.dataset["focused"] === "yes"),
+    ).toBe(true);
+  });
+
+  it("moves the keyboard to the window that took the space, not to the first window", async () => {
+    // `(1 | (2 | 3))` with the keyboard in the third window: the space of the
+    // third goes to the second beside it, and the keyboard follows the space —
+    // Emacs's rule, and the neighbour `docs/how-to-split-the-editing-area.md`
+    // promises. The first editing leaf is across the frame
+    // (`iss-2609120527458704`).
+    await mount();
+    press(app, "C-x 3");
+    const first = app.focus.window;
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("editor");
+    const second = app.focus.window;
+    expect(second).not.toBe(first);
+
+    // The second window divides, which nests rather than adding a third column.
+    press(app, "C-x 3");
+    expect(windowViews()).toHaveLength(3);
+    expect(app.focus.window).toBe(second);
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("editor");
+    const third = app.focus.window;
+    expect([third === first, third === second]).toEqual([false, false]);
+
+    expect(press(app, "C-x 0")).toBe(true);
+    expect(windowViews()).toHaveLength(2);
+    expect(app.focus.pane).toBe("editor");
+    expect(app.focus.window).toBe(second);
+    // And the keyboard is where the model says it is.
+    expect(
+      windowElements().filter((element) => element.dataset["focused"] === "yes"),
+    ).toHaveLength(1);
+    expect(
+      windowElements().find((element) => element.dataset["focused"] === "yes")
+        ?.dataset["windowId"],
+    ).toBe(second);
+  });
+
+  it("says so rather than closing the only window", async () => {
+    await mount();
+    const before = spoken();
+    expect(press(app, "C-x 0")).toBe(true);
+    expect(windowViews()).toHaveLength(1);
+    expect(modeline(app)).toContain("This is the only window");
+    // The announcement count moved, so a reader hears it rather than only
+    // seeing it.
+    expect(spoken()).not.toBe(before);
+  });
+
+  it("walks the editing windows in reading order, then the sidebar, then the panel", async () => {
+    await mount();
+    press(app, "C-x 3");
+    const [first, second] = windowViews();
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    // A registered panel rather than an overlay, because leaving an overlay
+    // cancels it and the cycle would find nothing in the third place on the way
+    // back round (`iss-2609052115254279`).
+    const panel = createPublishPanel(publishServices());
+    mountPublishPanel(app, panel);
+    await panel.open();
+    await settle();
+    expect(app.focus.pane).toBe("panel");
+
+    // Round the whole cycle: first window, second window, sidebar, panel.
+    press(app, "C-x o");
+    expect([app.focus.pane, app.view === first]).toEqual(["editor", true]);
+    press(app, "C-x o");
+    expect([app.focus.pane, app.view === second]).toEqual(["editor", true]);
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("sidebar");
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("panel");
+    panel.destroy();
+    await settle();
+  });
+
+  it("never visits the sidebar before a second editing window that is shown", async () => {
+    // The intent's own falsifier, written as a test.
+    await mount();
+    press(app, "C-x 3");
+    expect(app.focus.pane).toBe("editor");
+    const first = app.focus.window;
+    expect(app.sidebar.open).toBe(true);
+    expect(app.sidebar.rows().length).toBeGreaterThan(0);
+
+    press(app, "C-x o");
+    expect(app.focus.pane).toBe("editor");
+    expect(app.focus.window).not.toBe(first);
+  });
+
+  it("answers a chord in exactly one editing window", async () => {
+    await mount();
+    press(app, "C-x 3");
+    const [first, second] = windowViews();
+    if (!first || !second) throw new Error("the area did not divide");
+    first.dispatch({ selection: { anchor: 0 } });
+    second.dispatch({ selection: { anchor: 20 } });
+
+    // A movement chord.
+    const was = second.state.selection.main.head;
+    expect(press(app, "C-n")).toBe(true);
+    expect(first.state.selection.main.head).toBeGreaterThan(0);
+    expect(second.state.selection.main.head).toBe(was);
+
+    // A chord that changes the text. The echo puts the same text in the other
+    // window, and that window's caret is mapped through the change rather than
+    // moved to the typing window's — which is criterion 3.
+    const secondCaret = second.state.selection.main.head;
+    expect(press(app, "C-k")).toBe(true);
+    expect(first.state.doc.toString()).toBe(second.state.doc.toString());
+    expect(second.state.selection.main.head).not.toBe(
+      first.state.selection.main.head,
+    );
+    expect(
+      Math.abs(second.state.selection.main.head - secondCaret),
+    ).toBeLessThanOrEqual(1);
+
+    // And a chord that writes a file: the focused window's, and only it.
+    written = null;
+    press(app, "C-x C-s");
+    await settle();
+    expect(written).toEqual({ path: ALICE_PATH, text: first.state.sliceDoc() });
+  });
+
+  it("announces each window as a region named by the chapter it shows", async () => {
+    await mount();
+    press(app, "C-x 3");
+    for (const element of windowElements()) {
+      expect(element.getAttribute("role")).toBe("region");
+      expect(element.getAttribute("aria-label")).toBe("alice");
+    }
+    // The second window takes another chapter, and its region is renamed.
+    press(app, "C-x o");
+    await app.openChapter(BOB_CHAPTER);
+    expect(
+      windowElements().map((element) => element.getAttribute("aria-label")),
+    ).toEqual(["alice", "bob"]);
+    // Exactly one window is marked as holding the keyboard.
+    expect(
+      windowElements().filter((element) => element.dataset["focused"] === "yes"),
+    ).toHaveLength(1);
+    // The dividers are separators with an orientation, and no tab stop.
+    const divider = host.querySelector<HTMLElement>(".window-divider");
+    expect(divider?.getAttribute("role")).toBe("separator");
+    expect(divider?.getAttribute("aria-orientation")).toBe("vertical");
+    expect(divider?.hasAttribute("tabindex")).toBe(false);
+  });
+});
+
+describe("resizing by keyboard", () => {
+  /** The root split's shares, as they reach CSS. */
+  function rootShares(): number[] {
+    const root = host.querySelector<HTMLElement>(".editor-pane > .window-split");
+    if (root === null) throw new Error("no split is drawn");
+    return sharesOn(root);
+  }
+
+  it("widens the window holding the keyboard and no other", async () => {
+    await mount();
+    press(app, "C-x 3");
+    expect(rootShares()).toEqual([0.5, 0.5]);
+    expect(press(app, "C-x S-]")).toBe(true);
+    const shares = rootShares();
+    expect(shares[0]).toBeCloseTo(0.55, 6);
+    expect(shares[1]).toBeCloseTo(0.45, 6);
+    expect(shares[0]! + shares[1]!).toBeCloseTo(1, 6);
+  });
+
+  it("narrows the window holding the keyboard and no other", async () => {
+    await mount();
+    press(app, "C-x 3");
+    expect(press(app, "C-x S-[")).toBe(true);
+    const shares = rootShares();
+    expect(shares[0]).toBeCloseTo(0.45, 6);
+    expect(shares[1]).toBeCloseTo(0.55, 6);
+  });
+
+  it("makes the window holding the keyboard taller and no other", async () => {
+    // A chapter tall enough to divide above and below under the fake grid the
+    // harness measures with.
+    await mountTall();
+    expect(press(app, "C-x 2")).toBe(true);
+    expect(windowViews()).toHaveLength(2);
+    expect(press(app, "C-x S-6")).toBe(true);
+    const shares = rootShares();
+    expect(shares[0]).toBeCloseTo(0.55, 6);
+    expect(shares[1]).toBeCloseTo(0.45, 6);
+  });
+
+  it("says there is no window beside this one", async () => {
+    await mount();
+    for (const chord of ["C-x S-]", "C-x S-["]) {
+      const before = spoken();
+      expect(press(app, chord), chord).toBe(true);
+      expect(modeline(app), chord).toContain("No window beside this one");
+      expect(spoken(), chord).not.toBe(before);
+    }
+  });
+
+  it("says there is no window above or below this one", async () => {
+    await mount();
+    const before = spoken();
+    expect(press(app, "C-x S-6")).toBe(true);
+    expect(modeline(app)).toContain("No window above or below this one");
+    expect(spoken()).not.toBe(before);
+    // And a `columns`-only layout gives the same answer, which is the axis rule
+    // rather than a special case for the single window.
+    press(app, "C-x 3");
+    expect(press(app, "C-x S-6")).toBe(true);
+    expect(modeline(app)).toContain("No window above or below this one");
+  });
+
+  it("says what each resize chord did", async () => {
+    // The one pair of rows in the table whose success speaks. A resize has no
+    // textual consequence, so a silent success and a silent failure would be
+    // the same event to a reader working without sight.
+    await mountTall();
+    press(app, "C-x 3");
+    expect(press(app, "C-x S-]")).toBe(true);
+    expect(modeline(app)).toContain("Window 1 of 2: 55%");
+    expect(press(app, "C-x S-[")).toBe(true);
+    expect(modeline(app)).toContain("Window 1 of 2: 50%");
+
+    press(app, "C-x 1");
+    expect(press(app, "C-x 2")).toBe(true);
+    expect(press(app, "C-x S-6")).toBe(true);
+    expect(modeline(app)).toContain("Window 1 of 2: 55%");
   });
 });

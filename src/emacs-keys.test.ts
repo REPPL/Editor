@@ -827,6 +827,11 @@ describe("the Emacs keymap inside CodeMirror", () => {
     // The sweep is only worth anything if it actually swept: these are the
     // chords the documentation quotes.
     expect(swept).toContain("C-x C-s");
+    // The window vocabulary's three `S-` rows are pressed for real here, which
+    // is where a notation mistake in `toPackageChord` would surface.
+    expect(swept).toContain("C-x S-[");
+    expect(swept).toContain("C-x S-]");
+    expect(swept).toContain("C-x S-6");
     expect(swept).toContain("S-C-/");
     expect(swept).toContain("C-c i");
     expect(swept).toContain("C-h b");
