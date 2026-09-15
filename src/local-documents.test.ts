@@ -251,7 +251,23 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
     name: "no element in the page carries an absolute local path, a username or a hostname",
     run: (_doc, rendered) => {
       const username = userInfo().username;
+      // A hostname identifies a machine only when it is more than a vendor's
+      // word. After a reboot macOS can report a three-letter default that
+      // occurs inside ordinary prose, and a bare substring match on it fails
+      // the gate on any document that mentions a laptop. So the match is a
+      // whole word, and a name shorter than four characters is skipped out
+      // loud rather than silently (`iss-2609151137039621`).
       const host = hostname();
+      const hostIdentifies = host.length >= 4;
+      if (!hostIdentifies) {
+        console.warn(
+          "local documents: the hostname is too generic to identify this machine; the hostname check is skipped",
+        );
+      }
+      const hostWord = new RegExp(
+        `(?<![\\w-])${host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`,
+        "i",
+      );
       for (const [label, html] of [
         ["article", rendered.article],
         ["deck", rendered.deck],
@@ -261,8 +277,8 @@ const INTERACTION_CHECKS: readonly InteractionCheck[] = [
         if (username !== "") {
           expect(html, `${label}: the local username`).not.toContain(username);
         }
-        if (host !== "") {
-          expect(html, `${label}: the local hostname`).not.toContain(host);
+        if (hostIdentifies) {
+          expect(html, `${label}: the local hostname`).not.toMatch(hostWord);
         }
       }
     },

@@ -12,7 +12,7 @@ public on GitHub under the maintainer's account and licensed MIT.
 ## Current phase
 
 Phases one and two have shipped, and the keyboard work that followed them:
-twenty-six intents under `../development/intents/shipped/`, each with its
+twenty-seven intents under `../development/intents/shipped/`, each with its
 closed spec and an ingested fidelity audit. Phase one is the deck and the
 editing surface; phase two is the article — the Tufte page with a preview
 window in the app, reader controls, citations from a bibliography file,
@@ -31,9 +31,22 @@ follow it; Markdown tables stay aligned as they are typed, with `C-c C-t` to
 stop that for the session; and a cat on a rainbow trail marks the caret's
 progress through the chapter at 1280 CSS pixels and wider.
 
-Releases 0.1.0 to 0.4.0 are cut in `CHANGELOG.md` and tagged locally; nothing
-is pushed, and `main` is many commits ahead of the remote. The app builds as a
-release bundle. The maintainer's example documents are local test material
+Window splitting is on `main`, landed by pull request on 2026-09-15 and not
+yet cut as a release. `C-x 2` and `C-x 3` divide the window holding the
+keyboard, `C-x 0` and `C-x 1` close windows, `C-x o` walks them, and `C-x {`,
+`C-x }` and `C-x ^` resize them, with the same floor a pointer drag on a
+divider respects. A chapter is a buffer the application holds with zero or
+more windows looking at it, so closing a window loses no edit and switching a
+window to another chapter asks nothing; the gestures that do discard —
+quitting, replacing the document, `C-x C-k` — each ask for themselves.
+`adr-2609091832455881` is accepted, and the intent's fidelity audit is
+ingested: every mechanism criterion is met, and the six that are drawn
+geometry or assistive technology are inconclusive until a person sits at the
+keyboard.
+
+Releases 0.1.0 to 0.4.0 are cut in `CHANGELOG.md` and tagged; the repository
+is pushed and `main` matches the remote. The next cut carries window
+splitting. The app builds as a release bundle. The maintainer's example documents are local test material
 under the gitignored `examples/` folder, and nothing committed names one; a
 harness runs every local document through the article and the deck.
 
@@ -48,12 +61,10 @@ Phase three — bringing a single-file manuscript in (intent 13) and writing one
 text for two audiences (intent 14) — is next in
 `../development/brief/07-intent-map.md`.
 
-One decision waits on the maintainer before anything else is planned:
-`adr-2609091832455881`, *The editing surface becomes a tree of windows*, is
-`proposed` rather than accepted. It scopes Emacs-style window splitting —
-`C-x 2`, `C-x 3`, `C-x 0`, `C-x 1` with `C-x o` cycling the leaves — and its
-intent (`itd-2609081931493520`) is deliberately not planned until the
-maintainer has read it and settled the build scope.
+Nothing waits on the maintainer before phase three is planned: the issue
+ledger has no open entry, and `abcd docs lint` is the seventh gate command,
+armed with the present-tense token family so that its green means the
+documentation rule was checked.
 
 ## Sharp edges
 

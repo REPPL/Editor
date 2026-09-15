@@ -96,7 +96,7 @@ Xcode command line tools are also required. Typst is used by the publish
 pipeline, not by the app; Pandoc is a development convenience for
 converting source documents into examples and is not part of the pipeline.
 
-### The six commands a change must pass
+### The seven commands a change must pass
 
 ```sh
 npm test                                             # Vitest in jsdom
@@ -105,7 +105,13 @@ npm run build                                        # tsc --noEmit, then the bu
 cargo test   --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo fmt    --manifest-path src-tauri/Cargo.toml --check
+abcd docs lint                                       # change narration, dead links, stray root markdown
 ```
+
+`abcd docs lint` is the documentation-currency check: it reads `docs/` and
+`README.md` against `.abcd/docs-lint.json` and must report zero blockers. It
+needs the abcd binary on the path and is deliberately not folded into
+`npm run lint`, so a contributor without abcd can still run the Node gates.
 
 `npm run lint` ends in `npm run lint:rust`, which is
 `cargo audit --file src-tauri/Cargo.lock`. It must report zero vulnerabilities;

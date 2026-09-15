@@ -1099,28 +1099,6 @@ export function createApp(root: HTMLElement, services: AppServices): App {
   }
 
   /**
-   * Ask before edits are thrown away. True means carry on.
-   *
-   * Asked of the focused window's buffer, and a shipped promise
-   * (`itd-2609051335399446`) rather than a conclusion of this design. It is
-   * left exactly as it is here: once buffers outlive windows, switching one
-   * window from one chapter to another discards nothing, so the question is
-   * asked about a loss that no longer happens — which is a defect in its own
-   * right, carried by `iss-2609111123510084`, and amending a shipped intent's
-   * acceptance criterion is its own record rather than a line in this diff.
-   *
-   * It is the question `openChapter` asks and only that. A gesture that
-   * replaces the whole document discards every buffer, so it asks
-   * `mayReplaceDocument` below instead (`iss-2609120527458643`).
-   */
-  async function mayDiscard(): Promise<boolean> {
-    const buffer = bufferHere();
-    if (!isDirty(buffer)) return true;
-    const what = buffer.title ?? "The document";
-    return services.confirmDiscard(`${what} has unsaved edits. Discard them?`);
-  }
-
-  /**
    * Ask before another document throws every buffer away. True means carry on.
    *
    * `forgetDocument` clears every buffer, so the question is about every dirty
@@ -2060,11 +2038,11 @@ export function createApp(root: HTMLElement, services: AppServices): App {
 
       const held = here();
       const sameChapter = chapter.path === held.buffer;
-      if (!sameChapter && !(await mayDiscard())) {
-        announce("Kept the open chapter");
-        return;
-      }
-      if (!alive(held)) return;
+      // Switching this window to another chapter asks nothing: the chapter it
+      // leaves keeps its buffer, edits and all, and the modeline keeps marking
+      // it unsaved, so there is no loss to ask about. The gestures that do
+      // discard — quitting, replacing the document, `C-x C-k` — each ask for
+      // themselves (`iss-2609111123510084`, settled 2026-09-15).
       if (sameChapter && node) {
         // Already open: moving to one of its headings is not a load, and
         // reloading would throw the author's edits away.
